@@ -26,6 +26,9 @@ public class CrfMcpServer {
   static PrintStream mcp;   // protocol channel (real stdout)
   static JSONParser P = new JSONParser();
 
+  // Server version — bump on release. Surfaced in initialize.serverInfo.version (visible in /mcp) and tagged in git (vX.Y.Z) + CHANGELOG.md.
+  static final String VERSION = "0.3.0";
+
   // CLIP report concept primer surfaced to the LLM via MCP `instructions` so it explains/suggests in proper terms.
   static final String INSTRUCTIONS =
     "이 서버는 Clipsoft CLIP report(.crf) 리포트를 읽고 생성·수정하며, 사용자에게 설명/개선제안하는 도구를 제공합니다. 아래 개념·용어로 답하세요.\n"+
@@ -76,8 +79,33 @@ public class CrfMcpServer {
   static void reply(Object id, JSONObject result){ JSONObject o=new JSONObject(); o.put("jsonrpc","2.0"); o.put("id",id); o.put("result",result); mcp.println(o.toJSONString()); }
   @SuppressWarnings("unchecked")
   static void error(Object id, int code, String msg){ JSONObject e=new JSONObject(); e.put("code",(long)code); e.put("message",msg); JSONObject o=new JSONObject(); o.put("jsonrpc","2.0"); o.put("id",id); o.put("error",e); mcp.println(o.toJSONString()); }
+  // One-shot, fail-safe update check: compares this build's VERSION to the raw VERSION file on GitHub main.
+  // Never blocks/breaks startup (offline/timeout/any error → silent, no notice). Disable via env CLIP_MCP_UPDATE_CHECK=0.
+  static String UPDATE_NOTICE_CACHE=null;
+  static String updateNotice(){
+    if(UPDATE_NOTICE_CACHE!=null) return UPDATE_NOTICE_CACHE;
+    UPDATE_NOTICE_CACHE="";
+    try{
+      if("0".equals(System.getenv("CLIP_MCP_UPDATE_CHECK"))) return UPDATE_NOTICE_CACHE;
+      java.net.http.HttpClient c=java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofMillis(1500)).build();
+      java.net.http.HttpRequest q=java.net.http.HttpRequest.newBuilder()
+        .uri(java.net.URI.create("https://raw.githubusercontent.com/fdrn9999/clip-report-mcp/main/VERSION"))
+        .timeout(java.time.Duration.ofMillis(1500)).header("User-Agent","clip-report-mcp").GET().build();
+      java.net.http.HttpResponse<String> resp=c.send(q, java.net.http.HttpResponse.BodyHandlers.ofString());
+      if(resp.statusCode()==200){
+        String latest=resp.body().trim();
+        if(!latest.isEmpty() && isNewer(latest, VERSION)){
+          UPDATE_NOTICE_CACHE="\n[⚠️ 업데이트 있음] 이 clip-report MCP 는 버전 "+VERSION+" 이고 GitHub 최신은 "+latest+" 입니다. 사용자에게 업데이트를 안내하세요: 'cd clip-report-mcp; git pull; ./build.ps1' (JDK 없으면 git pull 만) 후 Claude 재시작 또는 /mcp 재연결. (이 점검 끄기: 환경변수 CLIP_MCP_UPDATE_CHECK=0)";
+        }
+      }
+    }catch(Throwable t){ /* offline/timeout/any → no notice */ }
+    return UPDATE_NOTICE_CACHE;
+  }
+  static boolean isNewer(String a,String b){ try{ String[] pa=a.split("\\."),pb=b.split("\\."); int n=Math.max(pa.length,pb.length); for(int i=0;i<n;i++){ int x=i<pa.length?numOf(pa[i]):0, y=i<pb.length?numOf(pb[i]):0; if(x!=y) return x>y; } return false; }catch(Exception e){ return false; } }
+  static int numOf(String s){ try{ String d=s.replaceAll("[^0-9]",""); return d.isEmpty()?0:Integer.parseInt(d); }catch(Exception e){ return 0; } }
+
   @SuppressWarnings("unchecked")
-  static JSONObject initResult(){ JSONObject r=new JSONObject(); r.put("protocolVersion","2024-11-05"); JSONObject caps=new JSONObject(); caps.put("tools",new JSONObject()); r.put("capabilities",caps); JSONObject si=new JSONObject(); si.put("name","clip-report-mcp"); si.put("version","0.2"); r.put("serverInfo",si); r.put("instructions",INSTRUCTIONS); return r; }
+  static JSONObject initResult(){ JSONObject r=new JSONObject(); r.put("protocolVersion","2024-11-05"); JSONObject caps=new JSONObject(); caps.put("tools",new JSONObject()); r.put("capabilities",caps); JSONObject si=new JSONObject(); si.put("name","clip-report-mcp"); si.put("version",VERSION); r.put("serverInfo",si); r.put("instructions",INSTRUCTIONS+updateNotice()); return r; }
 
   @SuppressWarnings("unchecked")
   static JSONObject tool(String name,String desc, JSONObject schema){ JSONObject t=new JSONObject(); t.put("name",name); t.put("description",desc); t.put("inputSchema",schema); return t; }

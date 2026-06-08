@@ -65,7 +65,7 @@ cd clip-report-mcp
 # (DB 도구 쓸 때만) copy .env.example .env  → .env 편집  +  Tibero JDBC jar 준비
 ./install.ps1 -Target Code      # Claude Code(~/.mcp.json) | Desktop | Print(설정 출력만)
 ```
-`install.ps1` 이 Java/CLIP 경로 자동탐지 → (JDK 있으면) 빌드, 없으면 **동봉된 `clip-report-mcp.jar` 사용** → MCP 설정 + `/clipreport` 명령 설치. 이후 **Claude 재시작 → `/mcp` 에서 clip-report 승인/확인**.
+`install.ps1` 이 Java/CLIP 경로 자동탐지 → (JDK 있으면) 빌드, 없으면 **동봉된 `clip-report-mcp.jar` 사용** → MCP 설정 + `/clipreport` 명령 설치. 이후 **Claude 재시작 → `/mcp` 에서 clip-report 승인/확인**. **연결이 안 되면 → 아래 [`doctor.ps1` 진단](#설치연결-문제--doctorps1) 을 먼저 돌리세요.**
 
 ### 업데이트 (이미 설치한 사람)
 ```powershell
@@ -77,7 +77,21 @@ git pull                         # 최신 소스 + 동봉 jar 갱신
 > ⚠️ **빌드/교체 전에 Claude(=MCP 서버 java 프로세스)를 종료**하세요. 실행 중이면 `clip-report-mcp.jar` 가 잠겨 갱신이 조용히 실패합니다(`build.ps1` 은 jar를 잠근 java 프로세스를 자동 종료함).
 > ⚠️ 변경은 **재연결/재시작 후** 적용됩니다 — 실행 중인 세션에는 자동 반영되지 않습니다(INSTRUCTIONS 는 `initialize` 때 주입).
 
-> 폴더를 직접 복사해 `install.ps1` 을 돌리는 **오프라인 배포**도 그대로 됩니다(git 없이). 단 `git pull` 자동 업데이트는 위 GitHub 방식에서만 가능합니다.
+### 설치·연결 문제 → `doctor.ps1`
+`/mcp` 에서 clip-report 가 안 잡히거나 "서버 연결 불가" 면 **먼저 doctor 를 돌립니다**:
+```powershell
+cd clip-report-mcp
+./doctor.ps1            # 필요시 -Java / -Clip / -Tibero 로 경로 지정
+```
+점검: Java 17+ · CLIP 엔진(`Viewer.jar` + `json-simple`) · `clip-report-mcp.jar` · (DB쓰면) Tibero JDBC·`.env` → **실제 서버 기동 테스트**로 죽는 원인 분류 + 등록 명령까지 출력. 흔한 원인: Java 17 미만(`UnsupportedClassVersion`), `-Clip` 가 엔진 `bin\jar`(Viewer.jar 위치)를 안 가리켜 `json-simple` 을 못 찾음.
+
+### 버전 / 자동 업데이트 알림
+- **현재 버전**: `/mcp` → clip-report 의 `serverInfo.version`. 이력은 [CHANGELOG.md](CHANGELOG.md), 릴리스는 git 태그 `vX.Y.Z`.
+- **자동 알림**: MCP 연결(`initialize`) 때 서버가 GitHub `main` 의 [`VERSION`](VERSION) 과 자기 버전을 비교해, **더 최신이 있으면 업데이트 안내를 INSTRUCTIONS 로 띄웁니다** → Claude 가 사용자에게 `git pull` 을 안내. (오프라인/사내망 차단이면 1.5초 타임아웃 후 조용히 건너뜀)
+- **끄기**: 환경변수 `CLIP_MCP_UPDATE_CHECK=0`.
+- **릴리스 절차(메인테이너)**: `VERSION` 파일 + `src/CrfMcpServer.java` 의 `VERSION` 상수 + `CHANGELOG.md` 를 **같은 값**으로 올림 → `build.ps1` → 커밋 → `git tag vX.Y.Z` → `git push && git push --tags`.
+
+> 폴더를 직접 복사해 `install.ps1` 을 돌리는 **오프라인 배포**도 그대로 됩니다(git 없이). 단 `git pull` 자동 업데이트와 위 버전 알림은 GitHub 연결이 있을 때만 동작합니다.
 
 ---
 
