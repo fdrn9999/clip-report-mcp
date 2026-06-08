@@ -3,6 +3,14 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.4.0] - 2026-06-08
+### Added
+- **`/clipreport --` 메타 명령 세트**: `--help`, `--version`, `--changelog`, `--doctor`, `--update` (대상 `.crf` 없이 동작).
+- **`update.ps1`** : 자가 업데이트 — 실행중 서버 종료 → `git pull` → (JDK 있으면)재빌드 → `/clipreport` 슬래시 명령 갱신.
+
+### Changed
+- 연결 시 업데이트 알림 문구를 **`/clipreport --update`** 안내로 변경.
+
 ## [0.3.0] - 2026-06-08
 ### Added
 - **공식필드(rexpert.*) 지식**을 INSTRUCTIONS + `GUIDE.md` 에 정식화:

@@ -68,6 +68,9 @@ cd clip-report-mcp
 `install.ps1` 이 Java/CLIP 경로 자동탐지 → (JDK 있으면) 빌드, 없으면 **동봉된 `clip-report-mcp.jar` 사용** → MCP 설정 + `/clipreport` 명령 설치. 이후 **Claude 재시작 → `/mcp` 에서 clip-report 승인/확인**. **연결이 안 되면 → 아래 [`doctor.ps1` 진단](#설치연결-문제--doctorps1) 을 먼저 돌리세요.**
 
 ### 업데이트 (이미 설치한 사람)
+**가장 쉬운 방법 — Claude 에서 `/clipreport --update`**: 서버종료→`git pull`→재빌드→슬래시명령 갱신까지 자동. 끝나면 `/mcp` 재연결만 하면 됩니다.
+
+수동으로 하려면:
 ```powershell
 cd clip-report-mcp
 git pull                         # 최신 소스 + 동봉 jar 갱신
@@ -84,6 +87,10 @@ cd clip-report-mcp
 ./doctor.ps1            # 필요시 -Java / -Clip / -Tibero 로 경로 지정
 ```
 점검: Java 17+ · CLIP 엔진(`Viewer.jar` + `json-simple`) · `clip-report-mcp.jar` · (DB쓰면) Tibero JDBC·`.env` → **실제 서버 기동 테스트**로 죽는 원인 분류 + 등록 명령까지 출력. 흔한 원인: Java 17 미만(`UnsupportedClassVersion`), `-Clip` 가 엔진 `bin\jar`(Viewer.jar 위치)를 안 가리켜 `json-simple` 을 못 찾음.
+
+### 메타 명령 — `/clipreport --…`
+대상 `.crf` 없이 동작하는 유지보수 명령:
+- `--help` (목록) · `--version` (설치본 vs GitHub 최신 비교) · `--changelog` · `--doctor` (진단) · `--update` (자가 업데이트)
 
 ### 버전 / 자동 업데이트 알림
 - **현재 버전**: `/mcp` → clip-report 의 `serverInfo.version`. 이력은 [CHANGELOG.md](CHANGELOG.md), 릴리스는 git 태그 `vX.Y.Z`.

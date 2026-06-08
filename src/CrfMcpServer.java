@@ -27,7 +27,7 @@ public class CrfMcpServer {
   static JSONParser P = new JSONParser();
 
   // Server version — bump on release. Surfaced in initialize.serverInfo.version (visible in /mcp) and tagged in git (vX.Y.Z) + CHANGELOG.md.
-  static final String VERSION = "0.3.0";
+  static final String VERSION = "0.4.0";
 
   // CLIP report concept primer surfaced to the LLM via MCP `instructions` so it explains/suggests in proper terms.
   static final String INSTRUCTIONS =
@@ -95,7 +95,7 @@ public class CrfMcpServer {
       if(resp.statusCode()==200){
         String latest=resp.body().trim();
         if(!latest.isEmpty() && isNewer(latest, VERSION)){
-          UPDATE_NOTICE_CACHE="\n[⚠️ 업데이트 있음] 이 clip-report MCP 는 버전 "+VERSION+" 이고 GitHub 최신은 "+latest+" 입니다. 사용자에게 업데이트를 안내하세요: 'cd clip-report-mcp; git pull; ./build.ps1' (JDK 없으면 git pull 만) 후 Claude 재시작 또는 /mcp 재연결. (이 점검 끄기: 환경변수 CLIP_MCP_UPDATE_CHECK=0)";
+          UPDATE_NOTICE_CACHE="\n[⚠️ 업데이트 있음] 이 clip-report MCP 는 버전 "+VERSION+" 이고 GitHub 최신은 "+latest+" 입니다. 사용자에게 업데이트를 안내하세요: Claude 에서 '/clipreport --update' 실행(또는 프로젝트 폴더에서 ./update.ps1) → 끝나면 /mcp 재연결. (변경내역은 '/clipreport --changelog', 점검 끄기: 환경변수 CLIP_MCP_UPDATE_CHECK=0)";
         }
       }
     }catch(Throwable t){ /* offline/timeout/any → no notice */ }
