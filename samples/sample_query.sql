@@ -1,0 +1,12 @@
+SELECT D.DEPT_CD
+     , D.DEPT_NM
+     , COUNT(1)             AS EMP_CNT       -- 인원수
+     , SUM(S.PYMNT_AMT)     AS TOTAL_AMT     -- 지급총액
+     , AVG(S.PYMNT_AMT)     AS AVG_AMT
+     , MAX(S.SALY_YM)       AS LAST_YM
+  FROM TB_EMP D
+  JOIN TB_SALARY S ON S.EMPNO = D.EMPNO
+ WHERE S.SALY_YM = #{salyYm}
+   AND D.USE_YN  = 'Y'
+ GROUP BY D.DEPT_CD, D.DEPT_NM
+ ORDER BY D.DEPT_CD

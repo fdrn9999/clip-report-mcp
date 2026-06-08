@@ -1,0 +1,13 @@
+{
+  "_note": "DB 자격증명은 여기 넣지 말고 .env 로 분리하세요(.env.example 참고). 서버가 ~/.dbtools/.env 또는 ~/clip-report-mcp/.env 를 자동 로드합니다.",
+  "mcpServers": {
+    "clip-report": {
+      "command": "<JDK경로>\\bin\\java.exe",
+      "args": [
+        "-cp",
+        "<CLIP설치>\\bin\\jar\\*;<TIBERO_JDBC_JAR경로>;<프로젝트>\\clip-report-mcp.jar",
+        "CrfMcpServer"
+      ]
+    }
+  }
+}
