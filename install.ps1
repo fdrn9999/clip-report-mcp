@@ -53,8 +53,11 @@ Set-Content -Path (Join-Path $proj "clip-report.mcp.json") -Value $json -Encodin
 
 $cmdDir = Join-Path $env:USERPROFILE ".claude\commands"
 New-Item -ItemType Directory -Force $cmdDir | Out-Null
-Copy-Item (Join-Path $proj "setup\clipreport.md") (Join-Path $cmdDir "clipreport.md") -Force
-Write-Output "/clipreport 명령 설치: $cmdDir\clipreport.md"
+$cmdN = 0
+Get-ChildItem (Join-Path $proj "setup") -Filter "clipreport*.md" | ForEach-Object {
+  Copy-Item $_.FullName (Join-Path $cmdDir $_.Name) -Force; $cmdN++
+}
+Write-Output "/clipreport 명령 설치: $cmdDir ($cmdN 개 파일 — clipreport + 메타 명령들)"
 
 switch ($Target) {
   "Code" {

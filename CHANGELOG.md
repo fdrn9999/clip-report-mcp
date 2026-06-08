@@ -3,6 +3,14 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.4.1] - 2026-06-08
+### Added
+- **별칭 슬래시 명령**: `/clipreport-version`, `/clipreport-changelog`, `/clipreport-doctor`, `/clipreport-update` — 각각 `--version`/`--changelog`/`--doctor`/`--update` 와 동일 동작. `--` 인자는 Claude Code 가 자동완성 못 하지만 별칭 명령은 **이름으로 탭 자동완성**됨.
+
+### Changed
+- `argument-hint` 에 메타 명령 목록(`--help|--version|--changelog|--doctor|--update`) 노출.
+- `install.ps1` / `update.ps1` : `setup\clipreport.md` 한 개 → **`setup\clipreport*.md` 전부**(별칭 명령 포함) 복사하도록 변경.
+
 ## [0.4.0] - 2026-06-08
 ### Added
 - **`/clipreport --` 메타 명령 세트**: `--help`, `--version`, `--changelog`, `--doctor`, `--update` (대상 `.crf` 없이 동작).

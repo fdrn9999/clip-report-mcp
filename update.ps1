@@ -48,11 +48,14 @@ if ($Java -and $javac -and (Test-Path $javac) -and $Clip) {
   Write-Output "JDK/CLIP 자동탐지 실패 또는 JRE 전용 -> git pull 로 받은 clip-report-mcp.jar 를 그대로 사용."
 }
 
-# 4) /clipreport 슬래시 명령 갱신 (설치돼 있을 때만)
-$cmd = Join-Path $env:USERPROFILE ".claude\commands\clipreport.md"
-if (Test-Path (Split-Path $cmd)) {
-  Copy-Item (Join-Path $proj "setup\clipreport.md") $cmd -Force
-  Write-Output "/clipreport 명령 갱신: $cmd"
+# 4) /clipreport 슬래시 명령 갱신 (설치돼 있을 때만) — clipreport.md + clipreport-*.md(메타 명령) 전부
+$cmdDir = Join-Path $env:USERPROFILE ".claude\commands"
+if (Test-Path $cmdDir) {
+  $cmdN = 0
+  Get-ChildItem (Join-Path $proj "setup") -Filter "clipreport*.md" | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $cmdDir $_.Name) -Force; $cmdN++
+  }
+  Write-Output "/clipreport 명령 갱신: $cmdDir ($cmdN 개 파일)"
 }
 
 $ver = if (Test-Path (Join-Path $proj "VERSION")) { (Get-Content (Join-Path $proj "VERSION") -Raw).Trim() } else { "?" }
