@@ -3,7 +3,22 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
-## [0.5.1] - 2026-08-28
+## [0.6.0] - 2026-08-28
+### Added
+- **`crf_validate`**(lint): 끊어진 바인딩(없는 필드/빈 바인딩, 셀 좌표까지), 공식 `#unknown#`·없는 필드 참조·`return` 누락, 그룹 필드 null, 머리글/바닥글/그룹 수 불일치, 미선언·미사용 매개변수, 쿼리 SELECT↔필드 불일치, scriptType 불일치, 중복 이름, 숨김 밴드/컨트롤, 링크 서브리포트 파일 없음. 임베디드 서브리포트의 매개변수 링크 대상은 오탐하지 않음.
+- **`crf_set_cell` v2**: `formula`(공식필드 자동 생성+바인딩), `clear`, `align`/`valign`, `fontsize`, `bold`, `font`, `wrap`, `cangrow`, `merge`, `bgcolor` 를 한 번에. **`crf_set_label`**: 글상자/컨트롤에 같은 속성 + 위치/크기/표시.
+- **`crf_set_subsection`**: 밴드 행 높이·숨김·이름·페이지바꿈(`None|Before|After|BeforeAfter`).
+- **`crf_add_table`**: `columns` JSON 으로 **표 생성**(본문 데이터 행 + 머리글 밴드 제목 행, 같은 열 너비; 셀은 TableCellNormal 로 직접 구성해 라운드트립 확인).
+- **`crf_add_group` v2**: `level=inner|outer|N` 중첩 위치(머리글/바닥글 대칭 삽입, 그룹 목록 순서 동기), `label=true`, `subtotal=F1,F2`(그룹 기준 `rexpert.sum` 공식 + 바닥글 라벨), `sort`. **`crf_set_group`**(필드/정렬), **`crf_remove_group`**(대칭 밴드·그룹이름 필드 제거; 컨트롤/참조 있으면 거부).
+- **`crf_remove_control`**, **`crf_remove_section`**(컨트롤 있으면 거부, 본문 불가).
+- `crf_describe_layout detail=true`: 셀/컨트롤별 정렬·폰트·크기·굵게·줄바꿈·확장·셀합치기·조건스타일·배경.
+- **`crf_diff` v2**: 데이터셋/필드/쿼리(줄 단위 ±, 앞 6줄)/scriptType/매개변수/공식 스크립트/그룹/섹션/컨트롤(위치·바인딩)/표 셀 그리드 변화.
+### Changed
+- `crf_set_cell_style` 은 `crf_set_cell` 과 같은 적용기를 사용(정렬/크기/굵게/줄바꿈도 가능).
+### Fixed
+- 숫자형 JSON 인자(`width`, `row` 등이 문자열이 아닌 숫자로 올 때)가 기본값으로 떨어지던 문제.
+
+
 ### Added
 - **`crf_set_query` v2**: 미선언 `{parameter.X}` 를 전역 매개변수로 **자동 선언**(`declare_params`, 기본 true), SELECT 컬럼을 데이터 필드로 **자동 추가**(`sync_fields=add` 기본; `replace` 는 미참조 필드 제거, 참조 중이면 유지+경고; `none`). 별칭 없는 식 컬럼·`SELECT *` 는 안내.
 - **`crf_sync_fields`**: `mode=sql`(파싱) / **`mode=db`**(쿼리를 `SELECT * FROM (…) WHERE 1=0` 로 실행, ResultSetMetaData 로 컬럼·타입 확정 — `SELECT *`·함수테이블 해결; JS 동적쿼리는 평문 복원본 실행; `{parameter.X}`/`{dataset.X}` 는 `params` JSON 또는 `''`/NULL 바인딩). `set_types`, `remove_unused`.

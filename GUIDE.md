@@ -130,7 +130,10 @@ return txt;
 | **쿼리 본문** 읽기 (JS 동적쿼리는 평문 복원본 포함) | `crf_get_query` |
 | **공식 스크립트**·누적합산·그룹이름 읽기 | `crf_get_formula` |
 | 폴더에서 테이블/매개변수/문구로 리포트 **검색** | `crf_search` |
-| 밴드별 컨트롤·표 셀 바인딩 보기 (설명/제안의 근거) | `crf_describe_layout` |
+| 밴드별 컨트롤·표 셀 바인딩 보기 (설명/제안의 근거; `detail=true` 스타일까지) | `crf_describe_layout` |
+| 리포트 **검증(lint)** — 끊어진 바인딩/공식/매개변수 | `crf_validate` |
+| 셀 값·공식·정렬·폰트 / 글상자 편집 / 밴드 행 높이·숨김 | `crf_set_cell` / `crf_set_label` / `crf_set_subsection` |
+| 표 생성 / 그룹 위치·라벨·소계 / 삭제(컨트롤·그룹·밴드) | `crf_add_table` / `crf_add_group`·`crf_set_group` / `crf_remove_control`·`crf_remove_group`·`crf_remove_section` |
 | 폴더 리포트 찾기 | `crf_list_reports` |
 | SQL/MyBatis로 초안 생성 | `crf_generate` |
 | 쿼리 교체(매개변수 선언·필드 동기화) / 그룹 추가 / 본문 필드 배치 | `crf_set_query` / `crf_add_group` / `crf_place_detail_fields` |

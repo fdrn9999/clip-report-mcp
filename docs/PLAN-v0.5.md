@@ -79,7 +79,8 @@
 - **`crf_set_param`**(추가/수정: `name,type,default,prompt`) / `crf_remove_param`.
 - **`crf_rename_field`**(바인딩·공식 문자열 `data.OLD`→`data.NEW` 동시 치환) / **`crf_remove_field`**(참조 목록 보여주고 `force` 없으면 거부).
 
-### v0.6.0 — 레이아웃 읽기/수정 강화
+### v0.6.0 — 레이아웃 읽기/수정 강화 — ✅ 2026-08-28 완료
+> 미구현: `crf_set_cell` 의 `crf_set_cell_style` 통합(둘 다 유지, 같은 적용기). `crf_add_table` 은 1행 데이터 표 + 제목 표 방식. 소계 공식은 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 로 생성(인자 의미는 실행 미검증 → 문서에 명시).
 - **`crf_describe_layout` v2**: 섹션→서브섹션(유형/이름/높이/가시성/페이지바꿈) 구조로 출력. `SubSectionSubreport`·`ControlSubreport`는 링크 경로/임베디드 여부/파라미터 링크(`FieldLink` 1↔2) 표시. 셀은 `‹병합›`(Dumy)·`·`(빈 정상셀) 구분, 병합 플래그(`getCellMergeRowDataDuplication`)·정렬·폰트크기/굵게·출력양식 표시(옵션 `detail=true`). 조건스타일 개수+조건 요약. 그룹머리글에 `→ 그룹필드`. (docs/crf-binary-notes.md의 바이트 스캔은 이걸로 대체)
 - **`crf_set_cell` v2**: 병합셀 ERROR(위 2), `clear=true`, `formula="…"`(공식필드 생성+바인딩 한 번에), `align`, `valign`, `fontsize`, `bold`, `wrap`. `crf_set_cell_style`과 통합 검토.
 - **`crf_set_subsection`**: `section`, `index?`, `height`, `visible`, `name`, `new_page`.

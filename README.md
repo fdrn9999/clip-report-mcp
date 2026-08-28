@@ -126,7 +126,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 | 파일 | 역할 |
 |---|---|
-| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 30개 (.crf 25 + DB 4 + PDF 1) |
+| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 38개 (.crf 33 + DB 4 + PDF 1) |
 | **CrfMcpHttp.java** | **MCP 서버 (원격 Streamable HTTP)** — 같은 도구 |
 | **CrfGen3.java** | SQL/MyBatis → 초안 생성기 (필드·쿼리·파라미터·그룹·푸터) |
 | **CrfGen2.java** | 파싱/변환 코어 (SELECT 컬럼 파서, MyBatis→JS, 파라미터 정규화, 타입추정) |
@@ -138,14 +138,15 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 ---
 
-## MCP 도구 (30)
+## MCP 도구 (38)
 
 ### 리포트(.crf) 도구
 
 | 분류 | 도구 | 설명 |
 |---|---|---|
 | 설명 | `crf_summary(path)` | 데이터셋·필드·쿼리·그룹·섹션 요약 |
-| 설명 | `crf_describe_layout(path)` | 밴드별 컨트롤 + 필드 바인딩 표시 |
+| 설명 | `crf_describe_layout(path, [detail])` | 섹션→서브섹션(유형/높이/숨김/서브리포트 링크)→컨트롤 + 표 셀 그리드(`‹병합›`, `{출력양식}`). `detail=true` 면 셀/컨트롤별 정렬·폰트·크기·굵게·줄바꿈·확장·셀합치기·조건스타일 |
+| 설명 | `crf_validate(path)` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, 그룹 필드 null, 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음 |
 | 설명 | `crf_get_query(path, [dataset|mode])` | **쿼리 본문** — 데이터셋별 scriptType·연결·필드·사용 매개변수(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JS 동적쿼리는 원문 + **평문 복원본**(if 블록은 `/*IF*/` 주석) |
 | 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
 | 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로)·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
@@ -157,15 +158,20 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_set_param(path, name, output, [type|default|prompt])` / `crf_remove_param(...)` | 전역 매개변수 생성·수정 / 삭제(쿼리·바인딩 참조 시 거부) |
 | 수정 | `crf_rename_field(path, name, new_name, output, [dataset])` / `crf_remove_field(path, name, output, [dataset|force])` | 필드 이름변경(객체 바인딩 자동 추종 + 공식 `"ns.OLD"`·쿼리 `{parameter.OLD}` 재작성) / 삭제(참조 목록 제시, `force` 없으면 거부) |
 | 설명 | `crf_field_refs(path, name, [dataset])` | 필드/매개변수가 쓰이는 곳: 셀 좌표·라벨·그룹·누적합산·서브리포트 링크·공식·쿼리 |
-| 수정 | `crf_add_group(path, column, output)` | 컬럼에 그룹 머리/바닥글 추가 |
+| 수정 | `crf_add_group(path, column, output, [level|label|subtotal|sort])` | 그룹 머리/바닥글 추가 — `level=inner|outer|N` 로 중첩 위치, `label=true` 머리글에 그룹필드 라벨, `subtotal=F1,F2` 바닥글에 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 소계 공식 |
+| 수정 | `crf_set_group(path, group, output, [column|sort])` / `crf_remove_group(path, group, output, [force])` | 그룹 필드/정렬 변경 / 그룹 삭제(머리·바닥글 밴드 대칭 제거, 컨트롤·그룹이름 참조 있으면 거부) |
 | 수정 | `crf_place_detail_fields(path, output)` | 본문에 필드 바인딩 데이터 라벨 배치 |
-| 수정 | `crf_set_cell(path, table, row, col, [field|text|format], output)` | **표 셀** 편집 — 필드 바인딩 / 정적텍스트 / 출력양식. 저장 후 되읽어 검증. `‹병합›`(병합돼 숨은 셀)은 편집 불가 → 기준 셀 안내 |
+| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|align|valign|fontsize|bold|font|wrap|cangrow|merge|bgcolor])` | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
+| 수정 | `crf_set_label(path, name, output, [같은 속성 + left|top|width|height|visible])` | **글상자/컨트롤** 편집 — 값·공식·스타일·위치·크기·표시 |
+| 수정 | `crf_set_subsection(path, section, output, [index|height|visible|name|new_page])` | 밴드 행(서브섹션) 높이·숨김·이름·페이지바꿈 |
+| 수정 | `crf_add_table(path, columns, output, [section|header_section|left|top|row_height|name])` | **표 생성** — `columns` JSON(`field,title,width,format,align`)로 본문 1행 데이터 표 + 머리글 밴드 제목 표(같은 열 너비). SDK 생성이라 디자이너에서 한 번 확인 권장 |
+| 수정 | `crf_remove_control(path, name, output)` / `crf_remove_section(path, section, output, [force])` | 컨트롤 삭제 / 밴드 삭제(컨트롤 있으면 거부) |
 | 수정 | `crf_set_cell_style(path, table, row, col, [bgcolor|font|cangrow|merge], output)` | 셀 **스타일** — 배경색/폰트/확장가능/셀합치기 |
 | 수정 | `crf_add_formula_field(path, name, script, output, [force])` | **공식필드** 생성 (JS, 끝에 `return`; 예: `return rexpert.sum(0,"data.AMT",0,"","")`) → 셀에 바인딩. 이름 중복 / `return` 누락 / `:col` `#{}` 바인드 표기는 거부(`force=true`로 강행) |
 | 수정 | `crf_add_data_field(path, name, [type], output)` | 데이터셋에 **필드(컬럼)** 추가 |
 | 수정 | `crf_add_label(path, section, [text|field], [위치], output)` | 밴드에 **글상자** 추가(없는 표준밴드는 자동생성) |
 | 수정 | `crf_set_paper(path, [paper|orientation|margin*], output)` | **용지** 종류/방향/여백 |
-| 설명 | `crf_diff(a, b)` | 두 리포트 **비교**(필드/그룹/섹션 변화) |
+| 설명 | `crf_diff(a, b)` | 두 리포트 **비교** — 데이터셋/필드/쿼리(줄 단위 ±)/scriptType/매개변수/공식 스크립트/그룹/섹션/컨트롤/표 셀 바인딩 |
 
 ### 업무지식 도구 — DB & 문서 (양식→백엔드→DB→쿼리 파이프라인)
 
@@ -205,7 +211,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
   }
 }
 ```
-→ 클라이언트 재시작 → 도구 30개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
+→ 클라이언트 재시작 → 도구 38개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
 > DB 도구(`db_*`)를 쓰려면 classpath 에 **Tibero JDBC 드라이버 jar** 도 추가하세요. 접속정보는 `.env` 분리(아래).
 
 ### B. 원격 (HTTP) — 팀 공유 / claude.ai 웹
@@ -280,7 +286,8 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 
 - 본문은 데이터 **라벨** 배치까지. 정식 **표(ControlTable)** 생성은 미구현(셀 바인딩은 동일 `setApplyValueField`라 기계적 확장).
 - 필드 동기화는 SELECT 파싱(별칭 없는 식은 제외) 또는 DB 실행 기반. `mode=db` 는 `.env` DB 연결이 필요하고, 매개변수 값이 없으면 `''`/NULL 로 바인딩해 메타데이터만 읽는다(조건에 따라 타입 오류가 나면 `params` 로 값 지정).
-- 표(ControlTable) 생성·lint·서브섹션 편집·삭제 계열은 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) 로드맵(v0.6.0).
+- `crf_add_table` 로 만든 표는 SDK 기본 속성(테두리/여백)을 쓴다 — 디자이너에서 한 번 열어 확인. 그룹 소계 공식의 `rexpert.sum` 인자 의미(범위/리셋)는 실행으로 확인한 값이 아니므로 결과가 다르면 `crf_set_cell formula=` 로 조정.
+- 남은 로드맵(생성기 개선 등)은 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) v0.7.
 - `crf_get_query` 의 JS→평문 복원은 문자열 연결을 풀고 `if` 블록을 주석으로 표시한 **추정본**(실제 SQL 은 매개변수 조건에 따라 달라짐). 테이블 목록도 FROM/JOIN 정규식 추정.
 - 도구 실패는 `ERROR: …`(MCP `isError`)로 반환. 쓰기 도구는 `output` 이 원본과 같으면 거부.
 - MyBatis `<foreach>`/`<choose>` 부분 지원(경고).

@@ -183,6 +183,58 @@ if os.path.isfile(A) and os.environ.get("CLIP_SMOKE_DB", "1") == "1":
     case("sync_fields db bad column -> ERROR with SQL", "crf_sync_fields", {"path": OUT + "/b_sq2.crf", "dataset": "SQLDS3", "mode": "db", "output": OUT + "/b_syncbad.crf"},
          err_contains("DB 실행 실패", "WHERE 1=0"))
 
+# ---- v0.6.0 레이아웃 편집 / validate / diff ----
+if os.path.isfile(A):
+    case("validate A finds real defects", "crf_validate", {"path": A},
+         contains("ERROR 3", "그룹 필드 없음(null)", "공식 COND_1: 없는 필드 참조 [parameter.TODAY]", "바인딩 비어 있음: 그룹.GroupingField"))
+    case("set_cell v2 formula+style", "crf_set_cell",
+         {"path": A, "table": "표3", "row": "0", "col": "0", "formula": "return rexpert.field(\"data.ADR\")+\"!\";", "align": "Right", "fontsize": "12", "bold": "true", "wrap": "true", "output": OUT + "/a_c2.crf"},
+         contains("formula=F_표3_0_0", "align=Right", "크기=12", "굵게=true", "verified[field=F_표3_0_0]"))
+    case("describe detail shows cell style", "crf_describe_layout", {"path": OUT + "/a_c2.crf", "detail": "true"},
+         contains("공식:F_표3_0_0 «정렬=Right/Center, 폰트=나눔고딕, 크기=12, 굵게, 줄바꿈»"))
+    case("set_cell formula without return -> ERROR", "crf_set_cell",
+         {"path": A, "table": "표3", "row": "0", "col": "0", "formula": "1+1", "output": OUT + "/a_c3.crf"}, err_contains("return"))
+    case("set_cell clear", "crf_set_cell", {"path": A, "table": "표3", "row": "0", "col": "0", "clear": "true", "output": OUT + "/a_c4.crf"}, contains("cleared", 'verified[text=""]'))
+    case("set_label text+style+size", "crf_set_label",
+         {"path": A, "name": "글상자2", "text": "임용지원서(수정)", "align": "Center", "fontsize": "20", "bold": "true", "width": "1700", "output": OUT + "/a_l.crf"},
+         contains('"글상자2" (Detail)', "align=Middle", "width=1700", 'verified[text="임용지원서(수정)"]'))
+    case("set_label missing -> ERROR", "crf_set_label", {"path": A, "name": "없음", "text": "x", "output": OUT + "/a_l2.crf"}, error)
+    case("remove_control", "crf_remove_control", {"path": A, "name": "글상자1", "output": OUT + "/a_rc.crf"}, contains("삭제 (Detail/PAGE1)"))
+    case("remove_control verify", "crf_describe_layout", {"path": OUT + "/a_rc.crf"}, lambda t, e: None if not e and '"글상자1"' not in t else "still present")
+    case("set_subsection", "crf_set_subsection", {"path": A, "section": "본문", "index": "1", "visible": "true", "height": "800", "new_page": "After", "output": OUT + "/a_ss.crf"},
+         contains('Detail sub[1] "본문2" h=800', "visible=true", "new_page=After"))
+    case("set_subsection bad new_page -> ERROR", "crf_set_subsection", {"path": A, "section": "본문", "new_page": "Sideways", "output": OUT + "/a_ss2.crf"}, error)
+    case("remove_section empty band", "crf_remove_section", {"path": A, "section": "페이지머리글", "output": OUT + "/a_rs.crf"}, contains("PageHeader 밴드 삭제"))
+    case("remove_section with controls -> ERROR", "crf_remove_section", {"path": A, "section": "페이지바닥글", "output": OUT + "/a_rs2.crf"}, err_contains("컨트롤 3개", "force"))
+    case("remove_section detail -> ERROR", "crf_remove_section", {"path": A, "section": "본문", "output": OUT + "/a_rs3.crf"}, error)
+    case("add_table data+title", "crf_add_table",
+         {"path": A, "columns": '[{"field":"APPCA_NM","title":"성명","width":500},{"field":"BIRDT","title":"생년월일","width":400,"align":"Center"},{"field":"APPCA_SEQNO","title":"접수번호","width":300,"format":"#,##0","align":"Right"}]', "top": "1200", "output": OUT + "/a_tbl.crf"},
+         contains("표 '표_new' (3열, 너비 1200)", "제목 표 '표_new_title'", "verified[cell(0,0) field=APPCA_NM]"))
+    case("add_table verify grid", "crf_describe_layout", {"path": OUT + "/a_tbl.crf"},
+         contains('ControlTable "표_new_title"  위치(왼0,위0', '"성명" | "생년월일" | "접수번호"', "데이터:APPCA_NM | 데이터:BIRDT | 데이터:APPCA_SEQNO{#,##0}"))
+    case("add_table bad field -> ERROR", "crf_add_table", {"path": A, "columns": '[{"field":"NOPE"}]', "output": OUT + "/a_tbl2.crf"}, err_contains("NOPE"))
+    case("diff cell change", "crf_diff", {"a": A, "b": OUT + "/a_c2.crf"}, contains("공식: +1 [F_표3_0_0]", "표 표3 셀: ~1", '[0,0]: "주 소 (연락처)" → 공식:F_표3_0_0'))
+if os.path.isfile(B):
+    case("validate B", "crf_validate", {"path": B}, contains("ERROR 1 / WARN 1", "끊어진 참조 #unknown#", "중복 이름 CURI_YEAR"))
+    case("validate after force remove (dangling)", "crf_validate", {"path": OUT + "/b_rm2.crf"}, contains('바인딩 비어 있음: GroupHeader/그룹 머리글1/Table"표2"[3,6].ApplyValueField', "필드로 없는 SELECT 컬럼 [NM]"))
+    case("add_group outer+label+subtotal", "crf_add_group",
+         {"path": B, "column": "DEPT_CD", "level": "outer", "label": "true", "subtotal": "TOT_CDT_PASS,CDT_NUM_TOT", "output": OUT + "/b_g1.crf"},
+         contains("level 0 of 2", "+머리글 라벨(DEPT_CD)", "+소계 SUM_TOT_CDT_PASS_BY_DEPT_CD", "sections: GroupHeader,GroupHeader,Detail,GroupFooter,GroupFooter,PageFooter"))
+    case("add_group level 1 nests correctly", "crf_add_group", {"path": OUT + "/b_g1.crf", "column": "MAJOR_CD", "level": "1", "output": OUT + "/b_g2.crf"}, contains("level 1 of 3"))
+    case("add_group verify order", "crf_summary", {"path": OUT + "/b_g2.crf"},
+         contains("groups=3 [DEPT_CD,MAJOR_CD,STUDENT_CD]", "[0] GroupHeader(→DEPT_CD)", "[1] GroupHeader(→MAJOR_CD)", "[2] GroupHeader(→STUDENT_CD)", '[5] GroupFooter: "그룹 바닥글[MAJOR_CD]"', '[6] GroupFooter: "그룹 바닥글[DEPT_CD]"'))
+    case("add_group subtotal formula", "crf_get_formula", {"path": OUT + "/b_g1.crf", "name": "SUM_TOT_CDT_PASS_BY_DEPT_CD"}, contains('rexpert.sum(0,"data.TOT_CDT_PASS",0,"data.DEPT_CD","")'))
+    case("add_group duplicate -> ERROR", "crf_add_group", {"path": B, "column": "STUDENT_CD", "output": OUT + "/b_gx.crf"}, err_contains("이미 그룹"))
+    case("remove_group empty bands", "crf_remove_group", {"path": OUT + "/b_g2.crf", "group": "MAJOR_CD", "output": OUT + "/b_g3.crf"}, contains("groups now 2", "sections: GroupHeader,GroupHeader,Detail,GroupFooter,GroupFooter,PageFooter"))
+    case("remove_group with controls -> ERROR", "crf_remove_group", {"path": B, "group": "STUDENT_CD", "output": OUT + "/b_g4.crf"}, err_contains("컨트롤 1개", "force"))
+    case("remove_group force", "crf_remove_group", {"path": B, "group": "0", "force": "true", "output": OUT + "/b_g5.crf"}, contains("groups now 0", "sections: Detail,PageFooter"))
+    case("set_group sort", "crf_set_group", {"path": B, "group": "STUDENT_CD", "sort": "Descending", "output": OUT + "/b_sg.crf"}, contains("sort=Descending"))
+    case("add_table on subreport-only detail -> ERROR", "crf_add_table", {"path": B, "columns": '[{"field":"NM","width":400}]', "output": OUT + "/b_tbl.crf"}, err_contains("서브섹션"))
+    case("add_table into group header, no title", "crf_add_table", {"path": B, "columns": '[{"field":"NM","width":400}]', "section": "그룹머리글", "header_section": "none", "top": "460", "output": OUT + "/b_tbl2.crf"}, contains("GroupHeader 에 생성", "verified[cell(0,0) field=NM]"))
+    case("diff group add", "crf_diff", {"a": B, "b": OUT + "/b_g1.crf"}, contains("그룹: +1 [DEPT_CD]", "컨트롤: +3 [grp_DEPT_CD, sub_CDT_NUM_TOT, sub_TOT_CDT_PASS]", "섹션: GroupHeader,Detail"))
+    case("diff query change", "crf_diff", {"a": B, "b": OUT + "/b_sq.crf"}, contains("SQLDS2 필드: +6", "SQLDS2 쿼리 변경", "매개변수(타입=기본값): +1 [SALYYM]"))
+    case("diff identical", "crf_diff", {"a": B, "b": B}, contains("차이 없음"))
+
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))
 case("db_query DDL refused", "db_query", {"sql": " /*c*/ drop table x"}, error)

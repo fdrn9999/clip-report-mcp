@@ -44,6 +44,7 @@ public class CrfMcpServer {
     "[★입력은 상황마다 다름] 화면(.xfdl/.vue)·문서양식(PDF)·쿼리(SQL/MyBatis)·백엔드·DB연결이 항상 다 주어지지는 않습니다(화면만, 쿼리 없이, 글 설명만일 수도). 프롬프트에 실제로 있는 자료만 사용하고, 적용 안 되는 단계는 건너뛰며, 도구는 '있는 입력+의도'에 맞춰 선택합니다(고정 순서 아님). 도구로 직접 확인 가능한 건 먼저 확보(파일 읽기·db_* 도구·백엔드 추적)하되, [★모르면 질문] 그래도 부족하거나 불명확한 정보(대상 파일·테이블·파라미터·조건 등)는 임의 추정·기본값으로 진행하지 말고 반드시 유저에게 질문해 확보하세요(질문은 한 번에 모아 간결히). 유저가 '추정해서 진행'을 명시한 경우에만 가정을 밝히고 진행합니다.\n"+
     "[★쿼리 읽기/찾기] 리포트의 SQL 본문은 crf_get_query(JS 동적쿼리는 평문 복원본 포함), 공식 스크립트는 crf_get_formula, '어떤 리포트가 테이블 X/매개변수 Y/문구 Z 를 쓰나'는 crf_search(dir, text, scope) 로 확인하세요. crf_summary 는 개요만 줍니다.\n"+
     "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
+    "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값), 글상자=crf_set_label, 밴드 행=crf_set_subsection(높이/숨김/페이지바꿈), 표 생성=crf_add_table(columns JSON), 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section/crf_remove_field. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
     "쓰기 도구는 항상 output 경로를 따로 받아 원본을 보존합니다(output=원본이면 거부). 도구 실패는 'ERROR: …' 메시지(isError)로 옵니다 — 그대로 유저에게 설명하고 임의로 재시도하지 마세요. crf_describe_layout 의 표 셀 중 ‹병합› 은 병합되어 숨은 자리라 편집 불가(기준 셀에 설정), {…} 는 출력양식입니다.\n"+
     "[★열린 파일 주의] .crf가 CLIP report 앱에서 열려 있는 동안 쓰기 도구로 수정하면 파일 잠금/상태 충돌(앱에서 저장 시 편집이 덮어써짐, 또는 편집이 앱에 반영 안 됨)이 납니다. 이미 만든 _edited.crf에 추가 수정이 필요할 때 그 파일이 열려 있을 수 있으면, 먼저 유저에게 '저장 후 잠깐 닫기'를 요청하고 → 수정 → '다시 열기'를 안내하세요(저장→닫기→수정→재오픈).";
 
@@ -150,14 +151,30 @@ public class CrfMcpServer {
         strSchema(new String[]{"path"}, "path",".crf file", "name","one field name (default: all)")));
     arr.add(tool("crf_search","Search .crf files under a directory for text: in queries (plain-SQL view of JS queries), field names, formula scripts, parameters, or control/cell texts and bindings. E.g. find reports using table AHRM1234, parameter DEPTCD, or a label text.",
         strSchema(new String[]{"dir","text"}, "dir","directory to scan (recursive)", "text","text to find (case-insensitive substring; or a regex when regex=true)", "regex","true for regex (default false)", "scope","query|field|formula|param|control|any (default any)", "like","file-name filter: substring or glob (optional)", "limit","max matching files to report (default 50)", "max_files","max files to scan (default 5000)")));
-    arr.add(tool("crf_describe_layout","Describe a report's section bands and the controls in each, including which field each control is bound to.",
+    arr.add(tool("crf_describe_layout","Describe a report's section bands: subsections (type/height/hidden, subreport links), controls with bindings, and table cell grids (‹병합›=merged-away, {fmt}=output format). detail=true adds per-cell/control style (align, font size/bold, can-grow, merge flag, conditional styles).",
+        strSchema(new String[]{"path"}, "path",".crf file", "detail","true for style details per cell/control (default false)")));
+    arr.add(tool("crf_validate","Lint a report: dangling bindings (cells/labels/groups bound to fields that no longer exist), broken formula references (#unknown#, missing fields, no return), undeclared/unused parameters, query columns vs fields, scriptType mismatches, duplicate names, hidden subsections, missing linked subreport files. Read-only.",
         strSchema(new String[]{"path"}, "path",".crf file")));
-    arr.add(tool("crf_add_group","Add a GROUP BY group (group header + footer bands) on a column to an existing report, and save to a new file.",
-        strSchema(new String[]{"path","column","output"}, "path","source .crf", "column","field name to group by", "output","destination .crf")));
+    arr.add(tool("crf_set_label","Edit a 글상자(label) or other named control: bind field / static text / new formula, output format, alignment, font size/bold, wrap, can-grow, background, position/size, visibility. Saves to a new file.",
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format e.g. #,##0 (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "bgcolor","#RRGGBB (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "visible","true/false (optional)", "output","destination .crf")));
+    arr.add(tool("crf_set_subsection","Edit a subsection (band row) of a section: height, visible, name, page break. Saves to a new file.",
+        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English)", "index","subsection index within the section (default 0; see crf_describe_layout sub[j])", "height","new height (optional)", "visible","true/false (optional)", "name","new subsection name (optional)", "new_page","None|Before|After|BeforeAfter page break (optional)", "output","destination .crf")));
+    arr.add(tool("crf_remove_control","Remove a control (label/table/line/image/subreport…) by name from its band. Saves to a new file.",
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "output","destination .crf")));
+    arr.add(tool("crf_remove_group","Remove a group: its group header + footer bands (with their controls) and the Group definition. Refuses if the group's 그룹이름 field is bound somewhere unless force=true. Saves to a new file.",
+        strSchema(new String[]{"path","group","output"}, "path","source .crf", "group","grouping column name or 0-based group index (outermost = 0)", "force","true to remove even if the group-name field is referenced", "output","destination .crf")));
+    arr.add(tool("crf_remove_section","Remove a non-group section band (e.g. 페이지머리글). Refuses if it still has controls unless force=true. Group bands: use crf_remove_group. Saves to a new file.",
+        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band name (Korean or English)", "force","true to remove with its controls", "output","destination .crf")));
+    arr.add(tool("crf_add_table","Create a real table (ControlTable): a 1-row data table bound to fields in the 본문(Detail) band (or given section) plus an optional 1-row title table in a header band with the same column widths. columns = JSON array of {field, title, width, format, align}. (SDK-built; open in the CLIP designer once to confirm.) Saves to a new file.",
+        strSchema(new String[]{"path","columns","output"}, "path","source .crf", "columns","JSON array, e.g. [{\"field\":\"DEPT_NM\",\"title\":\"학과\",\"width\":500},{\"field\":\"AMT\",\"title\":\"금액\",\"width\":300,\"format\":\"#,##0\",\"align\":\"Right\"}]", "section","band for the data row (default 본문)", "header_section","band for the title row: 데이터머리글(default)|그룹머리글|페이지머리글|none", "left","X (default 0)", "top","Y of the data table (default 0)", "header_top","Y of the title table (default 0)", "row_height","row height (default 60)", "name","table name (default 표_new)", "output","destination .crf")));
+    arr.add(tool("crf_set_group","Change a group's grouping column or sort. Saves to a new file.",
+        strSchema(new String[]{"path","group","output"}, "path","source .crf", "group","grouping column name or 0-based group index", "column","new grouping field (optional)", "sort","Ascending|Descending|Not (optional)", "output","destination .crf")));
+    arr.add(tool("crf_add_group","Add a group (group header + footer bands) on a column. level chooses nesting: inner (default, closest to 본문) | outer | N (0 = outermost). label=true puts the grouping field in the header; subtotal=comma-separated fields creates rexpert.sum formulas (per group) bound in the footer. Saves to a new file.",
+        strSchema(new String[]{"path","column","output"}, "path","source .crf", "column","field name to group by", "level","inner|outer|N (default inner)", "label","true to add a header label bound to the grouping field (optional)", "subtotal","comma-separated numeric fields to subtotal in the footer (optional)", "sort","Ascending|Descending (default Ascending)", "output","destination .crf")));
     arr.add(tool("crf_place_detail_fields","Place a field-bound data label in the DETAIL band for every field of the first dataset (a simple list row), and save to a new file.",
         strSchema(new String[]{"path","output"}, "path","source .crf", "output","destination .crf")));
-    arr.add(tool("crf_set_cell","Edit one table cell: bind it to a field (by name), and/or set static text, and/or set an output format. Use the table name and row/col from crf_describe_layout; cells shown as ‹병합› are merged-away and cannot be edited (edit the anchor cell). Saves to a new file.",
-        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name (from describe_layout)", "row","row index (0-based)", "col","column index (0-based)", "field","field name to bind (optional)", "text","static text (optional)", "format","output format string e.g. #,##0 (optional)", "output","destination .crf")));
+    arr.add(tool("crf_set_cell","Edit one table cell: bind a field / static text / a new formula, output format, alignment, font size/bold, wrap, can-grow, merge-duplicates, background, font. Use the table name and row/col from crf_describe_layout; cells shown as ‹병합› are merged-away and cannot be edited (edit the anchor cell). Saves to a new file.",
+        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name (from describe_layout)", "row","row index (0-based)", "col","column index (0-based)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format string e.g. #,##0 (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "merge","true/false merge duplicate values (optional)", "bgcolor","#RRGGBB (optional)", "output","destination .crf")));
     arr.add(tool("crf_add_formula_field","Create a formula (computed) field with a JavaScript expression that MUST end with `return`. Refs via rexpert.field(\"data.COL\"); aggregates via rexpert.sum/avg/count/min/max(0,\"data.COL\",0,\"\",\"\"). Then bind it to a cell with crf_set_cell. Saves to a new file.",
         strSchema(new String[]{"path","name","script","output"}, "path","source .crf", "name","new formula field name", "script","JavaScript, MUST end with return;. Field ref=rexpert.field(\"ns.COL\") (ns=data/system/parameter/formula/runningtotal). Aggregate=rexpert.sum(범위,\"data.COL\",옵션,\"그룹|''\",\"조건식|''\"). e.g.  return rexpert.sum(0,\"data.PRVDD_BAL_AMT\",0,\"\",\"\");", "force","true to skip the return/bind-syntax checks (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_cell_style","Style a table cell: background color (hex #RRGGBB), font name, can-grow, and merge-duplicate. Saves to a new file.",
@@ -227,8 +244,16 @@ public class CrfMcpServer {
       case "crf_get_query":return textContent(getQuery(args));
       case "crf_get_formula":return textContent(getFormula(args));
       case "crf_search":return textContent(searchReports(args));
-      case "crf_describe_layout":return textContent(describeLayout((String)args.get("path")));
-      case "crf_add_group":return textContent(addGroup((String)args.get("path"),(String)args.get("column"),(String)args.get("output")));
+      case "crf_describe_layout":return textContent(describeLayout((String)args.get("path"),"true".equalsIgnoreCase(s(args,"detail"))));
+      case "crf_add_group":return textContent(addGroup(args));
+      case "crf_set_group":return textContent(setGroup(args));
+      case "crf_validate":return textContent(validate(args));
+      case "crf_set_label":return textContent(setLabel(args));
+      case "crf_set_subsection":return textContent(setSubsection(args));
+      case "crf_remove_control":return textContent(removeControl(args));
+      case "crf_remove_group":return textContent(removeGroup(args));
+      case "crf_remove_section":return textContent(removeSection(args));
+      case "crf_add_table":return textContent(addTable(args));
       case "crf_place_detail_fields":return textContent(placeDetailFields((String)args.get("path"),(String)args.get("output")));
       case "crf_set_cell":return textContent(setCell(args));
       case "crf_add_formula_field":return textContent(addFormulaField(args));
@@ -350,27 +375,70 @@ public class CrfMcpServer {
     for(Control c: all) if("ControlTable".equals(c.getClass().getSimpleName()) && name.equals(c.getName())) return c;
     return null;
   }
+  /** Apply value/style properties from args to a cell or label. Returns a description of what was set (empty if nothing). */
+  @SuppressWarnings("unchecked")
+  static String applyProps(TheReportFile rf,Object target,JSONObject args,String autoFormulaName) {
+    StringBuilder did=new StringBuilder();
+    String field=s(args,"field"), text=s(args,"text"), formula=s(args,"formula"), format=s(args,"format");
+    if(field!=null && !field.isEmpty()){ Field f=findField(rf,field); if(f==null) throw new RuntimeException("field '"+field+"' not found (crf_summary 로 이름 확인)");
+      call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); call(target,"setApplyValueField",Field.class,f); did.append(" field="+field+"("+fieldKindKo(f)+")"); }
+    else if(formula!=null && !formula.trim().isEmpty()){ if(!java.util.regex.Pattern.compile("\\breturn\\b").matcher(formula).find()) throw new RuntimeException("formula 에 return 이 없습니다 (예: return rexpert.field(\"data.COL\");)");
+      String fname=s(args,"formula_name"); if(fname==null||fname.trim().isEmpty()) fname=autoFormulaName; fname=fname.trim(); if(findField(rf,fname)!=null){ int i=2; while(findField(rf,fname+"_"+i)!=null) i++; fname=fname+"_"+i; }
+      FieldFormula ff=new FieldFormula(); ff.setName(fname); ff.setScript(formula); ff.setScriptType(ScriptType.JavaScript); ((RexObjectList<FieldFormula>) rf.getGlobe().getMainReport().getReportObjectManager().getFieldFormulaList()).add(ff);
+      call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); call(target,"setApplyValueField",Field.class,ff); did.append(" formula="+fname+"{"+oneLine(formula,60)+"}"); }
+    else if(text!=null){ call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(target,"setApplyValueText",String.class,text); did.append(" text=\""+text+"\""); }
+    else if("true".equalsIgnoreCase(s(args,"clear"))){ call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(target,"setApplyValueText",String.class,""); did.append(" cleared"); }
+    if(format!=null && !format.isEmpty()){ call(target,"setOutputFormat",String.class,format); did.append(" format="+format); }
+    String align=s(args,"align"), valign=s(args,"valign"), fontsize=s(args,"fontsize"), bold=s(args,"bold"), font=s(args,"font"), wrap=s(args,"wrap");
+    if(align!=null||valign!=null||fontsize!=null||bold!=null||(font!=null&&!font.isEmpty())||wrap!=null){ Object ti=go(target,"getTextInfo"); if(ti==null) throw new RuntimeException("이 컨트롤은 텍스트 속성(TextInfo)이 없습니다");
+      if(align!=null&&!align.isEmpty()){ String a=align.trim().toLowerCase(); com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod h= a.startsWith("l")?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Left : a.startsWith("r")?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Right : (a.startsWith("c")||a.startsWith("m"))?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Middle : null; if(h==null) throw new RuntimeException("align 은 Left|Center|Right"); call(ti,"setHorizontalAlignment",com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.class,h); did.append(" align="+h); }
+      if(valign!=null&&!valign.isEmpty()){ String a=valign.trim().toLowerCase(); com.clipsoft.clipreport.common.enums.VerticalAlignmentMethod v= a.startsWith("t")?com.clipsoft.clipreport.common.enums.VerticalAlignmentMethod.Top : a.startsWith("b")?com.clipsoft.clipreport.common.enums.VerticalAlignmentMethod.Bottom : (a.startsWith("c")||a.startsWith("m"))?com.clipsoft.clipreport.common.enums.VerticalAlignmentMethod.Center : null; if(v==null) throw new RuntimeException("valign 은 Top|Center|Bottom"); call(ti,"setVerticalAlignment",com.clipsoft.clipreport.common.enums.VerticalAlignmentMethod.class,v); did.append(" valign="+v); }
+      if(fontsize!=null&&!fontsize.isEmpty()){ call(ti,"setFontSize",short.class,(short)Integer.parseInt(fontsize.trim())); did.append(" 크기="+fontsize.trim()); }
+      if(bold!=null&&!bold.isEmpty()){ call(ti,"setFontBold",boolean.class,Boolean.parseBoolean(bold)); did.append(" 굵게="+bold); }
+      if(font!=null&&!font.isEmpty()){ call(ti,"setFontName",String.class,font); did.append(" 폰트="+font); }
+      if(wrap!=null&&!wrap.isEmpty()){ call(ti,"setWordWrap",boolean.class,Boolean.parseBoolean(wrap)); did.append(" 줄바꿈="+wrap); } }
+    String cg=s(args,"cangrow"), mg=s(args,"merge"), bg=s(args,"bgcolor");
+    if(cg!=null&&!cg.isEmpty()){ call(target,"setCanGrow",boolean.class,Boolean.parseBoolean(cg)); did.append(" 확장가능="+cg); }
+    if(mg!=null&&!mg.isEmpty()){ call(target,"setCellMergeRowDataDuplication",boolean.class,Boolean.parseBoolean(mg)); did.append(" 셀합치기="+mg); }
+    if(bg!=null&&!bg.isEmpty()){ call(target,"setBackStyle",BackStyleType.class,BackStyleType.Normal); call(target,"setBackColor",int.class,parseColor(bg)); did.append(" 배경="+bg); }
+    return did.toString();
+  }
   static String setCell(JSONObject args) throws Exception {
-    String path=(String)args.get("path"), table=(String)args.get("table"), output=(String)args.get("output");
-    int row=Integer.parseInt(((String)args.get("row")).trim()), col=Integer.parseInt(((String)args.get("col")).trim());
-    String field=(String)args.get("field"), text=(String)args.get("text"), format=(String)args.get("format");
+    String path=s(args,"path"), table=s(args,"table"), output=s(args,"output");
+    int row=Integer.parseInt(q(s(args,"row")).trim()), col=Integer.parseInt(q(s(args,"col")).trim());
     TheReportFile rf=open(path);
     Control tbl=findTable(rf,table); if(tbl==null) return "ERROR: table '"+table+"' not found (use crf_describe_layout for names)";
     Object cell=cellOf(tbl,row,col);
-    StringBuilder did=new StringBuilder();
-    if(field!=null && !field.isEmpty()){ Field f=findField(rf,field); if(f==null) return "ERROR: field '"+field+"' not found";
-      call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); call(cell,"setApplyValueField",Field.class,f); did.append(" field="+field+"("+fieldKindKo(f)+")"); }
-    else if(text!=null){ call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(cell,"setApplyValueText",String.class,text); did.append(" text=\""+text+"\""); }
-    if(format!=null && !format.isEmpty()){ call(cell,"setOutputFormat",String.class,format); did.append(" format="+format); }
-    if(did.length()==0) return "ERROR: nothing to set (provide field, text, or format)";
+    String did=applyProps(rf,cell,args,"F_"+table+"_"+row+"_"+col);
+    if(did.isEmpty()) return "ERROR: nothing to set (field/text/formula/clear/format/align/fontsize/bold/wrap/cangrow/merge/bgcolor)";
     String wrote=save(rf,output,path);
-    // verify by re-reading the written file
     TheReportFile v=open(output); Control vt=findTable(v,table); Object vc=vt==null?null:cellOf(vt,row,col);
     Object vf=go(vc,"getApplyValueField"); String vtxt=g(vc,"getApplyValueText"), vfmt=g(vc,"getOutputFormat");
     String ver=" verified["+(vf!=null?"field="+nameOf(vf):"text=\""+vtxt+"\"")+(vfmt!=null&&!vfmt.isEmpty()?" format="+vfmt:"")+"]";
+    String field=s(args,"field"), format=s(args,"format");
     if(field!=null && !field.isEmpty() && (vf==null || !field.equalsIgnoreCase(nameOf(vf)))) return "ERROR: 저장 후 되읽기 검증 실패 — 셀 바인딩이 반영되지 않음"+ver;
     if(format!=null && !format.isEmpty() && !format.equals(vfmt)) return "ERROR: 저장 후 되읽기 검증 실패 — 출력양식이 반영되지 않음"+ver;
     return "OK: "+table+"["+row+","+col+"] set"+did+ver+", wrote "+wrote;
+  }
+  /** All controls with their location: {section, subsection, controlList, control}. */
+  @SuppressWarnings("unchecked")
+  static java.util.List<Object[]> allControls(TheReportFile rf){ java.util.List<Object[]> out=new java.util.ArrayList<>(); RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
+    for(int i=0;i<secs.size();i++){ RexObjectList<SubSection> ss=secs.get(i).getSubSectionList(); for(int j=0;j<ss.size();j++){ if(!(ss.get(j) instanceof SubSectionDefault)) continue; RexObjectList<ControlListForEachSeparatedPage> cls=((SubSectionDefault)ss.get(j)).getControlListForEachSeparatedPageList();
+      for(int k=0;k<cls.size();k++){ RexObjectList<Control> cl=(RexObjectList<Control>)(RexObjectList<?>)cls.get(k).getControlList(); for(int x=0;x<cl.size();x++) out.add(new Object[]{secs.get(i),ss.get(j),cl,cl.get(x)}); } } }
+    return out; }
+  static Object[] findControlLoc(TheReportFile rf,String name){ if(name==null) return null; for(Object[] e: allControls(rf)) if(name.equals(((Control)e[3]).getName())) return e; return null; }
+  static String setLabel(JSONObject args) throws Exception {
+    String path=s(args,"path"), name=s(args,"name"), output=s(args,"output");
+    TheReportFile rf=open(path); Object[] loc=findControlLoc(rf,name); if(loc==null) return "ERROR: control '"+name+"' not found (crf_describe_layout 로 이름 확인)";
+    Control c=(Control)loc[3]; StringBuilder did=new StringBuilder(applyProps(rf,c,args,"F_"+name));
+    if(args.get("left")!=null){ c.setX1(pInt(args.get("left"),c.getX1())); did.append(" left="+c.getX1()); } if(args.get("top")!=null){ c.setY1(pInt(args.get("top"),c.getY1())); did.append(" top="+c.getY1()); }
+    if(args.get("width")!=null){ call(c,"setWidth",int.class,pInt(args.get("width"),0)); did.append(" width="+s(args,"width")); } if(args.get("height")!=null){ call(c,"setHeight",int.class,pInt(args.get("height"),0)); did.append(" height="+s(args,"height")); }
+    String vis=s(args,"visible"); if(vis!=null&&!vis.isEmpty()){ c.setVisible(Boolean.parseBoolean(vis)); did.append(" visible="+vis); }
+    if(did.length()==0) return "ERROR: nothing to set";
+    String wrote=save(rf,output,path);
+    Object[] v=findControlLoc(open(output),name); if(v==null) return "ERROR: 저장 후 되읽기 검증 실패";
+    Object vf=go(v[3],"getApplyValueField"); String vtxt=g(v[3],"getApplyValueText");
+    return "OK: "+c.getClass().getSimpleName()+" \""+name+"\" ("+((Section)loc[0]).getClass().getSimpleName().replace("Section","")+") set"+did+" verified["+(vf!=null?"field="+nameOf(vf):"text=\""+q(vtxt)+"\"")+"], wrote "+wrote;
   }
   @SuppressWarnings("unchecked")
   static String addFormulaField(JSONObject args) throws Exception {
@@ -392,22 +460,14 @@ public class CrfMcpServer {
   }
 
   static int parseColor(String s){ s=s.trim().replace("#",""); if(s.matches("[0-9a-fA-F]{6}")){ int r=Integer.parseInt(s.substring(0,2),16),g=Integer.parseInt(s.substring(2,4),16),b=Integer.parseInt(s.substring(4,6),16); return (b<<16)|(g<<8)|r; } return Integer.parseInt(s); }
-  static int pInt(Object o,int def){ try{ return Integer.parseInt(((String)o).trim()); }catch(Exception e){ return def; } }
+  static int pInt(Object o,int def){ if(o instanceof Number) return ((Number)o).intValue(); try{ return Integer.parseInt(String.valueOf(o).trim()); }catch(Exception e){ return def; } }
 
   static String setCellStyle(JSONObject args) throws Exception {
-    String path=(String)args.get("path"), table=(String)args.get("table"), output=(String)args.get("output");
-    int row=pInt(args.get("row"),0), col=pInt(args.get("col"),0);
-    String bg=(String)args.get("bgcolor"), font=(String)args.get("font"), cg=(String)args.get("cangrow"), mg=(String)args.get("merge");
-    TheReportFile rf=open(path);
-    Control tbl=findTable(rf,table); if(tbl==null) return "ERROR: table '"+table+"' not found";
-    Object cell=cellOf(tbl,row,col);
-    StringBuilder did=new StringBuilder();
-    if(bg!=null && !bg.isEmpty()){ call(cell,"setBackStyle",BackStyleType.class,BackStyleType.Normal); call(cell,"setBackColor",int.class,parseColor(bg)); did.append(" 배경="+bg); }
-    if(font!=null && !font.isEmpty()){ Object ti=go(cell,"getTextInfo"); if(ti!=null){ call(ti,"setFontName",String.class,font); did.append(" 폰트="+font); } }
-    if(cg!=null){ call(cell,"setCanGrow",boolean.class,Boolean.parseBoolean(cg)); did.append(" 확장가능="+cg); }
-    if(mg!=null){ call(cell,"setCellMergeRowDataDuplication",boolean.class,Boolean.parseBoolean(mg)); did.append(" 셀합치기="+mg); }
-    if(did.length()==0) return "ERROR: nothing to set (bgcolor/font/cangrow/merge)";
-    save(rf,output,path); return "OK: "+table+"["+row+","+col+"] style"+did+", wrote "+output;
+    String path=s(args,"path"), table=s(args,"table"), output=s(args,"output"); int row=pInt(args.get("row"),0), col=pInt(args.get("col"),0);
+    TheReportFile rf=open(path); Control tbl=findTable(rf,table); if(tbl==null) return "ERROR: table '"+table+"' not found";
+    Object cell=cellOf(tbl,row,col); JSONObject a=new JSONObject(); for(Object k: args.keySet()) if(!k.equals("field")&&!k.equals("text")&&!k.equals("formula")&&!k.equals("format")&&!k.equals("clear")) a.put(k,args.get(k));
+    String did=applyProps(rf,cell,a,"F_"+table); if(did.isEmpty()) return "ERROR: nothing to set (bgcolor/font/cangrow/merge/align/fontsize/bold/wrap)";
+    String wrote=save(rf,output,path); return "OK: "+table+"["+row+","+col+"] style"+did+", wrote "+wrote;
   }
 
   @SuppressWarnings("unchecked")
@@ -471,6 +531,36 @@ public class CrfMcpServer {
     return "OK: added label("+did+") to "+sec.getClass().getSimpleName().replace("Section","")+", wrote "+output;
   }
 
+  static String setSubsection(JSONObject args) throws Exception {
+    String path=s(args,"path"), section=s(args,"section"), output=s(args,"output"); int idx=pInt(args.get("index"),0);
+    TheReportFile rf=open(path); Section sec=findSection(rf,section); if(sec==null) return "ERROR: section '"+section+"' not found";
+    RexObjectList<SubSection> ss=sec.getSubSectionList(); if(idx<0||idx>=ss.size()) return "ERROR: index "+idx+" 범위 밖 (서브섹션 "+ss.size()+"개)";
+    SubSection sb=ss.get(idx); StringBuilder did=new StringBuilder();
+    if(args.get("height")!=null){ sb.setHeight(pInt(args.get("height"),sb.getHeight())); did.append(" height="+sb.getHeight()); }
+    String vis=s(args,"visible"); if(vis!=null&&!vis.isEmpty()){ sb.setVisible(Boolean.parseBoolean(vis)); did.append(" visible="+vis); }
+    String nm=s(args,"name"); if(nm!=null&&!nm.isEmpty()){ sb.setName(nm); did.append(" name=\""+nm+"\""); }
+    String np=s(args,"new_page"); if(np!=null&&!np.isEmpty()){ NewPageType t; try{ t=NewPageType.valueOf(np.trim()); }catch(Exception e){ return "ERROR: new_page 는 None|Before|After|BeforeAfter"; } call(sb,"setNewPage",NewPageType.class,t); did.append(" new_page="+t); }
+    if(did.length()==0) return "ERROR: nothing to set (height/visible/name/new_page)";
+    String wrote=save(rf,output,path);
+    return "OK: "+sec.getClass().getSimpleName().replace("Section","")+" sub["+idx+"] "+subSectionInfo(sb)+" set"+did+", wrote "+wrote;
+  }
+  static String removeControl(JSONObject args) throws Exception {
+    String path=s(args,"path"), name=s(args,"name"), output=s(args,"output");
+    TheReportFile rf=open(path); Object[] loc=findControlLoc(rf,name); if(loc==null) return "ERROR: control '"+name+"' not found";
+    RexObjectList<?> cl=(RexObjectList<?>)loc[2]; for(int i=0;i<cl.size();i++) if(cl.get(i)==loc[3]){ cl.remove(i); break; }
+    String wrote=save(rf,output,path); if(findControlLoc(open(output),name)!=null) return "ERROR: 저장 후 되읽기 검증 실패 — 컨트롤이 남아 있음";
+    return "OK: "+((Control)loc[3]).getClass().getSimpleName()+" \""+name+"\" 삭제 ("+((Section)loc[0]).getClass().getSimpleName().replace("Section","")+"/"+nameOf(loc[1])+"), wrote "+wrote;
+  }
+  static String removeSection(JSONObject args) throws Exception {
+    String path=s(args,"path"), key=s(args,"section"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
+    if(engSection(key).toLowerCase().contains("group")) return "ERROR: 그룹 밴드는 crf_remove_group 으로 삭제하세요";
+    TheReportFile rf=open(path); Section sec=findSection(rf,key); if(sec==null) return "ERROR: section '"+key+"' not found";
+    if(sec instanceof SectionDetail) return "ERROR: 본문(Detail) 밴드는 삭제할 수 없습니다";
+    int n=0; for(Object[] e: allControls(rf)) if(e[0]==sec) n++;
+    if(n>0&&!force) return "ERROR: 이 밴드에 컨트롤 "+n+"개가 있습니다 — force=true 로 함께 삭제";
+    RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); for(int i=0;i<secs.size();i++) if(secs.get(i)==sec){ secs.remove(i); break; }
+    String wrote=save(rf,output,path); return "OK: "+sec.getClass().getSimpleName().replace("Section","")+" 밴드 삭제(컨트롤 "+n+"개 포함), wrote "+wrote;
+  }
   static String setPaper(JSONObject args) throws Exception {
     String path=(String)args.get("path"), output=(String)args.get("output");
     TheReportFile rf=open(path); MainPage mp=rf.getGlobe().getMainReport().getReportDesign().getMainPage();
@@ -490,19 +580,39 @@ public class CrfMcpServer {
     RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList();
     for(int i=0;i<dss.size();i++){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) dss.get(i).getFieldDataList(); for(int j=0;j<fl.size();j++) s.add(fl.get(j).getName()); } return s; }
   static String sectionsOf(TheReportFile rf){ RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); StringBuilder b=new StringBuilder(); for(int i=0;i<secs.size();i++) b.append(secs.get(i).getClass().getSimpleName().replace("Section","")).append(i<secs.size()-1?",":""); return b.toString(); }
+  static java.util.Map<String,String> cellGrid(Control t){ java.util.Map<String,String> m=new java.util.LinkedHashMap<>(); Object rc=go(t,"getRowCount"), cc=go(t,"getColumnCount"); if(!(rc instanceof Integer)||!(cc instanceof Integer)) return m;
+    for(int r=0;r<(Integer)rc;r++) for(int c=0;c<(Integer)cc;c++){ Object cell=tableCell(t,r,c); String v; if(!isNormalCell(cell)) v="‹병합›"; else { Object cf=go(cell,"getApplyValueField"); String ct=g(cell,"getApplyValueText"), fmt=g(cell,"getOutputFormat"); v=cf!=null?fieldKindKo(cf)+":"+nameOf(cf):(ct!=null&&!ct.isEmpty()?"\""+ct+"\"":"·"); if(fmt!=null&&!fmt.isEmpty()) v+="{"+fmt+"}"; } m.put("["+r+","+c+"]",v); } return m; }
+  static java.util.Map<String,String> formulaMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); RexObjectList<?> fl=rf.getGlobe().getMainReport().getReportObjectManager().getFieldFormulaList(); for(int i=0;i<fl.size();i++) m.put(nameOf(fl.get(i)),q(g(fl.get(i),"getScript"))); return m; }
+  static java.util.Map<String,String> paramMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); for(int i=0;i<gp.size();i++) m.put(nameOf(gp.get(i)),q(g(gp.get(i),"getDataType"))+"="+q(g(gp.get(i),"getDefaultValue"))); return m; }
+  static java.util.Map<String,String> controlMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; Object f=go(c,"getApplyValueField"); String t=g(c,"getApplyValueText"); m.put(c.getName(), ((Section)e[0]).getClass().getSimpleName().replace("Section","")+" "+c.getClass().getSimpleName().replace("Control","")+(f!=null?" ["+nameOf(f)+"]":(t!=null&&!t.isEmpty()?" \""+oneLine(t,30)+"\"":""))+" @"+c.getX1()+","+c.getY1()); } return m; }
+  static void diffMaps(StringBuilder s,String title,java.util.Map<String,String> A,java.util.Map<String,String> B,int max){ java.util.List<String> add=new java.util.ArrayList<>(), rem=new java.util.ArrayList<>(), chg=new java.util.ArrayList<>();
+    for(String k: B.keySet()) if(!A.containsKey(k)) add.add(k); for(String k: A.keySet()) if(!B.containsKey(k)) rem.add(k); for(String k: A.keySet()) if(B.containsKey(k)&&!q(A.get(k)).equals(q(B.get(k)))) chg.add(k);
+    if(add.isEmpty()&&rem.isEmpty()&&chg.isEmpty()) return; s.append(title).append(": ");
+    if(!add.isEmpty()) s.append("+").append(add.size()).append(" ").append(add.subList(0,Math.min(max,add.size()))).append(add.size()>max?"… ":" "); if(!rem.isEmpty()) s.append("-").append(rem.size()).append(" ").append(rem.subList(0,Math.min(max,rem.size()))).append(rem.size()>max?"… ":" ");
+    if(!chg.isEmpty()){ s.append("~").append(chg.size()); for(int i=0;i<chg.size()&&i<max;i++){ String k=chg.get(i); s.append("\n     ").append(k).append(": ").append(oneLine(A.get(k),60)).append(" → ").append(oneLine(B.get(k),60)); } if(chg.size()>max) s.append("\n     …"); }
+    s.append("\n"); }
   static String diff(String a,String b) throws Exception {
-    TheReportFile A=open(a), B=open(b);
-    java.util.Set<String> fa=dataFieldNames(A), fb=dataFieldNames(B);
-    java.util.Set<String> added=new java.util.TreeSet<>(fb); added.removeAll(fa);
-    java.util.Set<String> removed=new java.util.TreeSet<>(fa); removed.removeAll(fb);
-    int ga=A.getGlobe().getMainReport().getReportObjectManager().getGroupList().size();
-    int gb=B.getGlobe().getMainReport().getReportObjectManager().getGroupList().size();
-    StringBuilder s=new StringBuilder();
+    TheReportFile A=open(a), B=open(b); StringBuilder s=new StringBuilder();
     s.append("A: ").append(new File(a).getName()).append("\nB: ").append(new File(b).getName()).append("\n");
-    s.append("필드 추가(B): ").append(added.isEmpty()?"-":added).append("\n");
-    s.append("필드 삭제(A에만): ").append(removed.isEmpty()?"-":removed).append("\n");
-    s.append("그룹 수: A=").append(ga).append("  B=").append(gb).append("\n");
-    s.append("섹션 A: ").append(sectionsOf(A)).append("\n섹션 B: ").append(sectionsOf(B));
+    // datasets
+    java.util.Map<String,DataSet> da=new java.util.LinkedHashMap<>(), db=new java.util.LinkedHashMap<>(); RexObjectList<DataSet> la=A.getGlobe().getGlobalObjectManager().getDataSetList(), lb=B.getGlobe().getGlobalObjectManager().getDataSetList();
+    for(int i=0;i<la.size();i++) da.put(la.get(i).getName(),la.get(i)); for(int i=0;i<lb.size();i++) db.put(lb.get(i).getName(),lb.get(i));
+    java.util.Map<String,String> dsa=new java.util.TreeMap<>(), dsb=new java.util.TreeMap<>(); for(String k: da.keySet()) dsa.put(k,"ds"); for(String k: db.keySet()) dsb.put(k,"ds"); diffMaps(s,"데이터셋",dsa,dsb,10);
+    for(String k: da.keySet()){ if(!db.containsKey(k)) continue; DataSet x=da.get(k), y=db.get(k);
+      java.util.Map<String,String> fa=new java.util.TreeMap<>(), fb=new java.util.TreeMap<>(); RexObjectList<?> xf=x.getFieldDataList(), yf=y.getFieldDataList(); for(int i=0;i<xf.size();i++) fa.put(nameOf(xf.get(i)),q(g(xf.get(i),"getDataType"))); for(int i=0;i<yf.size();i++) fb.put(nameOf(yf.get(i)),q(g(yf.get(i),"getDataType"))); diffMaps(s,"  "+k+" 필드",fa,fb,15);
+      DataAccessMethodSQL qx=x.getDataSetItemNormal()==null?null:x.getDataSetItemNormal().getDataAccessMethodSQL(), qy=y.getDataSetItemNormal()==null?null:y.getDataSetItemNormal().getDataAccessMethodSQL();
+      if(qx!=null&&qy!=null){ String sx=q(qx.getQueryString()), sy=q(qy.getQueryString()); if(qx.getScriptType()!=qy.getScriptType()) s.append("  ").append(k).append(" scriptType: ").append(qx.getScriptType()).append(" → ").append(qy.getScriptType()).append("\n");
+        if(!sx.equals(sy)){ java.util.List<String> lx=java.util.Arrays.asList(sx.split("\\r?\\n")), ly=java.util.Arrays.asList(sy.split("\\r?\\n")); java.util.Set<String> setx=new java.util.HashSet<>(), sety=new java.util.HashSet<>(); for(String l: lx) setx.add(l.trim()); for(String l: ly) sety.add(l.trim());
+          java.util.List<String> plus=new java.util.ArrayList<>(), minus=new java.util.ArrayList<>(); for(String l: ly) if(!l.trim().isEmpty()&&!setx.contains(l.trim())) plus.add(l.trim()); for(String l: lx) if(!l.trim().isEmpty()&&!sety.contains(l.trim())) minus.add(l.trim());
+          s.append("  ").append(k).append(" 쿼리 변경: ").append(sx.length()).append("→").append(sy.length()).append(" chars, +").append(plus.size()).append(" 줄 / -").append(minus.size()).append(" 줄\n"); for(int i=0;i<plus.size()&&i<6;i++) s.append("     + ").append(oneLine(plus.get(i),110)).append("\n"); for(int i=0;i<minus.size()&&i<6;i++) s.append("     - ").append(oneLine(minus.get(i),110)).append("\n"); } } }
+    diffMaps(s,"매개변수(타입=기본값)",paramMap(A),paramMap(B),10);
+    diffMaps(s,"공식",formulaMap(A),formulaMap(B),10);
+    java.util.Map<String,String> ga=new java.util.TreeMap<>(), gb=new java.util.TreeMap<>(); RexObjectList<Group> gla=A.getGlobe().getMainReport().getReportObjectManager().getGroupList(), glb=B.getGlobe().getMainReport().getReportObjectManager().getGroupList(); for(int i=0;i<gla.size();i++) ga.put(nameOf(gla.get(i).getGroupingField()),""+gla.get(i).getSortMethod()); for(int i=0;i<glb.size();i++) gb.put(nameOf(glb.get(i).getGroupingField()),""+glb.get(i).getSortMethod()); diffMaps(s,"그룹",ga,gb,10);
+    String sa=sectionsOf(A), sb=sectionsOf(B); if(!sa.equals(sb)) s.append("섹션: ").append(sa).append(" → ").append(sb).append("\n");
+    diffMaps(s,"컨트롤",controlMap(A),controlMap(B),15);
+    java.util.Map<String,Control> ta=new java.util.TreeMap<>(), tb=new java.util.TreeMap<>(); for(Object[] e: allControls(A)) if("ControlTable".equals(e[3].getClass().getSimpleName())) ta.put(((Control)e[3]).getName(),(Control)e[3]); for(Object[] e: allControls(B)) if("ControlTable".equals(e[3].getClass().getSimpleName())) tb.put(((Control)e[3]).getName(),(Control)e[3]);
+    for(String k: ta.keySet()) if(tb.containsKey(k)) diffMaps(s,"  표 "+k+" 셀",cellGrid(ta.get(k)),cellGrid(tb.get(k)),20);
+    if(s.toString().split("\n").length<=2) s.append("차이 없음 (데이터셋/필드/쿼리/매개변수/공식/그룹/섹션/컨트롤/셀 기준)\n");
     return s.toString();
   }
 
@@ -682,6 +792,75 @@ public class CrfMcpServer {
       if(v==target){ out.add(c+"."+nm.substring(3)); continue; }
       if(v instanceof Field||structural(v)) continue;
       walkRefs(v,target,out,seen,c,d+1); }
+  }
+  /** All field references in the layout: {ctx.getter, Field}. */
+  static void collectAllFieldRefs(Object o,java.util.List<Object[]> all,java.util.Set<Object> seen,String ctx,int d){
+    if(o==null||d>30) return;
+    if(o instanceof RexObjectList){ RexObjectList<?> l=(RexObjectList<?>)o; for(int i=0;i<l.size();i++){ Object e=l.get(i); if(structural(e)) continue; collectAllFieldRefs(e,all,seen,ctx,d); } return; }
+    if(!o.getClass().getName().startsWith("com.clipsoft.clipreport")) return; if(o instanceof Field) return; if(!seen.add(o)) return;
+    String sn=o.getClass().getSimpleName(); String c=ctx;
+    if(o instanceof Section){ c=sn.replace("Section",""); } else if(o instanceof SubSection) c=ctx+"/"+q(nameOf(o)); else if(o instanceof Control) c=ctx+"/"+sn.replace("Control","")+"\""+q(nameOf(o))+"\""; else if(o instanceof Group) c="그룹"; else if(sn.equals("Condition")) c=ctx+"/조건"; else if(sn.equals("ConditionalStyle")) c=ctx+"/조건스타일";
+    if(o instanceof MainPage){ RexObjectList<Section> secs=((MainPage)o).getSectionList(); for(int i=0;i<secs.size();i++) collectAllFieldRefs(secs.get(i),all,seen,c,d+1); }
+    if(o instanceof Section){ RexObjectList<SubSection> ss=((Section)o).getSubSectionList(); for(int i=0;i<ss.size();i++) collectAllFieldRefs(ss.get(i),all,seen,c,d+1); }
+    if(o instanceof SubSectionDefault){ RexObjectList<ControlListForEachSeparatedPage> cls=((SubSectionDefault)o).getControlListForEachSeparatedPageList(); for(int k=0;k<cls.size();k++){ RexObjectList<?> cl=cls.get(k).getControlList(); for(int x=0;x<cl.size();x++) collectAllFieldRefs(cl.get(x),all,seen,c,d+1); } }
+    if(o instanceof Control && "ControlTable".equals(sn)){ Object rc=go(o,"getRowCount"), cc=go(o,"getColumnCount"); if(rc instanceof Integer && cc instanceof Integer) for(int r=0;r<(Integer)rc;r++) for(int k=0;k<(Integer)cc;k++){ Object cell=tableCell((Control)o,r,k); if(cell!=null) collectAllFieldRefs(cell,all,seen,c+"["+r+","+k+"]",d+1); } }
+    Object links=go(o,"getFieldLinkListForSubReportParameter"); if(links instanceof RexObjectList){ RexObjectList<?> ll=(RexObjectList<?>)links; for(int i=0;i<ll.size();i++) collectAllFieldRefs(ll.get(i),all,seen,c+"/매개변수링크",d+1); }
+    for(java.lang.reflect.Method m:o.getClass().getMethods()){ if(m.getParameterCount()!=0||!m.getName().startsWith("get")||m.getName().equals("getClass")) continue; String nm=m.getName(); if(nm.equals("getParentObj")||nm.equals("getRefInfomationStorage")||nm.equals("getRefStorage")||nm.equals("getSubreport")) continue;
+      Class<?> rt=m.getReturnType(); if(rt.isPrimitive()||rt==String.class||rt.isEnum()||rt==Class.class||rt.isArray()) continue;
+      Object v; try{ v=m.invoke(o); }catch(Throwable t){ continue; }
+      if(Field.class.isAssignableFrom(rt)){ String at=g(o,"getApplyValueType"); if(nm.equals("getApplyValueField") && !"Field".equals(at)) continue; if(v!=null) all.add(new Object[]{c+"."+nm.substring(3),v}); else if(nm.equals("getApplyValueField")||nm.equals("getGroupingField")||nm.equals("getLinkedField1")||nm.equals("getLinkedField2")) all.add(new Object[]{c+"."+nm.substring(3),null}); continue; }
+      if(v==null||structural(v)) continue; collectAllFieldRefs(v,all,seen,c,d+1); }
+  }
+  static java.util.Set<Object> knownFields(TheReportFile rf){ java.util.Set<Object> k=Collections.newSetFromMap(new IdentityHashMap<>()); GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager(); var rom=rf.getGlobe().getMainReport().getReportObjectManager(); RexObjectList<DataSet> dss=gom.getDataSetList();
+    for(int i=0;i<dss.size();i++){ RexObjectList<?> fl=dss.get(i).getFieldDataList(); for(int j=0;j<fl.size();j++) k.add(fl.get(j)); RexObjectList<?> dp=dss.get(i).getFieldDataSetParameterList(); if(dp!=null) for(int j=0;j<dp.size();j++) k.add(dp.get(j)); }
+    for(RexObjectList<?> l: new RexObjectList<?>[]{rom.getFieldDataList(),rom.getFieldFormulaList(),rom.getFieldRunningTotalList(),rom.getFieldGroupNameList(),rom.getFieldGroupIndexList(),rom.getFieldReportParameterList(),rom.getFieldDataSetParameterList(),gom.getFieldGlobalParameterList(),gom.getFieldGlobalSpecialList(),gom.getFieldConditionList()}) if(l!=null) for(int j=0;j<l.size();j++) k.add(l.get(j));
+    // embedded subreports (리포트 서브섹션 / 서브리포트 컨트롤) own their dataset-parameter fields (LinkedField2 targets)
+    RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); java.util.List<Object> subs=new java.util.ArrayList<>();
+    for(int i=0;i<secs.size();i++){ RexObjectList<SubSection> ss=secs.get(i).getSubSectionList(); for(int j=0;j<ss.size();j++){ Object r=go(ss.get(j),"getSubreport"); if(r!=null) subs.add(r); } }
+    for(Object[] e: allControls(rf)){ Object r=go(e[3],"getSubreport"); if(r!=null) subs.add(r); }
+    for(Object r: subs){ Object srom=go(r,"getReportObjectManager"); if(srom==null) continue; for(String gname: new String[]{"getFieldDataSetParameterList","getFieldDataList","getFieldFormulaList","getFieldRunningTotalList","getFieldGroupNameList","getFieldReportParameterList"}){ Object l=go(srom,gname); if(l instanceof RexObjectList) for(int j=0;j<((RexObjectList<?>)l).size();j++) k.add(((RexObjectList<?>)l).get(j)); } }
+    return k; }
+  @SuppressWarnings("unchecked")
+  static String validate(JSONObject args) throws Exception {
+    String path=s(args,"path"); TheReportFile rf=open(path); GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager(); var rom=rf.getGlobe().getMainReport().getReportObjectManager(); RexObjectList<DataSet> dss=gom.getDataSetList();
+    java.util.List<String> err=new java.util.ArrayList<>(), warn=new java.util.ArrayList<>(), info=new java.util.ArrayList<>();
+    // 1) dangling bindings
+    java.util.Set<Object> known=knownFields(rf); java.util.List<Object[]> all=new java.util.ArrayList<>(); collectAllFieldRefs(rf.getGlobe(),all,Collections.newSetFromMap(new IdentityHashMap<>()),"",0);
+    int nRefs=0; for(Object[] r: all){ nRefs++; String at=String.valueOf(r[0]); if(r[1]==null) err.add("바인딩 비어 있음: "+at); else if(!known.contains(r[1])){ if(at.endsWith(".LinkedField2")) info.add("서브리포트 매개변수 링크 대상 확인 불가: "+at+" → '"+nameOf(r[1])+"'"); else err.add("존재하지 않는 필드에 바인딩: "+at+" → '"+nameOf(r[1])+"' ("+fieldKindKo(r[1])+", 필드 목록에 없음)"); } }
+    // 2) formulas
+    RexObjectList<FieldFormula> fl=(RexObjectList<FieldFormula>) rom.getFieldFormulaList();
+    for(int i=0;i<fl.size();i++){ FieldFormula f=fl.get(i); String sc=q(f.getScript());
+      if(sc.contains("#unknown#")) err.add("공식 "+f.getName()+": 끊어진 참조 #unknown#");
+      if(!java.util.regex.Pattern.compile("\\breturn\\b").matcher(sc).find()) warn.add("공식 "+f.getName()+": return 없음");
+      java.util.regex.Matcher m=java.util.regex.Pattern.compile("[\"']([a-zA-Z]+)\\.([A-Za-z0-9_가-힣]+)[\"']").matcher(sc); java.util.Set<String> miss=new java.util.TreeSet<>();
+      while(m.find()){ String ns=m.group(1).toLowerCase(), fn=m.group(2); if((ns.equals("data")||ns.equals("formula")||ns.equals("parameter")||ns.equals("runningtotal")) && findField(rf,fn)==null) miss.add(ns+"."+fn); }
+      if(!miss.isEmpty()) err.add("공식 "+f.getName()+": 없는 필드 참조 "+miss); }
+    // 3) groups
+    RexObjectList<Group> gl=rom.getGroupList(); for(int i=0;i<gl.size();i++){ Field gf=gl.get(i).getGroupingField(); if(gf==null) err.add("그룹["+i+"]: 그룹 필드 없음(null)"); else if(!known.contains(gf)) err.add("그룹["+i+"]: 존재하지 않는 필드 '"+gf.getName()+"'"); }
+    RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); int gh=0,gfo=0; for(int i=0;i<secs.size();i++){ if(secs.get(i) instanceof SectionGroupHeader){ gh++; if(((SectionGroupHeader)secs.get(i)).getGroup()==null) err.add("그룹 머리글["+i+"]: 연결된 그룹 없음"); } if(secs.get(i) instanceof SectionGroupFooter) gfo++; }
+    if(gh!=gfo) warn.add("그룹 머리글("+gh+")/바닥글("+gfo+") 수 불일치"); if(gh!=gl.size()) warn.add("그룹 정의("+gl.size()+")와 그룹 머리글("+gh+") 수 불일치");
+    // 4) parameters
+    java.util.Set<String> declared=declaredParams(rf); java.util.Set<String> usedAll=new java.util.TreeSet<>();
+    for(int i=0;i<dss.size();i++){ DataSetItemNormal n=dss.get(i).getDataSetItemNormal(); DataAccessMethodSQL qm=n==null?null:n.getDataAccessMethodSQL(); if(qm==null) continue; String raw=q(qm.getQueryString());
+      if(raw.trim().isEmpty()) warn.add("데이터셋 "+dss.get(i).getName()+": 쿼리 비어 있음");
+      for(String u: usedParams(raw)){ usedAll.add(u.toUpperCase()); if(!declared.contains(u.toUpperCase())) err.add("데이터셋 "+dss.get(i).getName()+": 미선언 매개변수 {parameter."+u+"}"); }
+      boolean js=qm.getScriptType()==ScriptType.JavaScript; if(js && !looksLikeJsQuery(raw) && !raw.trim().isEmpty()) warn.add("데이터셋 "+dss.get(i).getName()+": scriptType=JavaScript 인데 평문 SQL 로 보임"); if(!js && looksLikeJsQuery(raw)) warn.add("데이터셋 "+dss.get(i).getName()+": scriptType=NotScript 인데 JavaScript 로 보임");
+      String plain=js?jsToPlainSql(raw):raw; java.util.List<String> cols=CrfGen2.parseColumns(CrfGen2.stripComments(plain)); if(!cols.isEmpty()){ java.util.Set<String> cu=new java.util.HashSet<>(); for(String c: cols) cu.add(c.toUpperCase()); java.util.Set<String> fu=new java.util.HashSet<>(); RexObjectList<?> fds=dss.get(i).getFieldDataList(); java.util.List<String> notInQuery=new java.util.ArrayList<>(); for(int j=0;j<fds.size();j++){ String fn=nameOf(fds.get(j)); fu.add(fn.toUpperCase()); if(!cu.contains(fn.toUpperCase())) notInQuery.add(fn); }
+        java.util.List<String> notInFields=new java.util.ArrayList<>(); for(String c: cols) if(!c.matches("COL_\\d+")&&!fu.contains(c.toUpperCase())) notInFields.add(c);
+        if(!notInQuery.isEmpty()) info.add("데이터셋 "+dss.get(i).getName()+": 쿼리 SELECT 에 없는 필드 "+notInQuery); if(!notInFields.isEmpty()) warn.add("데이터셋 "+dss.get(i).getName()+": 필드로 없는 SELECT 컬럼 "+notInFields+" (crf_sync_fields)"); } }
+    RexObjectList<?> gp=gom.getFieldGlobalParameterList(); for(int i=0;i<gp.size();i++){ Field pf=(Field)gp.get(i); if(!usedAll.contains(pf.getName().toUpperCase()) && refsOf(rf,pf).isEmpty()) info.add("매개변수 "+pf.getName()+": 어디에도 사용되지 않음"); }
+    // 5) duplicate names
+    java.util.Map<String,java.util.List<String>> names=new java.util.TreeMap<>(); for(int i=0;i<dss.size();i++){ RexObjectList<?> fds=dss.get(i).getFieldDataList(); for(int j=0;j<fds.size();j++) names.computeIfAbsent(nameOf(fds.get(j)).toUpperCase(),k->new java.util.ArrayList<>()).add("데이터("+dss.get(i).getName()+")"); }
+    for(RexObjectList<?> l: new RexObjectList<?>[]{rom.getFieldFormulaList(),rom.getFieldRunningTotalList(),gom.getFieldGlobalParameterList()}) if(l!=null) for(int j=0;j<l.size();j++) names.computeIfAbsent(nameOf(l.get(j)).toUpperCase(),k->new java.util.ArrayList<>()).add(fieldKindKo(l.get(j)));
+    for(java.util.Map.Entry<String,java.util.List<String>> e: names.entrySet()){ java.util.List<String> v=e.getValue(); boolean sameDs=v.size()>1 && new java.util.HashSet<>(v).size()<v.size(); boolean crossKind=v.size()>1 && !v.stream().allMatch(x->x.startsWith("데이터(")); if(sameDs) warn.add("중복 이름 "+e.getKey()+": "+v); else if(crossKind) info.add("같은 이름이 여러 종류에 있음 "+e.getKey()+": "+v+" (공식/매개변수 참조 시 혼동 주의)"); }
+    // 6) hidden / subreport links
+    for(int i=0;i<secs.size();i++){ RexObjectList<SubSection> ss=secs.get(i).getSubSectionList(); for(int j=0;j<ss.size();j++){ SubSection sb=ss.get(j); String band=secs.get(i).getClass().getSimpleName().replace("Section",""); if(!sb.getVisible()) info.add(band+" sub["+j+"] \""+sb.getName()+"\" 숨김");
+      Object wl=go(sb,"getLinkedSubreportPath"); String url=g(wl,"getUrlText"); if(url!=null&&!url.isEmpty()&&!url.matches("(?i)https?://.*")){ File f=new File(new File(path).getAbsoluteFile().getParentFile(),url); if(!f.isFile()) warn.add(band+" sub["+j+"]: 링크 서브리포트 파일 없음 "+url+" (기준 "+new File(path).getAbsoluteFile().getParent()+")"); } } }
+    for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; if(!c.getVisible()) info.add(((Section)e[0]).getClass().getSimpleName().replace("Section","")+": 컨트롤 \""+c.getName()+"\" 숨김"); if(c instanceof ControlSubreport){ String url=g(((ControlSubreport)c).getLinkedSubreportPath(),"getUrlText"); if(url!=null&&!url.isEmpty()&&!url.matches("(?i)https?://.*")){ File f=new File(new File(path).getAbsoluteFile().getParentFile(),url); if(!f.isFile()) warn.add("서브리포트 \""+c.getName()+"\": 링크 파일 없음 "+url); } } }
+    StringBuilder b=new StringBuilder(new File(path).getName()+" — ERROR "+err.size()+" / WARN "+warn.size()+" / INFO "+info.size()+"  (바인딩 "+nRefs+"곳, 공식 "+fl.size()+", 그룹 "+gl.size()+", 데이터셋 "+dss.size()+")\n");
+    for(String x: err) b.append("  ✖ ").append(x).append("\n"); for(String x: warn) b.append("  ⚠ ").append(x).append("\n"); for(String x: info) b.append("  ℹ ").append(x).append("\n");
+    if(err.isEmpty()&&warn.isEmpty()) b.append("  ✔ 문제 없음\n");
+    return b.toString();
   }
   static String refsText(java.util.List<String> refs,int max){ StringBuilder b=new StringBuilder(); for(int i=0;i<refs.size()&&i<max;i++) b.append("\n   - ").append(refs.get(i)); if(refs.size()>max) b.append("\n   … +").append(refs.size()-max); return b.toString(); }
   /** Locate a field by name across datasets / formulas / running totals / parameters; dataset selector disambiguates. */
@@ -1002,7 +1181,7 @@ public class CrfMcpServer {
   static SubSectionDefault firstSub(Section sec){ RexObjectList<SubSection> ss=sec.getSubSectionList(); if(ss==null||ss.size()==0)return null; SubSection s=ss.get(0); return (s instanceof SubSectionDefault)?(SubSectionDefault)s:null; }
 
   @SuppressWarnings("unchecked")
-  static String describeLayout(String path) throws Exception {
+  static String describeLayout(String path,boolean detail) throws Exception {
     TheReportFile rf=open(path);
     RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
     StringBuilder b=new StringBuilder();
@@ -1025,6 +1204,7 @@ public class CrfMcpServer {
         String font=g(go(c,"getTextInfo"),"getFontName"); if(font!=null && !font.isEmpty()) ex.append(" 폰트="+font);
         if(c instanceof ControlSubreport){ ControlSubreport sr=(ControlSubreport)c; ex.append(subreportInfo(sr.getLinkedSubreportPath(), sr.getSubreport(), sr.getFieldLinkListForSubReportParameter())); }
         if(!c.getVisible()) ex.append(" [숨김]");
+        if(detail) ex.append(styleInfo(c));
         b.append("      - "+c.getClass().getSimpleName()+" \""+c.getName()+"\""+bind+"  "+pos+ex+"\n");
         if("ControlTable".equals(c.getClass().getSimpleName())){   // 표: 셀별 바인딩 그리드
           Object rc=go(c,"getRowCount"), cc=go(c,"getColumnCount");
@@ -1034,12 +1214,22 @@ public class CrfMcpServer {
                 Object cf=go(cell,"getApplyValueField"); String ct=g(cell,"getApplyValueText");
                 String cb = !isNormalCell(cell)? "‹병합›" : cf!=null? fieldKindKo(cf)+":"+nameOf(cf) : (ct!=null && !ct.isEmpty()? "\""+ct+"\"" : "·");
                 String cfmt=g(cell,"getOutputFormat"); if(isNormalCell(cell) && cfmt!=null && !cfmt.isEmpty()) cb+="{"+cfmt+"}";
+                if(detail && isNormalCell(cell)){ String st=styleInfo(cell).trim(); if(!st.isEmpty()) cb+=" «"+st.replace(" ", ", ")+"»"; }
                 row.append(cb).append(cn<colsN-1 && cn<19?" | ":""); }
               b.append(row).append("\n"); } }
         }
       } } }
     return b.toString();
   }
+  /** Style summary for a control or cell (detail mode). */
+  static String styleInfo(Object o){ StringBuilder x=new StringBuilder(); Object ti=go(o,"getTextInfo");
+    if(ti!=null){ String ha=g(ti,"getHorizontalAlignment"), va=g(ti,"getVerticalAlignment"), fs=g(ti,"getFontSize"), fb=g(ti,"getFontBold"), fn=g(ti,"getFontName"), ww=g(ti,"getWordWrap");
+      if(ha!=null) x.append(" 정렬=").append(ha).append(va!=null?"/"+va:""); if(fn!=null&&!fn.isEmpty()) x.append(" 폰트=").append(fn); if(fs!=null) x.append(" 크기=").append(fs); if("true".equals(fb)) x.append(" 굵게"); if("true".equals(ww)) x.append(" 줄바꿈"); }
+    if("true".equals(g(o,"getCanGrow"))) x.append(" 확장가능"); if("true".equals(g(o,"getCellMergeRowDataDuplication"))) x.append(" 셀합치기");
+    Object cs=go(o,"getConditionalStyleList"); if(cs instanceof RexObjectList && ((RexObjectList<?>)cs).size()>0) x.append(" 조건스타일=").append(((RexObjectList<?>)cs).size());
+    String bs=g(o,"getBackStyle"); if(bs!=null && !bs.equals("Transparent") && !bs.equals("None")){ String bc=g(o,"getBackColor"); if(bc!=null) x.append(" 배경=").append(colorHex(bc)); }
+    return x.toString(); }
+  static String colorHex(String bgr){ try{ int v=Integer.parseInt(bgr); int r=v&0xFF, gg=(v>>8)&0xFF, b=(v>>16)&0xFF; return String.format("#%02X%02X%02X",r,gg,b); }catch(Exception e){ return bgr; } }
   static void collectControls(Object o,List<Control> out,Set<Object> seen,int d){
     if(o==null||d>14) return;
     if(o instanceof RexObjectList){ RexObjectList<?> l=(RexObjectList<?>)o; for(int i=0;i<l.size();i++) collectControls(l.get(i),out,seen,d); return; }
@@ -1052,25 +1242,104 @@ public class CrfMcpServer {
       try{ collectControls(m.invoke(o),out,seen,d+1);}catch(Throwable t){} }
   }
 
+  static int detailIndex(RexObjectList<Section> secs){ for(int i=0;i<secs.size();i++) if(secs.get(i) instanceof SectionDetail) return i; return -1; }
+  /** Group by 0-based index (outermost=0, order of groupList) or grouping column name. */
+  static Group groupOf(TheReportFile rf,String sel){ RexObjectList<Group> gl=rf.getGlobe().getMainReport().getReportObjectManager().getGroupList(); if(gl.size()==0) throw new RuntimeException("그룹이 없습니다");
+    if(sel==null||sel.trim().isEmpty()) throw new RuntimeException("group 인자가 비어 있습니다"); String k=sel.trim();
+    for(int i=0;i<gl.size();i++){ Field f=gl.get(i).getGroupingField(); if(f!=null&&k.equalsIgnoreCase(f.getName())) return gl.get(i); }
+    try{ int i=Integer.parseInt(k); if(i>=0&&i<gl.size()) return gl.get(i); }catch(NumberFormatException e){}
+    StringBuilder names=new StringBuilder(); for(int i=0;i<gl.size();i++) names.append(i==0?"":", ").append(i).append(":").append(nameOf(gl.get(i).getGroupingField()));
+    throw new RuntimeException("그룹 '"+sel+"' 없음 — 사용 가능: "+names); }
   @SuppressWarnings("unchecked")
-  static String addGroup(String path,String column,String output) throws Exception {
-    TheReportFile rf=open(path);
-    Report rep=rf.getGlobe().getMainReport();
-    DataSet ds=rf.getGlobe().getGlobalObjectManager().getDataSetList().get(0);
-    RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList();
-    FieldData gf=null; for(int i=0;i<fl.size();i++) if(column.equalsIgnoreCase(fl.get(i).getName())) gf=fl.get(i);
-    if(gf==null) return "ERROR: column '"+column+"' not found in dataset "+ds.getName();
-    Group g=new Group(2800); g.setGroupingField(gf); g.setSortMethod(SortMethod.Ascending); g.setDataTypeCasting(SortDataTypeCasting.String); g.setTotalVisible(true); g.setLabelVisible(true);
-    rep.getReportObjectManager().getGroupList().add(g);
-    MainPage mp=rep.getReportDesign().getMainPage(); RexObjectList<Section> secs=mp.getSectionList();
-    SectionGroupHeader gh=new SectionGroupHeader(); gh.setGroup(g); gh.getSubSectionList().add(band("그룹 머리글["+column+"]",60));
-    SectionGroupFooter gfoot=new SectionGroupFooter(); gfoot.getSubSectionList().add(band("그룹 바닥글["+column+"]",50));
-    int di=-1; for(int i=0;i<secs.size();i++) if(secs.get(i) instanceof SectionDetail) di=i;
-    if(di<0){ secs.add(gh); secs.add(gfoot); } else { secs.add(di,gh); secs.add(di+2,gfoot); }
-    save(rf,output,path);
-    return "OK: added group on "+column+" (header+footer bands), wrote "+output;
+  static String addGroup(JSONObject args) throws Exception {
+    String path=s(args,"path"), column=s(args,"column"), output=s(args,"output"), level=q(s(args,"level")).trim().toLowerCase(), sort=q(s(args,"sort")).trim(); boolean label="true".equalsIgnoreCase(s(args,"label")); String subtotal=s(args,"subtotal");
+    if(column==null||column.trim().isEmpty()) return "ERROR: column 인자가 비어 있습니다";
+    TheReportFile rf=open(path); Report rep=rf.getGlobe().getMainReport();
+    Field gf=findField(rf,column.trim()); if(gf==null||!(gf instanceof FieldData)) return "ERROR: column '"+column+"' 데이터 필드 없음 (crf_summary 로 확인)";
+    RexObjectList<Group> gl=rep.getReportObjectManager().getGroupList(); for(int i=0;i<gl.size();i++) if(gl.get(i).getGroupingField()==gf) return "ERROR: '"+gf.getName()+"' 로 이미 그룹이 있습니다";
+    MainPage mp=rep.getReportDesign().getMainPage(); RexObjectList<Section> secs=mp.getSectionList(); int di=detailIndex(secs); if(di<0) return "ERROR: 본문(Detail) 밴드가 없습니다";
+    java.util.List<Integer> hIdx=new java.util.ArrayList<>(), fIdx=new java.util.ArrayList<>(); for(int i=0;i<secs.size();i++){ if(i<di&&secs.get(i) instanceof SectionGroupHeader) hIdx.add(i); if(i>di&&secs.get(i) instanceof SectionGroupFooter) fIdx.add(i); }
+    int L=hIdx.size(); int N; if(level.isEmpty()||level.equals("inner")) N=L; else if(level.equals("outer")) N=0; else { try{ N=Integer.parseInt(level); }catch(NumberFormatException e){ return "ERROR: level 은 inner|outer|N"; } if(N<0) N=0; if(N>L) N=L; }
+    Group g=new Group(2800); g.setGroupingField(gf); g.setSortMethod(sort.equalsIgnoreCase("Descending")?SortMethod.Descending:SortMethod.Ascending); g.setDataTypeCasting(SortDataTypeCasting.String); g.setTotalVisible(true); g.setLabelVisible(true);
+    if(N>=gl.size()) gl.add(g); else gl.add(N,g);
+    SectionGroupHeader gh=new SectionGroupHeader(); gh.setGroup(g); SubSectionDefault hsub=band("그룹 머리글["+gf.getName()+"]",60); gh.getSubSectionList().add(hsub);
+    SectionGroupFooter gfoot=new SectionGroupFooter(); SubSectionDefault fsub=band("그룹 바닥글["+gf.getName()+"]",50); gfoot.getSubSectionList().add(fsub);
+    int hpos = N<L ? hIdx.get(N) : di; secs.add(hpos,gh);
+    int fpos = N<L ? fIdx.get(L-1-N)+1+1 : di+2; secs.add(fpos,gfoot);
+    StringBuilder extra=new StringBuilder();
+    if(label){ ControlLabel c=new ControlLabel(); c.setName(uniqueControlName(rf,"grp_"+gf.getName())); c.setVisible(true); c.setX1(0); c.setY1(0); c.setWidth(600); c.setHeight(55); c.setApplyValueType(ApplyValueType.Field); c.setApplyValueField(gf); ((RexObjectList<Control>)(RexObjectList<?>)clpOf(hsub).getControlList()).add(c); extra.append(" +머리글 라벨("+gf.getName()+")"); }
+    if(subtotal!=null&&!subtotal.trim().isEmpty()){ int x=0; for(String fn: subtotal.split(",")){ fn=fn.trim(); if(fn.isEmpty()) continue; Field sf=findField(rf,fn); if(sf==null) return "ERROR: subtotal 필드 '"+fn+"' 없음";
+        String fname="SUM_"+fn+"_BY_"+gf.getName(); if(findField(rf,fname)!=null){ int i=2; while(findField(rf,fname+"_"+i)!=null) i++; fname=fname+"_"+i; }
+        FieldFormula ff=new FieldFormula(); ff.setName(fname); ff.setScript("return rexpert.sum(0,\"data."+fn+"\",0,\"data."+gf.getName()+"\",\"\");"); ff.setScriptType(ScriptType.JavaScript); ((RexObjectList<FieldFormula>) rep.getReportObjectManager().getFieldFormulaList()).add(ff);
+        ControlLabel c=new ControlLabel(); c.setName(uniqueControlName(rf,"sub_"+fn)); c.setVisible(true); c.setX1(x*400); c.setY1(0); c.setWidth(400); c.setHeight(50); c.setApplyValueType(ApplyValueType.Field); c.setApplyValueField(ff); c.setOutputFormat("#,##0"); ((RexObjectList<Control>)(RexObjectList<?>)clpOf(fsub).getControlList()).add(c); x++; extra.append(" +소계 "+fname); } }
+    String wrote=save(rf,output,path);
+    TheReportFile v=open(output); int vg=v.getGlobe().getMainReport().getReportObjectManager().getGroupList().size();
+    return "OK: added group on "+gf.getName()+" (level "+N+" of "+(L+1)+", 정렬 "+g.getSortMethod()+"; header+footer bands)"+extra+" — groups now "+vg+", sections: "+sectionsOf(v)+", wrote "+wrote+(subtotal==null||subtotal.trim().isEmpty()?"":"\n소계 공식은 rexpert.sum(0,\"data.F\",0,\"data."+gf.getName()+"\",\"\") 형태(그룹 기준 필드) — 결과가 다르면 crf_add_formula_field/crf_set_cell 로 조정하세요");
+  }
+  static String setGroup(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"), column=s(args,"column"), sort=s(args,"sort");
+    TheReportFile rf=open(path); Group g=groupOf(rf,s(args,"group")); StringBuilder did=new StringBuilder();
+    if(column!=null&&!column.trim().isEmpty()){ Field f=findField(rf,column.trim()); if(f==null) return "ERROR: column '"+column+"' 없음"; g.setGroupingField(f); did.append(" column="+f.getName());
+      RexObjectList<?> gn=rf.getGlobe().getMainReport().getReportObjectManager().getFieldGroupNameList(); if(gn!=null) for(int i=0;i<gn.size();i++){ Object x=gn.get(i); if(go(x,"getLinkedGroup")==g){ String nm=nameOf(x); if(nm.contains("[")) ((Field)x).setName(nm.substring(0,nm.indexOf('['))+"["+f.getName()+"]"); } } }
+    if(sort!=null&&!sort.trim().isEmpty()){ SortMethod sm; try{ sm=SortMethod.valueOf(sort.trim()); }catch(Exception e){ return "ERROR: sort 는 Ascending|Descending|Not"; } g.setSortMethod(sm); did.append(" sort="+sm); }
+    if(did.length()==0) return "ERROR: nothing to set (column/sort)";
+    String wrote=save(rf,output,path); return "OK: group("+nameOf(g.getGroupingField())+") set"+did+", wrote "+wrote;
+  }
+  static String removeGroup(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
+    TheReportFile rf=open(path); Report rep=rf.getGlobe().getMainReport(); Group g=groupOf(rf,s(args,"group")); RexObjectList<Group> gl=rep.getReportObjectManager().getGroupList();
+    RexObjectList<Section> secs=rep.getReportDesign().getMainPage().getSectionList(); int di=detailIndex(secs);
+    java.util.List<Integer> hIdx=new java.util.ArrayList<>(), fIdx=new java.util.ArrayList<>(); for(int i=0;i<secs.size();i++){ if(i<di&&secs.get(i) instanceof SectionGroupHeader) hIdx.add(i); if(i>di&&secs.get(i) instanceof SectionGroupFooter) fIdx.add(i); }
+    int level=-1; for(int i=0;i<hIdx.size();i++) if(((SectionGroupHeader)secs.get(hIdx.get(i))).getGroup()==g) level=i;
+    // group-name fields linked to this group
+    java.util.List<String> refs=new java.util.ArrayList<>(); java.util.List<Field> gnf=new java.util.ArrayList<>(); RexObjectList<?> gn=rep.getReportObjectManager().getFieldGroupNameList(); if(gn!=null) for(int i=0;i<gn.size();i++) if(go(gn.get(i),"getLinkedGroup")==g){ gnf.add((Field)gn.get(i)); for(String r: refsOf(rf,(Field)gn.get(i))) refs.add(nameOf(gn.get(i))+" ← "+r); }
+    RexObjectList<?> rt=rep.getReportObjectManager().getFieldRunningTotalList(); if(rt!=null) for(int i=0;i<rt.size();i++){ Object r=rt.get(i); if(go(r,"getRunningTotalResetOnChangeGroup")==g||go(r,"getRunningTotalEvaluateOnChangeGroup")==g) refs.add("누적합산 "+nameOf(r)+" (그룹 기준)"); }
+    if(!refs.isEmpty()&&!force) return "ERROR: 그룹("+nameOf(g.getGroupingField())+") 관련 필드가 "+refs.size()+"곳에서 참조됩니다 — force=true 로 강행:"+refsText(refs,30);
+    int nCtl=0; int hp=-1, fp=-1; if(level>=0){ hp=hIdx.get(level); fp=fIdx.size()>level? fIdx.get(hIdx.size()-1-level) : -1; for(Object[] e: allControls(rf)) if(e[0]==secs.get(hp)||(fp>=0&&e[0]==secs.get(fp))) nCtl++; }
+    if(nCtl>0&&!force) return "ERROR: 그룹("+nameOf(g.getGroupingField())+") 머리글/바닥글 밴드에 컨트롤 "+nCtl+"개가 있습니다 — force=true 로 밴드와 함께 삭제 (개별 컨트롤은 crf_describe_layout 로 확인)";
+    if(level>=0){ if(fp>hp){ secs.remove(fp); secs.remove(hp); } else { secs.remove(hp); if(fp>=0) secs.remove(fp); } }
+    for(int i=0;i<gl.size();i++) if(gl.get(i)==g){ gl.remove(i); break; }
+    for(Field f: gnf) removeFromLists(rf,f);
+    String wrote=save(rf,output,path); TheReportFile v=open(output);
+    return "OK: 그룹("+nameOf(g.getGroupingField())+") 삭제 — 머리글/바닥글 밴드"+(level>=0?"(컨트롤 "+nCtl+"개 포함)":" 없음")+", 그룹이름 필드 "+gnf.size()+"개; groups now "+v.getGlobe().getMainReport().getReportObjectManager().getGroupList().size()+", sections: "+sectionsOf(v)+", wrote "+wrote+(refs.isEmpty()?"":"\n⚠ force — 끊어진 참조:"+refsText(refs,30));
   }
 
+  /** Build a 1-row ControlTable with the given column widths; cells are TableCellNormal wired to rows/columns. */
+  @SuppressWarnings("unchecked")
+  static Control buildTable(String name,int[] widths,int rowH){
+    com.clipsoft.clipreport.base.controls.ControlTable t=new com.clipsoft.clipreport.base.controls.ControlTable(); t.setName(name); t.setVisible(true);
+    com.clipsoft.clipreport.base.controls.Tables.TableRow row=new com.clipsoft.clipreport.base.controls.Tables.TableRow(); row.setHeight(rowH); t.getTableRowList().add(row);
+    int tw=0; for(int c=0;c<widths.length;c++){ com.clipsoft.clipreport.base.controls.Tables.TableColumn col=new com.clipsoft.clipreport.base.controls.Tables.TableColumn(); col.setWidth(widths[c]); t.getTableColumnList().add(col); tw+=widths[c];
+      com.clipsoft.clipreport.base.controls.Tables.TableCellNormal cell=new com.clipsoft.clipreport.base.controls.Tables.TableCellNormal(); cell.setName(name+"_c"+c); cell.setTableRow(row); cell.setTableColumn(col); cell.setRowSpan(1); cell.setColSpan(1); row.getTableCellList().add(cell); col.getTableCellList().add(cell); }
+    try{ t.linkBaseCell(); t.setBaseCellRowColIndex(); }catch(Throwable e){}
+    t.setWidth(tw); t.setHeight(rowH); return t; }
+  @SuppressWarnings("unchecked")
+  static String addTable(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"), colsJson=s(args,"columns"), sectionKey=q(s(args,"section")).trim(), headKey=q(s(args,"header_section")).trim(), name=q(s(args,"name")).trim();
+    if(colsJson==null||colsJson.trim().isEmpty()) return "ERROR: columns 인자가 비어 있습니다";
+    JSONArray cols; try{ cols=(JSONArray)P.parse(colsJson); }catch(Exception e){ return "ERROR: columns 는 JSON 배열이어야 합니다: "+e; }
+    if(cols.isEmpty()) return "ERROR: columns 가 비어 있습니다";
+    if(sectionKey.isEmpty()) sectionKey="본문"; if(headKey.isEmpty()) headKey="데이터머리글"; if(name.isEmpty()) name="표_new";
+    int left=pInt(args.get("left"),0), top=pInt(args.get("top"),0), rowH=pInt(args.get("row_height"),60);
+    TheReportFile rf=open(path);
+    Section dataSec=findOrCreateSection(rf,sectionKey); if(dataSec==null) return "ERROR: section '"+sectionKey+"' not found";
+    SubSectionDefault dsub=firstSub(dataSec); if(dsub==null) return "ERROR: section '"+sectionKey+"' 에 기본 서브섹션이 없습니다(서브리포트 밴드?)";
+    int n=cols.size(); int[] widths=new int[n]; Field[] fields=new Field[n]; String[] titles=new String[n], formats=new String[n], aligns=new String[n];
+    for(int i=0;i<n;i++){ JSONObject c=(JSONObject)cols.get(i); String fn=s(c,"field"); if(fn==null||fn.trim().isEmpty()) return "ERROR: columns["+i+"].field 누락"; Field f=findField(rf,fn.trim()); if(f==null) return "ERROR: 필드 '"+fn+"' 없음"; fields[i]=f;
+      widths[i]=pInt(c.get("width"),300); titles[i]=s(c,"title")==null?f.getName():s(c,"title"); formats[i]=s(c,"format"); aligns[i]=s(c,"align"); }
+    String dname=uniqueControlName(rf,name); Control dt=buildTable(dname,widths,rowH); dt.setX1(left); dt.setY1(top);
+    for(int i=0;i<n;i++){ Object cell=tableCell(dt,0,i); call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); call(cell,"setApplyValueField",Field.class,fields[i]); if(formats[i]!=null&&!formats[i].isEmpty()) call(cell,"setOutputFormat",String.class,formats[i]);
+      if(aligns[i]!=null&&!aligns[i].isEmpty()){ JSONObject a=new JSONObject(); a.put("align",aligns[i]); applyProps(rf,cell,a,"F"); } }
+    ((RexObjectList<Control>)(RexObjectList<?>)clpOf(dsub).getControlList()).add(dt); if(dsub.getHeight()<top+rowH) dsub.setHeight(top+rowH);
+    String hname=null; if(!headKey.equalsIgnoreCase("none")){ Section hs=findOrCreateSection(rf,headKey); if(hs==null) return "ERROR: header_section '"+headKey+"' not found (그룹 밴드는 먼저 crf_add_group)"; SubSectionDefault hsub=firstSub(hs); if(hsub==null) return "ERROR: header_section 에 기본 서브섹션이 없습니다";
+      int htop=pInt(args.get("header_top"),0); hname=uniqueControlName(rf,dname+"_title"); Control ht=buildTable(hname,widths,rowH); ht.setX1(left); ht.setY1(htop);
+      for(int i=0;i<n;i++){ Object cell=tableCell(ht,0,i); call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(cell,"setApplyValueText",String.class,titles[i]); JSONObject a=new JSONObject(); a.put("align","Center"); a.put("bold","true"); applyProps(rf,cell,a,"F"); }
+      ((RexObjectList<Control>)(RexObjectList<?>)clpOf(hsub).getControlList()).add(ht); if(hsub.getHeight()<htop+rowH) hsub.setHeight(htop+rowH); }
+    String wrote=save(rf,output,path);
+    TheReportFile v=open(output); Control vt=findTable(v,dname); if(vt==null) return "ERROR: 저장 후 되읽기 검증 실패 — 표가 없음"; Object vc=tableCell(vt,0,0);
+    int tw=0; for(int w: widths) tw+=w;
+    return "OK: 표 '"+dname+"' ("+n+"열, 너비 "+tw+") 를 "+dataSec.getClass().getSimpleName().replace("Section","")+" 에 생성"+(hname!=null?", 제목 표 '"+hname+"' 를 "+headKey+" 에 생성":"")+" — verified[cell(0,0) field="+nameOf(go(vc,"getApplyValueField"))+"], wrote "+wrote+"\n⚠ SDK 로 만든 표는 디자이너에서 한 번 열어 테두리/여백을 확인하세요 (crf_set_cell 로 셀별 조정 가능)";
+  }
   @SuppressWarnings("unchecked")
   static String placeDetailFields(String path,String output) throws Exception {
     TheReportFile rf=open(path);
