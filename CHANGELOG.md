@@ -3,7 +3,18 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
-## [0.5.0] - 2026-08-28
+## [0.5.1] - 2026-08-28
+### Added
+- **`crf_set_query` v2**: 미선언 `{parameter.X}` 를 전역 매개변수로 **자동 선언**(`declare_params`, 기본 true), SELECT 컬럼을 데이터 필드로 **자동 추가**(`sync_fields=add` 기본; `replace` 는 미참조 필드 제거, 참조 중이면 유지+경고; `none`). 별칭 없는 식 컬럼·`SELECT *` 는 안내.
+- **`crf_sync_fields`**: `mode=sql`(파싱) / **`mode=db`**(쿼리를 `SELECT * FROM (…) WHERE 1=0` 로 실행, ResultSetMetaData 로 컬럼·타입 확정 — `SELECT *`·함수테이블 해결; JS 동적쿼리는 평문 복원본 실행; `{parameter.X}`/`{dataset.X}` 는 `params` JSON 또는 `''`/NULL 바인딩). `set_types`, `remove_unused`.
+- **`crf_add_dataset`** / **`crf_remove_dataset`**: 데이터셋 추가(첫 데이터셋의 연결·접근방식 복제, 쿼리 변환·매개변수 선언·필드 생성) / 삭제(필드 참조 있으면 거부, `force`).
+- **`crf_set_param`** / **`crf_remove_param`**: 전역 매개변수 생성·수정(타입/기본값/프롬프트) / 삭제(쿼리 토큰·바인딩·공식 참조 시 거부).
+- **`crf_rename_field`** / **`crf_remove_field`** / **`crf_field_refs`**: 이름변경(객체 바인딩 자동 추종, 공식 `"ns.OLD"` 및 쿼리 `{parameter.OLD}` 재작성, 그룹이름 라벨 갱신) / 삭제(참조 목록 제시 후 거부, `force`) / 참조 위치 조회(셀 좌표·라벨·그룹·누적합산·서브리포트 매개변수 링크·공식·쿼리).
+- `crf_add_data_field` 에 `dataset` 선택.
+### Changed
+- 참조 탐색은 섹션→서브섹션→컨트롤→셀 구조를 명시적으로 따라가 정확한 경로(`GroupHeader(→STUDENT_CD)/그룹 머리글1/Table"표2"[3,6].ApplyValueField`)를 보고.
+
+
 ### Added
 - **`crf_get_query`**: 데이터셋별 **쿼리 전문** — scriptType·연결·필드·사용 `{parameter.X}`(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JavaScript 동적쿼리는 원문과 **평문 복원본**(문자열 연결을 풀고 `if` 블록은 `/*IF*/…/*END IF*/` 주석)을 함께 제공. `dataset`(이름/인덱스), `mode=both|raw|plain`.
 - **`crf_get_formula`**: 공식 스크립트 전문 + 참조 필드 목록(없는 필드·`#unknown#` 끊어진 참조 표시), 누적합산(함수/대상필드/평가·리셋), 그룹이름→그룹필드.

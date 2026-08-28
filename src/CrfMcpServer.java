@@ -10,6 +10,7 @@ import com.clipsoft.clipreport.base.datas.*;
 import com.clipsoft.clipreport.base.datas.fields.Field;
 import com.clipsoft.clipreport.base.datas.fields.FieldData;
 import com.clipsoft.clipreport.base.datas.fields.FieldFormula;
+import com.clipsoft.clipreport.base.datas.fields.FieldGlobalParameter;
 import com.clipsoft.clipreport.common.enums.BackStyleType;
 import java.sql.*;
 import com.clipsoft.clipreport.base.groups.Group;
@@ -42,6 +43,7 @@ public class CrfMcpServer {
     "[★쿼리 파라미터] CLIP 리포트 쿼리에서 파라미터는 반드시 '{parameter.COLNM}' 형식(대문자, 언더바는 유지: empNm→EMPNM, emp_nm→EMP_NM)으로 작성하세요. 문자열 조건은 작은따옴표로 감싸 \"= '{parameter.X}'\". 절대 :colNm, #{colNm}, ${colNm}, ? 같은 일반 SQL/MyBatis 바인드 표기를 쓰지 마세요. {dataset.X}는 다른 데이터셋 값 참조용입니다.\n"+
     "[★입력은 상황마다 다름] 화면(.xfdl/.vue)·문서양식(PDF)·쿼리(SQL/MyBatis)·백엔드·DB연결이 항상 다 주어지지는 않습니다(화면만, 쿼리 없이, 글 설명만일 수도). 프롬프트에 실제로 있는 자료만 사용하고, 적용 안 되는 단계는 건너뛰며, 도구는 '있는 입력+의도'에 맞춰 선택합니다(고정 순서 아님). 도구로 직접 확인 가능한 건 먼저 확보(파일 읽기·db_* 도구·백엔드 추적)하되, [★모르면 질문] 그래도 부족하거나 불명확한 정보(대상 파일·테이블·파라미터·조건 등)는 임의 추정·기본값으로 진행하지 말고 반드시 유저에게 질문해 확보하세요(질문은 한 번에 모아 간결히). 유저가 '추정해서 진행'을 명시한 경우에만 가정을 밝히고 진행합니다.\n"+
     "[★쿼리 읽기/찾기] 리포트의 SQL 본문은 crf_get_query(JS 동적쿼리는 평문 복원본 포함), 공식 스크립트는 crf_get_formula, '어떤 리포트가 테이블 X/매개변수 Y/문구 Z 를 쓰나'는 crf_search(dir, text, scope) 로 확인하세요. crf_summary 는 개요만 줍니다.\n"+
+    "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
     "쓰기 도구는 항상 output 경로를 따로 받아 원본을 보존합니다(output=원본이면 거부). 도구 실패는 'ERROR: …' 메시지(isError)로 옵니다 — 그대로 유저에게 설명하고 임의로 재시도하지 마세요. crf_describe_layout 의 표 셀 중 ‹병합› 은 병합되어 숨은 자리라 편집 불가(기준 셀에 설정), {…} 는 출력양식입니다.\n"+
     "[★열린 파일 주의] .crf가 CLIP report 앱에서 열려 있는 동안 쓰기 도구로 수정하면 파일 잠금/상태 충돌(앱에서 저장 시 편집이 덮어써짐, 또는 편집이 앱에 반영 안 됨)이 납니다. 이미 만든 _edited.crf에 추가 수정이 필요할 때 그 파일이 열려 있을 수 있으면, 먼저 유저에게 '저장 후 잠깐 닫기'를 요청하고 → 수정 → '다시 열기'를 안내하세요(저장→닫기→수정→재오픈).";
 
@@ -122,8 +124,24 @@ public class CrfMcpServer {
         strSchema(new String[]{"path"}, "path","absolute path to the .crf file")));
     arr.add(tool("crf_generate","Generate a draft .crf from SQL or MyBatis: builds dataset fields, query (MyBatis->JavaScript), parameters, GROUP BY group bands, and the common page-footer logo. Writes a new file.",
         strSchema(new String[]{"template","sql","output"}, "template","path to a template .crf", "sql","the SQL or MyBatis query text", "output","path to write the generated .crf")));
-    arr.add(tool("crf_set_query","Replace a dataset's query and save to a new file. scriptType is set automatically (plain SQL -> NotScript; MyBatis XML -> converted to JavaScript; JS `var sql=...` -> JavaScript). :col/#{}/${} become '{parameter.X}'. Reports undeclared parameters. Fields are NOT synced (use crf_add_data_field).",
-        strSchema(new String[]{"path","sql","output"}, "path","source .crf", "sql","new SQL / MyBatis <select> / JavaScript dynamic query (with {parameter.X} tokens)", "dataset","dataset name or 0-based index (default: first)", "script_type","auto|sql|javascript (default auto)", "output","destination .crf")));
+    arr.add(tool("crf_set_query","Replace a dataset's query and save to a new file. scriptType is set automatically (plain SQL -> NotScript; MyBatis XML -> converted to JavaScript; JS `var sql=...` -> JavaScript). :col/#{}/${} become '{parameter.X}'. By default declares missing global parameters and ADDS data fields for new SELECT columns (parse-based; for SELECT * use crf_sync_fields mode=db).",
+        strSchema(new String[]{"path","sql","output"}, "path","source .crf", "sql","new SQL / MyBatis <select> / JavaScript dynamic query (with {parameter.X} tokens)", "dataset","dataset name or 0-based index (default: first)", "script_type","auto|sql|javascript (default auto)", "declare_params","true|false: declare undeclared {parameter.X} as String global parameters (default true)", "sync_fields","none|add|replace: add missing SELECT columns as fields / also remove unreferenced fields not in SELECT (default add)", "output","destination .crf")));
+    arr.add(tool("crf_sync_fields","Make a dataset's field list match its query columns. mode=sql parses the SELECT list; mode=db RUNS the query against the connected DB (wrapped in SELECT * FROM (...) WHERE 1=0, parameters bound from `params` or '' / NULL) and takes exact column names+types from ResultSetMetaData — use this for SELECT * or function/table columns. Adds missing fields; removes unreferenced extra fields only when remove_unused=true.",
+        strSchema(new String[]{"path","output"}, "path","source .crf", "dataset","dataset name or 0-based index (default: first)", "mode","sql|db (default sql)", "params","JSON object of parameter values for mode=db, e.g. {\"DEPTCD\":\"20399\"} (optional)", "set_types","true to set field DataType from DB/heuristics (default false = Null/auto)", "remove_unused","true to remove fields not in the query when nothing references them (default false)", "output","destination .crf")));
+    arr.add(tool("crf_add_dataset","Add a new SQL dataset (connection copied from the first dataset) with the given query; declares parameters and creates fields like crf_set_query. Saves to a new file.",
+        strSchema(new String[]{"path","name","sql","output"}, "path","source .crf", "name","new dataset name", "sql","query (SQL / MyBatis / JS)", "script_type","auto|sql|javascript (default auto)", "output","destination .crf")));
+    arr.add(tool("crf_remove_dataset","Remove a dataset. Refuses if any of its fields is referenced (bindings, formulas...) unless force=true. Saves to a new file.",
+        strSchema(new String[]{"path","dataset","output"}, "path","source .crf", "dataset","dataset name or 0-based index", "force","true to remove even if referenced (references become dangling)", "output","destination .crf")));
+    arr.add(tool("crf_set_param","Create or update a global parameter (매개변수) used as {parameter.NAME} in queries: data type, default value, prompt. Saves to a new file.",
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","parameter name (e.g. DEPTCD)", "type","String|Number|Currency|DateTime|Boolean (default String; existing kept if omitted)", "default","default value (optional)", "prompt","prompt/label text (optional)", "output","destination .crf")));
+    arr.add(tool("crf_remove_param","Remove a global parameter. Refuses if referenced (queries, bindings, formulas) unless force=true. Saves to a new file.",
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","parameter name", "force","true to remove anyway", "output","destination .crf")));
+    arr.add(tool("crf_rename_field","Rename a field (data/formula/parameter/running-total). Object bindings follow automatically; formula scripts (\"ns.OLD\") and query tokens {parameter.OLD} are rewritten. Saves to a new file.",
+        strSchema(new String[]{"path","name","new_name","output"}, "path","source .crf", "name","current field name", "new_name","new name", "dataset","dataset name/index when the same field name exists in several datasets (optional)", "output","destination .crf")));
+    arr.add(tool("crf_remove_field","Remove a data/formula/running-total field. Lists every reference (cells, labels, groups, formulas, links) and refuses unless force=true. Saves to a new file.",
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","field name", "dataset","dataset name/index to disambiguate (optional)", "force","true to remove even if referenced", "output","destination .crf")));
+    arr.add(tool("crf_field_refs","Show where a field (or parameter) is used: cell/label bindings, group fields, running totals, subreport links, formula scripts, query tokens. Read-only.",
+        strSchema(new String[]{"path","name"}, "path",".crf file", "name","field / parameter name", "dataset","dataset name/index to disambiguate (optional)")));
     arr.add(tool("crf_list_reports","List .crf report files under a directory (recursive), with total count; filter by name.",
         strSchema(new String[]{"dir"}, "dir","directory to scan", "like","file-name filter: substring or glob with * (optional)", "limit","max files to list (default 500)")));
     arr.add(tool("crf_get_query","Return the FULL query text of a report's datasets: scriptType, connection, fields, used {parameter.X} (flags undeclared ones), {dataset.X} refs, estimated tables. JavaScript dynamic queries are also shown as reconstructed plain SQL (if-blocks as /*IF*/ comments). Use this to explain or find a report's SQL.",
@@ -144,8 +162,8 @@ public class CrfMcpServer {
         strSchema(new String[]{"path","name","script","output"}, "path","source .crf", "name","new formula field name", "script","JavaScript, MUST end with return;. Field ref=rexpert.field(\"ns.COL\") (ns=data/system/parameter/formula/runningtotal). Aggregate=rexpert.sum(범위,\"data.COL\",옵션,\"그룹|''\",\"조건식|''\"). e.g.  return rexpert.sum(0,\"data.PRVDD_BAL_AMT\",0,\"\",\"\");", "force","true to skip the return/bind-syntax checks (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_cell_style","Style a table cell: background color (hex #RRGGBB), font name, can-grow, and merge-duplicate. Saves to a new file.",
         strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name", "row","row index", "col","col index", "bgcolor","background hex #RRGGBB (optional)", "font","font name e.g. 굴림 (optional)", "cangrow","true/false (optional)", "merge","true/false: merge duplicate values (optional)", "output","destination .crf")));
-    arr.add(tool("crf_add_data_field","Add a data field (column) to the first dataset. Saves to a new file.",
-        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","field name", "type","String|Number|Currency|DateTime|Boolean (default String)", "output","destination .crf")));
+    arr.add(tool("crf_add_data_field","Add a data field (column) to a dataset. Saves to a new file.",
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","field name", "type","String|Number|Currency|DateTime|Boolean (default String)", "dataset","dataset name or 0-based index (default: first)", "output","destination .crf")));
     arr.add(tool("crf_add_label","Add a 글상자(label) to a section band, bound to a field or with static text. Saves to a new file.",
         strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English ReportHeader/PageHeader/Detail/...)", "text","static text (optional)", "field","field name to bind (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_paper","Set paper type/orientation/margins. Saves to a new file.",
@@ -215,7 +233,15 @@ public class CrfMcpServer {
       case "crf_set_cell":return textContent(setCell(args));
       case "crf_add_formula_field":return textContent(addFormulaField(args));
       case "crf_set_cell_style":return textContent(setCellStyle(args));
-      case "crf_add_data_field":return textContent(addDataField((String)args.get("path"),(String)args.get("name"),(String)args.get("type"),(String)args.get("output")));
+      case "crf_add_data_field":return textContent(addDataField(args));
+      case "crf_sync_fields":return textContent(syncFields(args));
+      case "crf_add_dataset":return textContent(addDataset(args));
+      case "crf_remove_dataset":return textContent(removeDataset(args));
+      case "crf_set_param":return textContent(setParam(args));
+      case "crf_remove_param":return textContent(removeParam(args));
+      case "crf_rename_field":return textContent(renameField(args));
+      case "crf_remove_field":return textContent(removeField(args));
+      case "crf_field_refs":return textContent(fieldRefs(args));
       case "crf_add_label":return textContent(addLabel(args));
       case "crf_set_paper":return textContent(setPaper(args));
       case "crf_diff":return textContent(diff((String)args.get("a"),(String)args.get("b")));
@@ -385,10 +411,11 @@ public class CrfMcpServer {
   }
 
   @SuppressWarnings("unchecked")
-  static String addDataField(String path,String name,String type,String output) throws Exception {
+  static String addDataField(JSONObject args) throws Exception {
+    String path=s(args,"path"), name=s(args,"name"), type=s(args,"type"), output=s(args,"output");
     if(name==null||name.trim().isEmpty()) return "ERROR: name 인자가 비어 있습니다"; name=name.trim();
     TheReportFile rf=open(path);
-    DataSet ds=rf.getGlobe().getGlobalObjectManager().getDataSetList().get(0);
+    DataSet ds=datasetOf(rf,s(args,"dataset"));
     RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList();
     for(int i=0;i<fl.size();i++) if(name.equalsIgnoreCase(fl.get(i).getName())) return "ERROR: 이름 중복 — 데이터셋 "+ds.getName()+" 에 '"+fl.get(i).getName()+"' 필드가 이미 있습니다";
     Field other=findField(rf,name); String warn=other!=null?" ⚠ 같은 이름의 "+fieldKindKo(other)+" 필드가 다른 목록에 있음(공식/매개변수에서 혼동 주의)":"";
@@ -561,33 +588,253 @@ public class CrfMcpServer {
   }
   static boolean looksLikeJsQuery(String q){ return q!=null && java.util.regex.Pattern.compile("(?s)\\bvar\\s+\\w+\\s*=\\s*\"|\\w+\\s*\\+=\\s*\"|\\n\\s*\\+\\s*\"").matcher(q).find(); }
   static boolean looksLikeMyBatis(String q){ return q!=null && java.util.regex.Pattern.compile("(?is)<(if|where|foreach|choose|trim|set|select)\\b").matcher(q).find(); }
+  /** Result of applying a query to a dataset (shared by crf_set_query / crf_add_dataset). */
+  static class QueryApply { String conv; ScriptType before, after; java.util.List<String> warns=new java.util.ArrayList<>(), declared=new java.util.ArrayList<>(), added=new java.util.ArrayList<>(), removed=new java.util.ArrayList<>(), keptRef=new java.util.ArrayList<>(), skipped=new java.util.ArrayList<>(); java.util.Set<String> undeclared=new java.util.TreeSet<>(); boolean noColumns; }
+  static DataType dataTypeOrNull(String t){ try{ return DataType.valueOf(t); }catch(Exception e){ return DataType.String; } }
+  static DataType nullType(){ try{ return DataType.valueOf("Null"); }catch(Exception e){ return DataType.String; } }
+  @SuppressWarnings("unchecked")
+  static FieldGlobalParameter addGlobalParam(TheReportFile rf,String name,DataType type,String def,String prompt){
+    FieldGlobalParameter fp=new FieldGlobalParameter(); fp.setName(name); fp.setDataType(type==null?DataType.String:type); fp.setDefaultValue(def==null?"":def); fp.setValueIsNull(Boolean.FALSE); fp.setPrompt(prompt==null?name:prompt); fp.setTag("");
+    ((RexObjectList<FieldGlobalParameter>)(RexObjectList<?>) rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList()).add(fp); return fp; }
+  static FieldData findDataField(DataSet ds,String name){ RexObjectList<?> fl=ds.getFieldDataList(); for(int i=0;i<fl.size();i++) if(name.equalsIgnoreCase(nameOf(fl.get(i)))) return (FieldData)fl.get(i); return null; }
+  @SuppressWarnings("unchecked")
+  static FieldData addDataFieldTo(DataSet ds,String name,DataType type){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList(); FieldData f=new FieldData(); f.setName(name); f.setDataType(type==null?nullType():type); f.setIndex(fl.size()); fl.add(f); return f; }
+  static boolean validIdent(String n){ return n!=null && n.matches("[A-Za-z_가-힣][A-Za-z0-9_가-힣$#]*"); }
+  /** Convert + set the query on a dataset; optionally declare missing parameters and sync fields from the SELECT list. */
+  @SuppressWarnings("unchecked")
+  static QueryApply applyQuery(TheReportFile rf,DataSet ds,String sql,String mode,boolean declare,String sync){
+    QueryApply r=new QueryApply();
+    DataAccessMethodSQL q=ds.getDataSetItemNormal()==null?null:ds.getDataSetItemNormal().getDataAccessMethodSQL();
+    if(q==null) throw new RuntimeException("데이터셋 "+ds.getName()+" 은 SQL 데이터셋이 아닙니다");
+    r.before=q.getScriptType(); String m=mode==null||mode.trim().isEmpty()?"auto":mode.trim().toLowerCase(); String conv; ScriptType after;
+    if(m.equals("auto")){ if(looksLikeMyBatis(sql)){ conv=CrfGen2.mybatisToJs(sql,r.warns); after=ScriptType.JavaScript; } else if(looksLikeJsQuery(sql)){ conv=CrfGen2.subParamsQuoted(sql); after=ScriptType.JavaScript; } else { conv=CrfGen2.subParamsQuoted(CrfGen2.stripComments(sql)).trim(); after=ScriptType.NotScript; } }
+    else if(m.equals("javascript")||m.equals("js")){ conv=looksLikeMyBatis(sql)?CrfGen2.mybatisToJs(sql,r.warns):CrfGen2.subParamsQuoted(sql); after=ScriptType.JavaScript; }
+    else if(m.equals("sql")){ conv=CrfGen2.subParamsQuoted(sql); after=ScriptType.NotScript; }
+    else throw new RuntimeException("script_type 은 auto|sql|javascript 중 하나");
+    conv=CrfGen2.normParamTokens(conv); q.setQueryString(conv); q.setScriptType(after); r.conv=conv; r.after=after;
+    java.util.Set<String> declaredNames=declaredParams(rf);
+    for(String u: usedParams(conv)) if(!declaredNames.contains(u.toUpperCase())){ if(declare){ addGlobalParam(rf,u,DataType.String,"",u); declaredNames.add(u.toUpperCase()); r.declared.add(u); } else r.undeclared.add(u); }
+    String sy=sync==null||sync.trim().isEmpty()?"add":sync.trim().toLowerCase();
+    if(!sy.equals("none")){ String plain=after==ScriptType.JavaScript?jsToPlainSql(conv):conv; java.util.List<String> cols=CrfGen2.parseColumns(CrfGen2.stripComments(plain));
+      if(cols.isEmpty()) r.noColumns=true;
+      else { java.util.Set<String> want=new java.util.HashSet<>();
+        for(String c: cols){ if(c.matches("COL_\\d+")||!validIdent(c)){ r.skipped.add(c); continue; } want.add(c.toUpperCase()); if(findDataField(ds,c)==null){ addDataFieldTo(ds,c,nullType()); r.added.add(c); } }
+        if(sy.equals("replace")){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList(); for(int i=fl.size()-1;i>=0;i--){ FieldData f=fl.get(i); if(want.contains(f.getName().toUpperCase())) continue; java.util.List<String> refs=refsOf(rf,f); if(refs.isEmpty()){ fl.remove(i); r.removed.add(f.getName()); } else r.keptRef.add(f.getName()+"("+refs.size()+"곳 참조)"); } } } }
+    return r;
+  }
+  static String applySummary(QueryApply r){ StringBuilder b=new StringBuilder();
+    if(!r.declared.isEmpty()) b.append("\n+ 매개변수 선언: ").append(r.declared).append(" (String, 기본값 ''; 타입/기본값은 crf_set_param 으로)");
+    if(!r.undeclared.isEmpty()) b.append("\n⚠ 쿼리가 쓰는데 선언되지 않은 매개변수: ").append(r.undeclared).append(" (declare_params=true 또는 crf_set_param)");
+    if(!r.added.isEmpty()) b.append("\n+ 필드 추가: ").append(r.added);
+    if(!r.removed.isEmpty()) b.append("\n- 필드 제거(미참조): ").append(r.removed);
+    if(!r.keptRef.isEmpty()) b.append("\n⚠ SELECT 에 없지만 참조 중이라 유지: ").append(r.keptRef);
+    if(!r.skipped.isEmpty()) b.append("\n⚠ 별칭 없는 식 컬럼은 필드로 못 만듦(AS 별칭 필요): ").append(r.skipped);
+    if(r.noColumns) b.append("\n⚠ SELECT 목록을 파싱하지 못함(SELECT * / 함수테이블) — crf_sync_fields mode=db 로 DB 에서 컬럼을 확정하세요");
+    if(!r.warns.isEmpty()) b.append("\n⚠ MyBatis 변환 경고: ").append(r.warns);
+    return b.toString(); }
   @SuppressWarnings("unchecked")
   static String setQuery(JSONObject args) throws Exception {
-    String path=s(args,"path"), sql=s(args,"sql"), output=s(args,"output"), dsSel=s(args,"dataset"), mode=s(args,"script_type");
+    String path=s(args,"path"), sql=s(args,"sql"), output=s(args,"output");
     if(sql==null||sql.trim().isEmpty()) return "ERROR: sql 인자가 비어 있습니다";
-    TheReportFile rf=open(path);
-    DataSet ds=datasetOf(rf,dsSel);
-    DataAccessMethodSQL q=ds.getDataSetItemNormal()==null?null:ds.getDataSetItemNormal().getDataAccessMethodSQL();
-    if(q==null) return "ERROR: 데이터셋 "+ds.getName()+" 은 SQL 데이터셋이 아닙니다";
-    ScriptType before=q.getScriptType(); ScriptType after; String conv; java.util.List<String> warns=new java.util.ArrayList<>();
-    String m=mode==null?"auto":mode.trim().toLowerCase();
-    if(m.equals("auto")){ if(looksLikeMyBatis(sql)){ conv=CrfGen2.mybatisToJs(sql,warns); after=ScriptType.JavaScript; } else if(looksLikeJsQuery(sql)){ conv=CrfGen2.subParamsQuoted(sql); after=ScriptType.JavaScript; } else { conv=CrfGen2.subParamsQuoted(CrfGen2.stripComments(sql)).trim(); after=ScriptType.NotScript; } }
-    else if(m.equals("javascript")||m.equals("js")){ conv=looksLikeMyBatis(sql)?CrfGen2.mybatisToJs(sql,warns):CrfGen2.subParamsQuoted(sql); after=ScriptType.JavaScript; }
-    else if(m.equals("sql")){ conv=CrfGen2.subParamsQuoted(sql); after=ScriptType.NotScript; }
-    else return "ERROR: script_type 은 auto|sql|javascript 중 하나";
-    conv=CrfGen2.normParamTokens(conv);   // :colNm/#{}/${} -> '{parameter.COLNM}'
-    q.setQueryString(conv); q.setScriptType(after);
-    // undeclared {parameter.X} -> warn (declaration/field sync comes in v0.5.1)
-    java.util.Set<String> declared=new java.util.TreeSet<>(); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); for(int i=0;i<gp.size();i++) declared.add(nameOf(gp.get(i)).toUpperCase());
-    java.util.Set<String> used=new java.util.TreeSet<>(); java.util.regex.Matcher pm=java.util.regex.Pattern.compile("\\{parameter\\.([A-Za-z0-9_]+)\\}").matcher(conv); while(pm.find()) used.add(pm.group(1));
-    java.util.Set<String> undeclared=new java.util.TreeSet<>(used); undeclared.removeIf(u->declared.contains(u.toUpperCase()));
+    TheReportFile rf=open(path); DataSet ds=datasetOf(rf,s(args,"dataset"));
+    boolean declare=!"false".equalsIgnoreCase(s(args,"declare_params"));
+    QueryApply r=applyQuery(rf,ds,sql,s(args,"script_type"),declare,s(args,"sync_fields"));
     String wrote=save(rf,output,path);
-    StringBuilder r=new StringBuilder("OK: set query on "+ds.getName()+" ("+conv.length()+" chars, scriptType "+before+" → "+after+")"+(conv.equals(sql)?"":" — 파라미터를 {parameter.X} 형식으로 정규화함")+", wrote "+wrote);
-    if(!undeclared.isEmpty()) r.append("\n⚠ 쿼리가 쓰는데 전역 매개변수로 선언되지 않음: "+undeclared+" (디자이너에서 선언 필요)");
-    if(!warns.isEmpty()) r.append("\n⚠ MyBatis 변환 경고: "+warns);
-    r.append("\n⚠ 데이터셋 필드 목록은 그대로입니다 — 새 컬럼은 crf_add_data_field 로 추가하세요");
-    r.append("\n----- query (first 600 chars) -----\n").append(conv.length()>600?conv.substring(0,600)+"\n…":conv);
-    return r.toString();
+    StringBuilder b=new StringBuilder("OK: set query on "+ds.getName()+" ("+r.conv.length()+" chars, scriptType "+r.before+" → "+r.after+")"+(r.conv.equals(sql)?"":" — 파라미터를 {parameter.X} 형식으로 정규화함")+", wrote "+wrote);
+    b.append(applySummary(r)); b.append("\n필드("+ds.getFieldDataList().size()+"): "+fieldList(ds));
+    b.append("\n----- query (first 600 chars) -----\n").append(r.conv.length()>600?r.conv.substring(0,600)+"\n…":r.conv);
+    return b.toString();
+  }
+
+  // ===== v0.5.1: dataset / parameter / field editing =====
+  static String nsOf(Field f){ switch(f.getClass().getSimpleName()){ case "FieldData": return "data"; case "FieldFormula": return "formula"; case "FieldGlobalParameter": case "FieldParameter": case "FieldReportParameter": return "parameter"; case "FieldRunningTotal": return "runningtotal"; case "FieldGroupName": return "groupname"; case "FieldGroupIndex": return "groupindex"; case "FieldGlobalSpecial": return "system"; default: return f.getClass().getSimpleName().toLowerCase(); } }
+  static java.util.regex.Pattern scriptRefPattern(String ns,String name){ return java.util.regex.Pattern.compile("([\"'])"+ns+"\\."+java.util.regex.Pattern.quote(name)+"\\1", java.util.regex.Pattern.CASE_INSENSITIVE); }
+  static java.util.regex.Pattern paramTokenPattern(String name){ return java.util.regex.Pattern.compile("\\{parameter\\."+java.util.regex.Pattern.quote(name)+"\\}", java.util.regex.Pattern.CASE_INSENSITIVE); }
+  /** Everywhere a field object is used: bindings (labels/cells), group fields, running totals, conditions, subreport links (by identity) + formula scripts and query tokens (by name). */
+  @SuppressWarnings("unchecked")
+  static java.util.List<String> refsOf(TheReportFile rf,Field target){
+    java.util.List<String> out=new java.util.ArrayList<>();
+    walkRefs(rf.getGlobe(),target,out,Collections.newSetFromMap(new IdentityHashMap<>()),"",0);
+    var rom=rf.getGlobe().getMainReport().getReportObjectManager(); java.util.regex.Pattern sp=scriptRefPattern(nsOf(target),target.getName());
+    RexObjectList<FieldFormula> fl=(RexObjectList<FieldFormula>) rom.getFieldFormulaList(); for(int i=0;i<fl.size();i++) if(fl.get(i)!=target && sp.matcher(q(fl.get(i).getScript())).find()) out.add("공식 "+fl.get(i).getName()+" 스크립트");
+    if(nsOf(target).equals("parameter")){ java.util.regex.Pattern pp=paramTokenPattern(target.getName()); RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList();
+      for(int i=0;i<dss.size();i++){ DataSetItemNormal n=dss.get(i).getDataSetItemNormal(); DataAccessMethodSQL qm=n==null?null:n.getDataAccessMethodSQL(); if(qm!=null && pp.matcher(q(qm.getQueryString())).find()) out.add("데이터셋 "+dss.get(i).getName()+" 쿼리 {parameter."+target.getName()+"}"); } }
+    return out;
+  }
+  static boolean structural(Object v){ if(v==null) return false; String sn=v.getClass().getSimpleName(); return v instanceof Section||v instanceof SubSection||v instanceof Control||sn.startsWith("TableCell")||sn.equals("FieldLink"); }
+  @SuppressWarnings("unchecked")
+  static void walkRefs(Object o,Field target,java.util.List<String> out,java.util.Set<Object> seen,String ctx,int d){
+    if(o==null||d>30) return;
+    if(o instanceof RexObjectList){ RexObjectList<?> l=(RexObjectList<?>)o; for(int i=0;i<l.size();i++){ Object e=l.get(i); if(structural(e)) continue; walkRefs(e,target,out,seen,ctx,d); } return; }
+    if(!o.getClass().getName().startsWith("com.clipsoft.clipreport")) return; if(o==target) return; if(!seen.add(o)) return;
+    String sn=o.getClass().getSimpleName(); String c=ctx;
+    if(o instanceof Section){ String gf=groupFieldOf((Section)o); c=sn.replace("Section","")+(gf==null?"":"(→"+gf+")"); } else if(o instanceof SubSection) c=ctx+"/"+q(nameOf(o)); else if(o instanceof Control) c=ctx+"/"+sn.replace("Control","")+"\""+q(nameOf(o))+"\""; else if(o instanceof Field) c="필드 "+nameOf(o); else if(o instanceof Group) c="그룹"; else if(sn.equals("Condition")) c=ctx+"/조건"; else if(sn.equals("ConditionalStyle")) c=ctx+"/조건스타일";
+    // --- structural children first (explicit, with precise context) ---
+    if(o instanceof MainPage){ RexObjectList<Section> secs=((MainPage)o).getSectionList(); for(int i=0;i<secs.size();i++) walkRefs(secs.get(i),target,out,seen,c,d+1); }
+    if(o instanceof Section){ RexObjectList<SubSection> ss=((Section)o).getSubSectionList(); for(int i=0;i<ss.size();i++) walkRefs(ss.get(i),target,out,seen,c,d+1); }
+    if(o instanceof SubSectionDefault){ RexObjectList<ControlListForEachSeparatedPage> cls=((SubSectionDefault)o).getControlListForEachSeparatedPageList(); for(int k=0;k<cls.size();k++){ RexObjectList<Control> cl=(RexObjectList<Control>)(RexObjectList<?>)cls.get(k).getControlList(); for(int x=0;x<cl.size();x++) walkRefs(cl.get(x),target,out,seen,c,d+1); } }
+    if(o instanceof Control && "ControlTable".equals(sn)){ Object rc=go(o,"getRowCount"), cc=go(o,"getColumnCount"); if(rc instanceof Integer && cc instanceof Integer) for(int r=0;r<(Integer)rc;r++) for(int k=0;k<(Integer)cc;k++){ Object cell=tableCell((Control)o,r,k); if(cell!=null) walkRefs(cell,target,out,seen,c+"["+r+","+k+"]",d+1); } }
+    Object links=go(o,"getFieldLinkListForSubReportParameter"); if(links instanceof RexObjectList){ RexObjectList<?> ll=(RexObjectList<?>)links; for(int i=0;i<ll.size();i++) walkRefs(ll.get(i),target,out,seen,c+"/매개변수링크",d+1); }
+    // --- generic getters (never descend into structural objects here) ---
+    for(java.lang.reflect.Method m:o.getClass().getMethods()){ if(m.getParameterCount()!=0||!m.getName().startsWith("get")||m.getName().equals("getClass")) continue; String nm=m.getName(); if(nm.equals("getParentObj")||nm.equals("getRefInfomationStorage")||nm.equals("getRefStorage")||nm.equals("getSubreport")) continue;
+      Class<?> rt=m.getReturnType(); if(rt.isPrimitive()||rt==String.class||rt.isEnum()||rt==Class.class||rt.isArray()) continue;
+      Object v; try{ v=m.invoke(o); }catch(Throwable t){ continue; } if(v==null) continue;
+      if(v==target){ out.add(c+"."+nm.substring(3)); continue; }
+      if(v instanceof Field||structural(v)) continue;
+      walkRefs(v,target,out,seen,c,d+1); }
+  }
+  static String refsText(java.util.List<String> refs,int max){ StringBuilder b=new StringBuilder(); for(int i=0;i<refs.size()&&i<max;i++) b.append("\n   - ").append(refs.get(i)); if(refs.size()>max) b.append("\n   … +").append(refs.size()-max); return b.toString(); }
+  /** Locate a field by name across datasets / formulas / running totals / parameters; dataset selector disambiguates. */
+  static Field locateField(TheReportFile rf,String name,String dsSel,StringBuilder err){
+    if(name==null||name.trim().isEmpty()){ err.append("name 인자가 비어 있습니다"); return null; } name=name.trim();
+    GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager(); var rom=rf.getGlobe().getMainReport().getReportObjectManager(); RexObjectList<DataSet> dss=gom.getDataSetList();
+    if(dsSel!=null&&!dsSel.trim().isEmpty()){ DataSet ds=datasetOf(rf,dsSel); FieldData f=findDataField(ds,name); if(f==null) err.append("데이터셋 "+ds.getName()+" 에 필드 '"+name+"' 없음"); return f; }
+    java.util.List<Field> found=new java.util.ArrayList<>(); java.util.List<String> where=new java.util.ArrayList<>();
+    for(int i=0;i<dss.size();i++){ FieldData f=findDataField(dss.get(i),name); if(f!=null){ found.add(f); where.add("데이터셋 "+dss.get(i).getName()); } }
+    for(RexObjectList<?> l: new RexObjectList<?>[]{rom.getFieldFormulaList(),rom.getFieldRunningTotalList(),rom.getFieldGroupNameList(),gom.getFieldGlobalParameterList()}) if(l!=null) for(int i=0;i<l.size();i++) if(name.equalsIgnoreCase(nameOf(l.get(i)))){ found.add((Field)l.get(i)); where.add(fieldKindKo(l.get(i))+" 필드"); }
+    if(found.isEmpty()){ err.append("필드 '"+name+"' 없음 (crf_summary 로 이름 확인)"); return null; }
+    if(found.size()>1){ err.append("'"+name+"' 이 여러 곳에 있습니다: "+where+" — dataset 인자로 지정하세요"); return null; }
+    return found.get(0);
+  }
+  /** Remove a field object from whichever list holds it. */
+  static boolean removeFromLists(TheReportFile rf,Field f){
+    GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager(); var rom=rf.getGlobe().getMainReport().getReportObjectManager(); RexObjectList<DataSet> dss=gom.getDataSetList();
+    java.util.List<RexObjectList<?>> lists=new java.util.ArrayList<>(); for(int i=0;i<dss.size();i++) lists.add(dss.get(i).getFieldDataList());
+    lists.add(rom.getFieldFormulaList()); lists.add(rom.getFieldRunningTotalList()); lists.add(rom.getFieldGroupNameList()); lists.add(gom.getFieldGlobalParameterList()); lists.add(rom.getFieldReportParameterList());
+    for(RexObjectList<?> l: lists){ if(l==null) continue; for(int i=0;i<l.size();i++) if(l.get(i)==f){ l.remove(i); return true; } }
+    return false;
+  }
+  static String fieldRefs(JSONObject args) throws Exception {
+    TheReportFile rf=open(s(args,"path")); StringBuilder err=new StringBuilder(); Field f=locateField(rf,s(args,"name"),s(args,"dataset"),err); if(f==null) return "ERROR: "+err;
+    java.util.List<String> refs=refsOf(rf,f);
+    return fieldKindKo(f)+" 필드 '"+f.getName()+"' 참조 "+refs.size()+"곳"+(refs.isEmpty()?" (없음 — 삭제해도 안전)":":"+refsText(refs,60));
+  }
+  static String renameField(JSONObject args) throws Exception {
+    String path=s(args,"path"), nn=s(args,"new_name"), output=s(args,"output");
+    if(nn==null||nn.trim().isEmpty()) return "ERROR: new_name 인자가 비어 있습니다"; nn=nn.trim();
+    TheReportFile rf=open(path); StringBuilder err=new StringBuilder(); Field f=locateField(rf,s(args,"name"),s(args,"dataset"),err); if(f==null) return "ERROR: "+err;
+    if(nn.equalsIgnoreCase(f.getName())) return "ERROR: 이름이 같습니다";
+    Field dup=findField(rf,nn); if(dup!=null) return "ERROR: 이름 중복 — '"+nn+"' 은 이미 "+fieldKindKo(dup)+" 필드로 존재합니다";
+    String old=f.getName(), ns=nsOf(f); java.util.List<String> refs=refsOf(rf,f); f.setName(nn);
+    int scripts=0, queries=0; var rom=rf.getGlobe().getMainReport().getReportObjectManager();
+    java.util.regex.Pattern sp=scriptRefPattern(ns,old); RexObjectList<?> fl=rom.getFieldFormulaList();
+    for(int i=0;i<fl.size();i++){ FieldFormula ff=(FieldFormula)fl.get(i); String sc=q(ff.getScript()); java.util.regex.Matcher m=sp.matcher(sc); if(m.find()){ ff.setScript(m.replaceAll("$1"+ns+"."+java.util.regex.Matcher.quoteReplacement(nn)+"$1")); scripts++; } }
+    if(ns.equals("parameter")){ java.util.regex.Pattern pp=paramTokenPattern(old); RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList();
+      for(int i=0;i<dss.size();i++){ DataSetItemNormal n=dss.get(i).getDataSetItemNormal(); DataAccessMethodSQL qm=n==null?null:n.getDataAccessMethodSQL(); if(qm==null) continue; String qs=q(qm.getQueryString()); java.util.regex.Matcher m=pp.matcher(qs); if(m.find()){ qm.setQueryString(m.replaceAll(java.util.regex.Matcher.quoteReplacement("{parameter."+nn+"}"))); queries++; } } }
+    RexObjectList<?> gn=rom.getFieldGroupNameList(); if(gn!=null) for(int i=0;i<gn.size();i++){ Field g=(Field)gn.get(i); if(q(g.getName()).contains("["+old+"]")) g.setName(g.getName().replace("["+old+"]","["+nn+"]")); }
+    String wrote=save(rf,output,path);
+    TheReportFile v=open(output); if(findField(v,nn)==null) return "ERROR: 저장 후 되읽기 검증 실패 — 새 이름이 반영되지 않음";
+    return "OK: "+fieldKindKo(f)+" 필드 '"+old+"' → '"+nn+"' (객체 바인딩 "+refs.size()+"곳은 자동 추종, 공식 스크립트 "+scripts+"개"+(ns.equals("parameter")?", 쿼리 "+queries+"개":"")+" 재작성), wrote "+wrote+(refs.isEmpty()?"":refsText(refs,20));
+  }
+  static String removeField(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
+    TheReportFile rf=open(path); StringBuilder err=new StringBuilder(); Field f=locateField(rf,s(args,"name"),s(args,"dataset"),err); if(f==null) return "ERROR: "+err;
+    if(nsOf(f).equals("parameter")) return "ERROR: 매개변수는 crf_remove_param 으로 삭제하세요";
+    if(nsOf(f).equals("groupname")||nsOf(f).equals("system")) return "ERROR: "+fieldKindKo(f)+" 필드는 삭제 대상이 아닙니다";
+    java.util.List<String> refs=refsOf(rf,f);
+    if(!refs.isEmpty()&&!force) return "ERROR: '"+f.getName()+"' 은 "+refs.size()+"곳에서 참조됩니다 — 먼저 바인딩을 바꾸거나 force=true:"+refsText(refs,40);
+    if(!removeFromLists(rf,f)) return "ERROR: 필드 목록에서 찾지 못함";
+    String wrote=save(rf,output,path);
+    TheReportFile v=open(output); if(findField(v,f.getName())!=null) return "ERROR: 저장 후 되읽기 검증 실패 — 필드가 남아 있음";
+    return "OK: "+fieldKindKo(f)+" 필드 '"+f.getName()+"' 삭제, wrote "+wrote+(refs.isEmpty()?"":"\n⚠ force 삭제 — 다음 참조가 끊어졌습니다(디자이너에서 정리 필요):"+refsText(refs,40));
+  }
+  static String setParam(JSONObject args) throws Exception {
+    String path=s(args,"path"), name=s(args,"name"), output=s(args,"output"), type=s(args,"type"), def=s(args,"default"), prompt=s(args,"prompt");
+    if(name==null||name.trim().isEmpty()) return "ERROR: name 인자가 비어 있습니다"; name=name.trim();
+    TheReportFile rf=open(path); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); Object ex=null; for(int i=0;i<gp.size();i++) if(name.equalsIgnoreCase(nameOf(gp.get(i)))) ex=gp.get(i);
+    DataType dt=null; if(type!=null&&!type.trim().isEmpty()){ try{ dt=DataType.valueOf(type.trim()); }catch(Exception e){ return "ERROR: type 은 String|Number|Currency|DateTime|Boolean"; } }
+    String did;
+    if(ex!=null){ Field other=findField(rf,name); if(other!=null && other!=ex) return "ERROR: 이름 중복 — '"+name+"' 은 "+fieldKindKo(other)+" 필드로도 존재";
+      if(dt!=null) call(ex,"setDataType",DataType.class,dt); if(def!=null) call(ex,"setDefaultValue",String.class,def); if(prompt!=null) call(ex,"setPrompt",String.class,prompt);
+      did="updated '"+nameOf(ex)+"'"; }
+    else { Field other=findField(rf,name); if(other!=null) return "ERROR: 이름 중복 — '"+name+"' 은 이미 "+fieldKindKo(other)+" 필드로 존재";
+      addGlobalParam(rf,name,dt==null?DataType.String:dt,def,prompt); did="created '"+name+"'"; }
+    String wrote=save(rf,output,path);
+    Object v=null; RexObjectList<?> vp=open(output).getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); for(int i=0;i<vp.size();i++) if(name.equalsIgnoreCase(nameOf(vp.get(i)))) v=vp.get(i);
+    if(v==null) return "ERROR: 저장 후 되읽기 검증 실패";
+    return "OK: 매개변수 "+did+" type="+g(v,"getDataType")+" default=\""+q(g(v,"getDefaultValue"))+"\" prompt=\""+q(g(v,"getPrompt"))+"\", wrote "+wrote;
+  }
+  static String removeParam(JSONObject args) throws Exception {
+    String path=s(args,"path"), name=s(args,"name"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
+    if(name==null||name.trim().isEmpty()) return "ERROR: name 인자가 비어 있습니다"; name=name.trim();
+    TheReportFile rf=open(path); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); Field f=null; for(int i=0;i<gp.size();i++) if(name.equalsIgnoreCase(nameOf(gp.get(i)))) f=(Field)gp.get(i);
+    if(f==null) return "ERROR: 매개변수 '"+name+"' 없음";
+    java.util.List<String> refs=refsOf(rf,f);
+    if(!refs.isEmpty()&&!force) return "ERROR: 매개변수 '"+f.getName()+"' 은 "+refs.size()+"곳에서 참조됩니다 — force=true 로 강행 가능:"+refsText(refs,40);
+    removeFromLists(rf,f); String wrote=save(rf,output,path);
+    return "OK: 매개변수 '"+f.getName()+"' 삭제, wrote "+wrote+(refs.isEmpty()?"":"\n⚠ force 삭제 — 끊어진 참조:"+refsText(refs,40));
+  }
+  @SuppressWarnings("unchecked")
+  static String addDataset(JSONObject args) throws Exception {
+    String path=s(args,"path"), name=s(args,"name"), sql=s(args,"sql"), output=s(args,"output");
+    if(name==null||name.trim().isEmpty()) return "ERROR: name 인자가 비어 있습니다"; name=name.trim();
+    if(sql==null||sql.trim().isEmpty()) return "ERROR: sql 인자가 비어 있습니다";
+    TheReportFile rf=open(path); RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList();
+    for(int i=0;i<dss.size();i++) if(name.equalsIgnoreCase(dss.get(i).getName())) return "ERROR: 데이터셋 이름 중복: "+dss.get(i).getName();
+    if(dss.size()==0) return "ERROR: 복제할 기존 데이터셋(연결 정보)이 없습니다";
+    DataSet first=dss.get(0); DataSet ds=new DataSet(); ds.setName(name); ds.setDataSetType(first.getDataSetType());
+    DataSetItemNormal in=ds.getDataSetItemNormal(); if(in==null) return "ERROR: 새 데이터셋 구조 생성 실패(SDK)";
+    DataSetItemNormal fn=first.getDataSetItemNormal(); if(fn!=null){ in.setLinkedConnection(fn.getLinkedConnection()); in.setDataAccessMethod(fn.getDataAccessMethod()); }
+    if(in.getDataAccessMethodSQL()==null) return "ERROR: 새 데이터셋에 SQL 접근방식이 없습니다(SDK)";
+    QueryApply r=applyQuery(rf,ds,sql,s(args,"script_type"),true,"add");
+    dss.add(ds); String wrote=save(rf,output,path);
+    TheReportFile v=open(output); RexObjectList<DataSet> vd=v.getGlobe().getGlobalObjectManager().getDataSetList(); DataSet vds=null; for(int i=0;i<vd.size();i++) if(name.equalsIgnoreCase(vd.get(i).getName())) vds=vd.get(i);
+    if(vds==null) return "ERROR: 저장 후 되읽기 검증 실패 — 데이터셋이 없음";
+    return "OK: 데이터셋 '"+name+"' 추가 (DS["+vd.indexOf(vds)+"], scriptType "+r.after+", 연결="+nameOf(fn==null?null:fn.getLinkedConnection())+", 필드 "+vds.getFieldDataList().size()+"개: "+fieldList(vds)+"), wrote "+wrote+applySummary(r)+"\n(서브리포트/표에 바인딩하려면 crf_set_cell / crf_add_label 로 이 데이터셋 필드를 지정)";
+  }
+  static String removeDataset(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
+    if(s(args,"dataset")==null||s(args,"dataset").trim().isEmpty()) return "ERROR: dataset 인자가 비어 있습니다";
+    TheReportFile rf=open(path); RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList(); DataSet ds=datasetOf(rf,s(args,"dataset"));
+    if(dss.size()<=1) return "ERROR: 마지막 데이터셋은 삭제할 수 없습니다";
+    java.util.List<String> refs=new java.util.ArrayList<>(); RexObjectList<?> fl=ds.getFieldDataList(); for(int i=0;i<fl.size();i++){ for(String r: refsOf(rf,(Field)fl.get(i))) refs.add(nameOf(fl.get(i))+" ← "+r); }
+    if(!refs.isEmpty()&&!force) return "ERROR: 데이터셋 "+ds.getName()+" 의 필드가 "+refs.size()+"곳에서 참조됩니다 — force=true 로 강행 가능:"+refsText(refs,40);
+    dss.remove(dss.indexOf(ds)); String wrote=save(rf,output,path);
+    TheReportFile v=open(output); return "OK: 데이터셋 '"+ds.getName()+"' 삭제 (남은 데이터셋 "+v.getGlobe().getGlobalObjectManager().getDataSetList().size()+"), wrote "+wrote+(refs.isEmpty()?"":"\n⚠ force 삭제 — 끊어진 참조:"+refsText(refs,40));
+  }
+  /** Bind {parameter.X}/{dataset.X} for a metadata-only execution: quoted tokens -> 'value' or '', bare tokens -> value or NULL. */
+  static String bindForExec(String sql,java.util.Map<String,String> params){
+    java.util.regex.Matcher m=java.util.regex.Pattern.compile("'\\{(parameter|dataset)\\.([A-Za-z0-9_]+)\\}'").matcher(sql); StringBuffer b=new StringBuffer();
+    while(m.find()){ String v=params==null?null:params.get(m.group(2)); if(v==null&&params!=null) v=params.get(m.group(2).toUpperCase()); m.appendReplacement(b, java.util.regex.Matcher.quoteReplacement("'"+(v==null?"":v.replace("'","''"))+"'")); } m.appendTail(b);
+    m=java.util.regex.Pattern.compile("\\{(parameter|dataset)\\.([A-Za-z0-9_]+)\\}").matcher(b.toString()); StringBuffer c=new StringBuffer();
+    while(m.find()){ String v=params==null?null:params.get(m.group(2)); if(v==null&&params!=null) v=params.get(m.group(2).toUpperCase()); m.appendReplacement(c, java.util.regex.Matcher.quoteReplacement(v==null?"NULL":v)); } m.appendTail(c);
+    return c.toString();
+  }
+  static DataType jdbcToDataType(String typeName,int scale,String col){ String t=q(typeName).toUpperCase();
+    if(t.contains("DATE")||t.contains("TIME")) return DataType.DateTime;
+    if(t.contains("NUM")||t.contains("DEC")||t.contains("INT")||t.contains("FLOAT")||t.contains("DOUBLE")||t.contains("REAL")) return CrfGen2.guessType(col)==DataType.Currency?DataType.Currency:DataType.Number;
+    return DataType.String; }
+  @SuppressWarnings("unchecked")
+  static String syncFields(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"), mode=q(s(args,"mode")).trim().toLowerCase(); if(mode.isEmpty()) mode="sql";
+    boolean setTypes="true".equalsIgnoreCase(s(args,"set_types")), removeUnused="true".equalsIgnoreCase(s(args,"remove_unused"));
+    TheReportFile rf=open(path); DataSet ds=datasetOf(rf,s(args,"dataset"));
+    DataAccessMethodSQL qm=ds.getDataSetItemNormal()==null?null:ds.getDataSetItemNormal().getDataAccessMethodSQL(); if(qm==null) return "ERROR: 데이터셋 "+ds.getName()+" 은 SQL 데이터셋이 아닙니다";
+    String raw=q(qm.getQueryString()); String plain=qm.getScriptType()==ScriptType.JavaScript?jsToPlainSql(raw):raw;
+    java.util.List<String> cols=new java.util.ArrayList<>(); java.util.Map<String,DataType> types=new java.util.LinkedHashMap<>(); java.util.List<String> skipped=new java.util.ArrayList<>(); String source;
+    if(mode.equals("sql")){ for(String c: CrfGen2.parseColumns(CrfGen2.stripComments(plain))){ if(c.matches("COL_\\d+")||!validIdent(c)) skipped.add(c); else { cols.add(c); types.put(c,CrfGen2.guessType(c)); } }
+      if(cols.isEmpty()&&skipped.isEmpty()) return "ERROR: SELECT 목록을 파싱하지 못함(SELECT * / 함수테이블 등) — mode=db 를 사용하세요"; source="SQL 파싱"; }
+    else if(mode.equals("db")){ java.util.Map<String,String> params=new java.util.HashMap<>(); String pj=s(args,"params"); if(pj!=null&&!pj.trim().isEmpty()){ try{ JSONObject po=(JSONObject)P.parse(pj); for(Object k: po.keySet()) params.put(String.valueOf(k),String.valueOf(po.get(k))); }catch(Exception e){ return "ERROR: params 는 JSON 객체여야 합니다: "+e; } }
+      String body=bindForExec(CrfGen2.stripComments(plain),params).trim().replaceAll(";\\s*$","");
+      String exec="SELECT * FROM (\n"+body+"\n) WHERE 1=0";
+      try(Connection c=db(); Statement st=c.createStatement()){ try{ st.setQueryTimeout(DB_TIMEOUT_SEC); st.setMaxRows(1); }catch(Throwable t){}
+        try(ResultSet rs=st.executeQuery(exec)){ ResultSetMetaData md=rs.getMetaData(); for(int i=1;i<=md.getColumnCount();i++){ String c2=md.getColumnLabel(i); if(!validIdent(c2)) { skipped.add(c2); continue; } cols.add(c2); types.put(c2,jdbcToDataType(md.getColumnTypeName(i),md.getScale(i),c2)); } }
+      }catch(SQLException e){ return "ERROR: DB 실행 실패 — "+e.getMessage().trim()+"\n(params 로 매개변수 값을 주거나 쿼리를 확인하세요; 실행한 SQL 앞부분)\n"+(exec.length()>500?exec.substring(0,500)+"…":exec); }
+      source="DB ResultSetMetaData"+(params.isEmpty()?"":" params="+params); }
+    else return "ERROR: mode 는 sql|db";
+    java.util.List<String> added=new java.util.ArrayList<>(), typed=new java.util.ArrayList<>(), removed=new java.util.ArrayList<>(), kept=new java.util.ArrayList<>(); java.util.Set<String> want=new java.util.HashSet<>();
+    for(String c: cols){ want.add(c.toUpperCase()); FieldData f=findDataField(ds,c); if(f==null){ addDataFieldTo(ds,c,setTypes?types.get(c):nullType()); added.add(c+(setTypes?":"+types.get(c):"")); } else if(setTypes && f.getDataType()!=types.get(c)){ f.setDataType(types.get(c)); typed.add(c+":"+types.get(c)); } }
+    RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList();
+    for(int i=fl.size()-1;i>=0;i--){ FieldData f=fl.get(i); if(want.contains(f.getName().toUpperCase())) continue; if(!removeUnused){ kept.add(f.getName()); continue; } java.util.List<String> refs=refsOf(rf,f); if(refs.isEmpty()){ fl.remove(i); removed.add(f.getName()); } else kept.add(f.getName()+"("+refs.size()+"곳 참조)"); }
+    String wrote=save(rf,output,path);
+    StringBuilder b=new StringBuilder("OK: "+ds.getName()+" 필드 동기화 ("+source+") — 쿼리 컬럼 "+cols.size()+"개, wrote "+wrote);
+    b.append("\n쿼리 컬럼: "); for(String c: cols) b.append(c).append(":").append(types.get(c)).append(" ");
+    if(!added.isEmpty()) b.append("\n+ 추가: ").append(added); if(!typed.isEmpty()) b.append("\n~ 타입 변경: ").append(typed);
+    if(!removed.isEmpty()) b.append("\n- 제거(미참조): ").append(removed);
+    if(!kept.isEmpty()) b.append("\n⚠ 쿼리에 없는 필드 유지: ").append(kept).append(removeUnused?" (참조 중)":" (remove_unused=true 면 미참조 필드 제거)");
+    if(!skipped.isEmpty()) b.append("\n⚠ 필드명으로 못 쓰는 컬럼(별칭 필요): ").append(skipped);
+    b.append("\n필드("+ds.getFieldDataList().size()+"): "+fieldList(ds));
+    return b.toString();
   }
 
   static java.util.regex.Pattern likePattern(String like){ if(like==null||like.trim().isEmpty()) return null; String l=like.trim();

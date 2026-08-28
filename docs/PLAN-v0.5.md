@@ -71,7 +71,8 @@
 | `crf_list_reports` | `+ like?`, `limit?`(기본 500), 총계 | 이름 필터·총 개수 |
 | `crf_summary` | 동일 | 데이터셋별 scriptType·필드(타입)·매개변수(타입/기본값)·그룹→필드·섹션별 서브섹션(이름/높이/가시/유형) 요약 |
 
-### v0.5.1 — 쿼리/데이터셋 수정
+### v0.5.1 — 쿼리/데이터셋 수정 — ✅ 2026-08-28 완료
+> 추가: `crf_field_refs`(참조 조회). 실 DB(개발 Tibero)로 `mode=db` 검증 — 11k자 JS 동적쿼리도 평문 복원본으로 실행돼 41컬럼 확정.
 - **`crf_set_query` v2**: `dataset?`(이름/인덱스), `script_type?`(`auto|sql|javascript`; auto = MyBatis 태그→JS 변환, `var sql`/`sql +=`/`+"` 패턴→JavaScript, 그 외→NotScript), `declare_params=true`(새 `{parameter.X}` 전역 매개변수 String 선언), `sync_fields=none|add|replace`(SELECT 파싱으로 필드 추가/교체, 제거 시 바인딩 참조 있으면 경고·중단), 결과에 변환 diff 요약.
 - **`crf_sync_fields`**: `mode=sql|db`. `db`는 **쿼리를 실행해 ResultSetMetaData로 컬럼·타입 확정**(`{parameter.X}`는 `params` JSON 또는 `''`/NULL 대입, `WHERE 1=0` 래핑, JS 쿼리는 평문 복원본 사용) → `SELECT *`/함수테이블 해결. 타입 매핑 NUMBER→Number/Currency(이름 휴리스틱), DATE→DateTime.
 - **`crf_add_dataset`**(`name`, `sql`, 첫 데이터셋 연결 복제) / **`crf_remove_dataset`**(참조 있으면 거부).

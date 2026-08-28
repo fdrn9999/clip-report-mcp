@@ -126,7 +126,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 | 파일 | 역할 |
 |---|---|
-| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 22개 (.crf 17 + DB 4 + PDF 1) |
+| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 30개 (.crf 25 + DB 4 + PDF 1) |
 | **CrfMcpHttp.java** | **MCP 서버 (원격 Streamable HTTP)** — 같은 도구 |
 | **CrfGen3.java** | SQL/MyBatis → 초안 생성기 (필드·쿼리·파라미터·그룹·푸터) |
 | **CrfGen2.java** | 파싱/변환 코어 (SELECT 컬럼 파서, MyBatis→JS, 파라미터 정규화, 타입추정) |
@@ -138,7 +138,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 ---
 
-## MCP 도구 (22)
+## MCP 도구 (30)
 
 ### 리포트(.crf) 도구
 
@@ -151,7 +151,12 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로)·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
 | 설명 | `crf_list_reports(dir, [like|limit])` | 폴더의 .crf 목록 + 총 개수, 이름 필터(부분문자열/`*` 글롭) |
 | 생성 | `crf_generate(template, sql, output)` | SQL/MyBatis → 초안 .crf |
-| 수정 | `crf_set_query(path, sql, output, [dataset|script_type])` | 데이터셋 쿼리 교체 — 데이터셋 이름/인덱스 선택, **scriptType 자동**(평문 SQL→NotScript, MyBatis→JS 변환, `var sql`→JavaScript), 미선언 매개변수 경고, 변환 결과 미리보기 |
+| 수정 | `crf_set_query(path, sql, output, [dataset|script_type|declare_params|sync_fields])` | 데이터셋 쿼리 교체 — 데이터셋 선택, **scriptType 자동**(평문→NotScript, MyBatis→JS, `var sql`→JavaScript), **미선언 `{parameter.X}` 자동 선언**(String), **SELECT 컬럼을 필드로 추가**(`sync_fields=add` 기본 / `replace`=미참조 필드 제거 / `none`) |
+| 수정 | `crf_sync_fields(path, output, [dataset|mode|params|set_types|remove_unused])` | 필드 목록을 쿼리 컬럼에 맞춤. `mode=sql` 파싱 / **`mode=db`: 쿼리를 `SELECT * FROM (…) WHERE 1=0` 로 실행해 ResultSetMetaData 로 컬럼·타입 확정**(`SELECT *`·함수테이블 해결, 매개변수는 `params` JSON 또는 `''`/NULL) |
+| 수정 | `crf_add_dataset(path, name, sql, output)` / `crf_remove_dataset(path, dataset, output, [force])` | 데이터셋 추가(첫 데이터셋 연결 복제, 매개변수 선언·필드 생성) / 삭제(필드 참조 있으면 거부) |
+| 수정 | `crf_set_param(path, name, output, [type|default|prompt])` / `crf_remove_param(...)` | 전역 매개변수 생성·수정 / 삭제(쿼리·바인딩 참조 시 거부) |
+| 수정 | `crf_rename_field(path, name, new_name, output, [dataset])` / `crf_remove_field(path, name, output, [dataset|force])` | 필드 이름변경(객체 바인딩 자동 추종 + 공식 `"ns.OLD"`·쿼리 `{parameter.OLD}` 재작성) / 삭제(참조 목록 제시, `force` 없으면 거부) |
+| 설명 | `crf_field_refs(path, name, [dataset])` | 필드/매개변수가 쓰이는 곳: 셀 좌표·라벨·그룹·누적합산·서브리포트 링크·공식·쿼리 |
 | 수정 | `crf_add_group(path, column, output)` | 컬럼에 그룹 머리/바닥글 추가 |
 | 수정 | `crf_place_detail_fields(path, output)` | 본문에 필드 바인딩 데이터 라벨 배치 |
 | 수정 | `crf_set_cell(path, table, row, col, [field|text|format], output)` | **표 셀** 편집 — 필드 바인딩 / 정적텍스트 / 출력양식. 저장 후 되읽어 검증. `‹병합›`(병합돼 숨은 셀)은 편집 불가 → 기준 셀 안내 |
@@ -200,7 +205,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
   }
 }
 ```
-→ 클라이언트 재시작 → 도구 22개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
+→ 클라이언트 재시작 → 도구 30개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
 > DB 도구(`db_*`)를 쓰려면 classpath 에 **Tibero JDBC 드라이버 jar** 도 추가하세요. 접속정보는 `.env` 분리(아래).
 
 ### B. 원격 (HTTP) — 팀 공유 / claude.ai 웹
@@ -274,7 +279,8 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 ## 한계 / TODO
 
 - 본문은 데이터 **라벨** 배치까지. 정식 **표(ControlTable)** 생성은 미구현(셀 바인딩은 동일 `setApplyValueField`라 기계적 확장).
-- `crf_set_query` 는 필드/매개변수를 **동기화하지 않음**(미선언 매개변수는 경고만) — 새 컬럼은 `crf_add_data_field`. DB 메타데이터 동기화·데이터셋/필드 편집·표 생성·lint 는 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) 로드맵(v0.5.1~).
+- 필드 동기화는 SELECT 파싱(별칭 없는 식은 제외) 또는 DB 실행 기반. `mode=db` 는 `.env` DB 연결이 필요하고, 매개변수 값이 없으면 `''`/NULL 로 바인딩해 메타데이터만 읽는다(조건에 따라 타입 오류가 나면 `params` 로 값 지정).
+- 표(ControlTable) 생성·lint·서브섹션 편집·삭제 계열은 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) 로드맵(v0.6.0).
 - `crf_get_query` 의 JS→평문 복원은 문자열 연결을 풀고 `if` 블록을 주석으로 표시한 **추정본**(실제 SQL 은 매개변수 조건에 따라 달라짐). 테이블 목록도 FROM/JOIN 정규식 추정.
 - 도구 실패는 `ERROR: …`(MCP `isError`)로 반환. 쓰기 도구는 `output` 이 원본과 같으면 거부.
 - MyBatis `<foreach>`/`<choose>` 부분 지원(경고).

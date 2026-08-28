@@ -133,7 +133,10 @@ return txt;
 | 밴드별 컨트롤·표 셀 바인딩 보기 (설명/제안의 근거) | `crf_describe_layout` |
 | 폴더 리포트 찾기 | `crf_list_reports` |
 | SQL/MyBatis로 초안 생성 | `crf_generate` |
-| 쿼리 교체 / 그룹 추가 / 본문 필드 배치 | `crf_set_query` / `crf_add_group` / `crf_place_detail_fields` |
+| 쿼리 교체(매개변수 선언·필드 동기화) / 그룹 추가 / 본문 필드 배치 | `crf_set_query` / `crf_add_group` / `crf_place_detail_fields` |
+| 쿼리 컬럼↔필드 맞추기 (`SELECT *` 는 DB 실행) | `crf_sync_fields` (`mode=sql|db`) |
+| 데이터셋 추가·삭제 / 매개변수 생성·수정·삭제 | `crf_add_dataset`·`crf_remove_dataset` / `crf_set_param`·`crf_remove_param` |
+| 필드 이름변경·삭제 (참조 검사) / 참조 위치 보기 | `crf_rename_field`·`crf_remove_field` / `crf_field_refs` |
 
 > **편집 제안**: Claude가 `crf_summary` + `crf_describe_layout` 로 구조를 읽고, 위 개념에 비추어 개선점을 자연어로 제시합니다.
 

@@ -133,6 +133,56 @@ if os.path.isfile(B):
     case("describe v2 subreport subsections", "crf_describe_layout", {"path": B},
          contains('sub[0] "리포트 서브섹션1" [Subreport]', "링크=../../../images/bottom_logo.crf"))
 
+# ---- v0.5.1 데이터셋/매개변수/필드 편집 ----
+if os.path.isfile(B):
+    case("field_refs data field (group+cell+links)", "crf_field_refs", {"path": B, "name": "STUDENT_CD"},
+         contains("참조 11곳", "그룹.GroupingField", 'Table"표2"[3,4].ApplyValueField', "Detail/리포트 서브섹션1/매개변수링크.LinkedField1"))
+    case("field_refs param in query", "crf_field_refs", {"path": B, "name": "SYY"}, contains("데이터셋 SQLDS1 쿼리 {parameter.SYY}"))
+    case("field_refs ambiguous -> ERROR", "crf_field_refs", {"path": B, "name": "VISIBLE_CHK"}, err_contains("여러 곳", "dataset"))
+    case("field_refs with dataset", "crf_field_refs", {"path": B, "name": "VISIBLE_CHK", "dataset": "SQLDS2"}, contains("참조 0곳"))
+    case("rename data field rewrites formula", "crf_rename_field", {"path": B, "name": "DEPT_CD_NM", "new_name": "DEPT_NM2", "output": OUT + "/b_ren.crf"},
+         contains("OK", "공식 스크립트 1개"))
+    case("rename verify formula text", "crf_get_formula", {"path": OUT + "/b_ren.crf", "name": "DEPT_CLASS_NM"}, contains('rexpert.field("data.DEPT_NM2")'))
+    case("rename param rewrites query token", "crf_rename_field", {"path": B, "name": "DEPTCD", "new_name": "DEPT_CD2", "output": OUT + "/b_ren2.crf"}, contains("쿼리 1개 재작성"))
+    case("rename verify query token", "crf_get_query", {"path": OUT + "/b_ren2.crf", "dataset": "0", "mode": "raw"},
+         lambda t, e: None if not e and "{parameter.DEPT_CD2}" in t and "{parameter.DEPTCD}" not in t else f"token: {t[:200]}")
+    case("rename duplicate -> ERROR", "crf_rename_field", {"path": B, "name": "NM", "new_name": "YEAR", "output": OUT + "/b_ren3.crf"}, err_contains("중복"))
+    case("remove_field referenced -> ERROR", "crf_remove_field", {"path": B, "name": "NM", "output": OUT + "/b_rm.crf"}, err_contains("참조", "[3,6]"))
+    case("remove_field force", "crf_remove_field", {"path": B, "name": "NM", "force": "true", "output": OUT + "/b_rm2.crf"}, contains("OK", "끊어졌습니다"))
+    case("remove_field unreferenced", "crf_remove_field", {"path": B, "name": "CHK", "output": OUT + "/b_rm3.crf"}, ok)
+    case("remove_field verify", "crf_summary", {"path": OUT + "/b_rm3.crf"}, lambda t, e: None if not e and "fields(40)" in t and ", CHK," not in t else f"summary: {t[:200]}")
+    case("set_param create", "crf_set_param", {"path": B, "name": "NEW_P", "type": "Number", "default": "10", "prompt": "새 값", "output": OUT + "/b_p.crf"},
+         contains("created", "type=Number", 'default="10"'))
+    case("set_param update", "crf_set_param", {"path": OUT + "/b_p.crf", "name": "new_p", "default": "20", "output": OUT + "/b_p2.crf"}, contains("updated", 'default="20"', "type=Number"))
+    case("set_param name clash -> ERROR", "crf_set_param", {"path": B, "name": "YEAR", "output": OUT + "/b_p3.crf"}, err_contains("중복"))
+    case("remove_param referenced -> ERROR", "crf_remove_param", {"path": B, "name": "DEPTCD", "output": OUT + "/b_rp.crf"}, err_contains("{parameter.DEPTCD}"))
+    case("remove_param ok", "crf_remove_param", {"path": OUT + "/b_p.crf", "name": "NEW_P", "output": OUT + "/b_rp2.crf"}, ok)
+    sq = open(os.path.join(PROJ, "samples", "sample_query.sql"), encoding="utf-8").read()
+    case("set_query v2 declares params + adds fields", "crf_set_query", {"path": B, "sql": sq, "dataset": "1", "output": OUT + "/b_sq.crf"},
+         contains("매개변수 선언: [SALYYM]", "필드 추가: [DEPT_CD, DEPT_NM, EMP_CNT, TOTAL_AMT, AVG_AMT, LAST_YM]", "필드(11)"))
+    case("set_query v2 sync none / no declare", "crf_set_query", {"path": B, "sql": sq, "dataset": "1", "declare_params": "false", "sync_fields": "none", "output": OUT + "/b_sq1.crf"},
+         lambda t, e: None if not e and "선언되지 않은 매개변수: [SALYYM]" in t and "필드 추가" not in t else f"none: {t[:300]}")
+    case("set_query v2 replace removes unreferenced", "crf_set_query", {"path": B, "sql": sq, "dataset": "1", "sync_fields": "replace", "output": OUT + "/b_sq3.crf"},
+         contains("필드 제거(미참조): [", "필드(6)"))
+    case("set_query SELECT * hint", "crf_set_query", {"path": B, "sql": "SELECT * FROM ADM.AHRM810 WHERE X=#{x}", "dataset": "SQLDS3", "output": OUT + "/b_sq2.crf"},
+         contains("SELECT 목록을 파싱하지 못함", "mode=db"))
+    case("sync_fields sql", "crf_sync_fields", {"path": OUT + "/b_sq1.crf", "dataset": "1", "mode": "sql", "set_types": "true", "output": OUT + "/b_sync3.crf"},
+         contains("SQL 파싱", "쿼리 컬럼 6개", "TOTAL_AMT:Currency", "추가: [DEPT_CD"))
+    case("sync_fields bad mode", "crf_sync_fields", {"path": B, "mode": "xx", "output": OUT + "/b_syncx.crf"}, error)
+    case("add_dataset", "crf_add_dataset", {"path": B, "name": "NEW_DS", "sql": "SELECT A.EMP_NM, A.DEPT_CD FROM TB_EMP A WHERE A.YY = :yy", "output": OUT + "/b_ds.crf"},
+         contains("DS[12]", "연결=JDBC1", "필드 2개: EMP_NM, DEPT_CD", "매개변수 선언: [YY]"))
+    case("add_dataset duplicate -> ERROR", "crf_add_dataset", {"path": OUT + "/b_ds.crf", "name": "new_ds", "sql": "SELECT 1 A FROM DUAL", "output": OUT + "/b_ds2.crf"}, err_contains("중복"))
+    case("add_dataset verify query", "crf_get_query", {"path": OUT + "/b_ds.crf", "dataset": "NEW_DS"}, contains("'{parameter.YY}'", "TB_EMP"))
+    case("remove_dataset unreferenced", "crf_remove_dataset", {"path": OUT + "/b_ds.crf", "dataset": "NEW_DS", "output": OUT + "/b_ds3.crf"}, contains("남은 데이터셋 12"))
+    case("remove_dataset referenced -> ERROR", "crf_remove_dataset", {"path": B, "dataset": "SQLDS1", "output": OUT + "/b_ds4.crf"}, err_contains("참조", "force"))
+if os.path.isfile(A) and os.environ.get("CLIP_SMOKE_DB", "1") == "1":
+    case("sync_fields db (NotScript, dataset refs bound)", "crf_sync_fields", {"path": A, "dataset": "SQLDS3", "mode": "db", "params": "{\"RECRUYY\":\"2024\"}", "output": OUT + "/a_sync.crf"},
+         lambda t, e: None if (not e and "DB ResultSetMetaData" in t and "쿼리 컬럼 3개" in t) or (e and "DB 미설정" in t) else f"db: {t[:300]}")
+    case("sync_fields db on JS query (11k chars)", "crf_sync_fields", {"path": B, "dataset": "0", "mode": "db", "output": OUT + "/b_sync2.crf"},
+         lambda t, e: None if (not e and "쿼리 컬럼 41개" in t) or (e and "DB 미설정" in t) else f"db js: {t[:300]}")
+    case("sync_fields db bad column -> ERROR with SQL", "crf_sync_fields", {"path": OUT + "/b_sq2.crf", "dataset": "SQLDS3", "mode": "db", "output": OUT + "/b_syncbad.crf"},
+         err_contains("DB 실행 실패", "WHERE 1=0"))
+
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))
 case("db_query DDL refused", "db_query", {"sql": " /*c*/ drop table x"}, error)
