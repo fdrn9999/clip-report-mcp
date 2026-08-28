@@ -106,8 +106,19 @@ cd clip-report-mcp
 
 ```powershell
 ./build.ps1 -Jdk "C:\path\to\jdk\bin" -Clip "C:\Program Files (x86)\Clipsoft\CLIP report v5.0\bin\jar"
-# => clip-report-mcp.jar (stdio + http 서버 + 생성기 + DB/PDF 도구 포함, ~47KB)
+# => clip-report-mcp.jar (stdio + http 서버 + 생성기 + DB/PDF 도구 포함, ~56KB). VERSION 파일이 jar 리소스로 들어가 serverInfo.version 이 됨(빌드 없이 VERSION 만 올리면 안 됨)
 ```
+
+---
+
+## 테스트
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python tools/smoke.py -v        # 실 리포트 2종으로 읽기/쓰기 도구 회귀 (경로는 CLIP_SMOKE_A / CLIP_SMOKE_B 로 변경)
+python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
+```
+`tools/mcpcall.py` 는 `clip-report.mcp.json`(install.ps1 생성)에서 java/classpath 를 읽는다(없으면 `CLIP_JAVA`/`CLIP_CP`). 쓰기 결과는 `.smoke-out/`.
 
 ---
 
@@ -115,7 +126,7 @@ cd clip-report-mcp
 
 | 파일 | 역할 |
 |---|---|
-| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 19개 (.crf 14 + DB 4 + PDF 1) |
+| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 22개 (.crf 17 + DB 4 + PDF 1) |
 | **CrfMcpHttp.java** | **MCP 서버 (원격 Streamable HTTP)** — 같은 도구 |
 | **CrfGen3.java** | SQL/MyBatis → 초안 생성기 (필드·쿼리·파라미터·그룹·푸터) |
 | **CrfGen2.java** | 파싱/변환 코어 (SELECT 컬럼 파서, MyBatis→JS, 파라미터 정규화, 타입추정) |
@@ -127,7 +138,7 @@ cd clip-report-mcp
 
 ---
 
-## MCP 도구 (19)
+## MCP 도구 (22)
 
 ### 리포트(.crf) 도구
 
@@ -135,14 +146,17 @@ cd clip-report-mcp
 |---|---|---|
 | 설명 | `crf_summary(path)` | 데이터셋·필드·쿼리·그룹·섹션 요약 |
 | 설명 | `crf_describe_layout(path)` | 밴드별 컨트롤 + 필드 바인딩 표시 |
-| 설명 | `crf_list_reports(dir)` | 폴더의 .crf 목록 |
+| 설명 | `crf_get_query(path, [dataset|mode])` | **쿼리 본문** — 데이터셋별 scriptType·연결·필드·사용 매개변수(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JS 동적쿼리는 원문 + **평문 복원본**(if 블록은 `/*IF*/` 주석) |
+| 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
+| 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로)·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
+| 설명 | `crf_list_reports(dir, [like|limit])` | 폴더의 .crf 목록 + 총 개수, 이름 필터(부분문자열/`*` 글롭) |
 | 생성 | `crf_generate(template, sql, output)` | SQL/MyBatis → 초안 .crf |
-| 수정 | `crf_set_query(path, sql, output)` | 첫 데이터셋 쿼리 교체 |
+| 수정 | `crf_set_query(path, sql, output, [dataset|script_type])` | 데이터셋 쿼리 교체 — 데이터셋 이름/인덱스 선택, **scriptType 자동**(평문 SQL→NotScript, MyBatis→JS 변환, `var sql`→JavaScript), 미선언 매개변수 경고, 변환 결과 미리보기 |
 | 수정 | `crf_add_group(path, column, output)` | 컬럼에 그룹 머리/바닥글 추가 |
 | 수정 | `crf_place_detail_fields(path, output)` | 본문에 필드 바인딩 데이터 라벨 배치 |
-| 수정 | `crf_set_cell(path, table, row, col, [field|text|format], output)` | **표 셀** 편집 — 필드 바인딩 / 정적텍스트 / 출력양식 |
+| 수정 | `crf_set_cell(path, table, row, col, [field|text|format], output)` | **표 셀** 편집 — 필드 바인딩 / 정적텍스트 / 출력양식. 저장 후 되읽어 검증. `‹병합›`(병합돼 숨은 셀)은 편집 불가 → 기준 셀 안내 |
 | 수정 | `crf_set_cell_style(path, table, row, col, [bgcolor|font|cangrow|merge], output)` | 셀 **스타일** — 배경색/폰트/확장가능/셀합치기 |
-| 수정 | `crf_add_formula_field(path, name, script, output)` | **공식필드** 생성 (JS, 끝에 `return`; 예: `return rexpert.sum(0,"data.AMT",0,"","")`) → 셀에 바인딩 |
+| 수정 | `crf_add_formula_field(path, name, script, output, [force])` | **공식필드** 생성 (JS, 끝에 `return`; 예: `return rexpert.sum(0,"data.AMT",0,"","")`) → 셀에 바인딩. 이름 중복 / `return` 누락 / `:col` `#{}` 바인드 표기는 거부(`force=true`로 강행) |
 | 수정 | `crf_add_data_field(path, name, [type], output)` | 데이터셋에 **필드(컬럼)** 추가 |
 | 수정 | `crf_add_label(path, section, [text|field], [위치], output)` | 밴드에 **글상자** 추가(없는 표준밴드는 자동생성) |
 | 수정 | `crf_set_paper(path, [paper|orientation|margin*], output)` | **용지** 종류/방향/여백 |
@@ -155,7 +169,7 @@ cd clip-report-mcp
 | DB | `db_tables(like?)` | 테이블 목록 + **코멘트(업무명)** 검색 (`ALL_TAB_COMMENTS`) |
 | DB | `db_columns(table)` | 컬럼·타입·코멘트(`ALL_COL_COMMENTS`) → **컬럼 업무의미** 파악 |
 | DB | `db_sample(table, n?)` | 상위 N행 샘플 (값 형태·코드값 확인) |
-| DB | `db_query(sql, max?)` | 임의 `SELECT` 실행 (TSV, 행수 캡) — 조인/집계 검증 |
+| DB | `db_query(sql, max?, allow_write?)` | `SELECT`/`WITH` 실행 (TSV, 행수 캡, 타임아웃 `CLIP_DB_TIMEOUT` 기본 60s) — 쓰기 문장은 `allow_write=true` 명시 필요 |
 | 문서 | `pdf_text(path)` | PDF 문서양식의 **텍스트 추출**(pdfbox) → 항목·레이아웃 파악 |
 
 > **파이프라인**: 화면(xfdl/vue)·양식(PDF)을 받으면 → 화면/문서를 읽고(`pdf_text`+Read) → 백엔드 매퍼·서비스를 **Grep으로 역추적** → `db_tables`/`db_columns`/`db_sample`/`db_query`로 **도메인 테이블·코드값** 확보 → 양식에 맞는 **리포트 양식 추천 + 쿼리 작성/변환**(파라미터는 `'{parameter.COLNM}'` 규칙). DB 접속정보는 **`.env`** 로 분리(아래 [DB 설정](#db-설정-env) 참조).
@@ -186,7 +200,7 @@ cd clip-report-mcp
   }
 }
 ```
-→ 클라이언트 재시작 → 도구 19개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
+→ 클라이언트 재시작 → 도구 22개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
 > DB 도구(`db_*`)를 쓰려면 classpath 에 **Tibero JDBC 드라이버 jar** 도 추가하세요. 접속정보는 `.env` 분리(아래).
 
 ### B. 원격 (HTTP) — 팀 공유 / claude.ai 웹
@@ -222,7 +236,9 @@ DB 도구(`db_query`/`db_tables`/`db_columns`/`db_sample`)용 접속정보는 **
 ## 예시 대화 (자연어 → Claude가 도구 호출)
 
 - *"report 폴더에 리포트 뭐뭐 있어?"* → `crf_list_reports`
-- *"이 리포트 구조랑 쿼리 설명해줘: C:\...\xxx.crf"* → `crf_summary` + `crf_describe_layout` → Claude가 풀이
+- *"이 리포트 구조랑 쿼리 설명해줘: C:\...\xxx.crf"* → `crf_summary` + `crf_get_query` + `crf_describe_layout` → Claude가 풀이
+- *"AHRM1234 테이블 쓰는 리포트 찾아줘"* / *"DEPTCD 매개변수 받는 리포트?"* → `crf_search(dir, "AHRM1234", scope="query")` / `scope="param"`
+- *"이 공식 뭐 하는 거야?"* → `crf_get_formula`
 - *"이 리포트 레이아웃 보고 개선점 제안해줘"* → 설명 도구로 읽고 **편집 제안**
 - *"이 SQL로 학과별 그룹 잡힌 초안 만들어줘, 출력은 out.crf"* → `crf_generate`
 - *"방금 거 본문에 필드 깔고 직급으로 그룹 하나 더 추가해"* → `crf_place_detail_fields` + `crf_add_group`
@@ -258,6 +274,9 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 ## 한계 / TODO
 
 - 본문은 데이터 **라벨** 배치까지. 정식 **표(ControlTable)** 생성은 미구현(셀 바인딩은 동일 `setApplyValueField`라 기계적 확장).
+- `crf_set_query` 는 필드/매개변수를 **동기화하지 않음**(미선언 매개변수는 경고만) — 새 컬럼은 `crf_add_data_field`. DB 메타데이터 동기화·데이터셋/필드 편집·표 생성·lint 는 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) 로드맵(v0.5.1~).
+- `crf_get_query` 의 JS→평문 복원은 문자열 연결을 풀고 `if` 블록을 주석으로 표시한 **추정본**(실제 SQL 은 매개변수 조건에 따라 달라짐). 테이블 목록도 FROM/JOIN 정규식 추정.
+- 도구 실패는 `ERROR: …`(MCP `isError`)로 반환. 쓰기 도구는 `output` 이 원본과 같으면 거부.
 - MyBatis `<foreach>`/`<choose>` 부분 지원(경고).
 - 원격 HTTP: 운영 시 **TLS + 강한 인증**, localhost 바인딩 또는 사내망 한정 권장.
 

@@ -15,6 +15,9 @@ $sources = (Get-ChildItem "$proj\src\*.java").FullName
 & "$Jdk\javac.exe" -encoding UTF-8 -cp $cp -d $out @sources
 if ($LASTEXITCODE -ne 0) { throw "compile failed" }
 
+# VERSION 파일을 jar 리소스(/VERSION)로 포함 — 서버가 serverInfo.version 으로 노출 (단일 출처)
+Copy-Item (Join-Path $proj "VERSION") (Join-Path $out "VERSION") -Force
+
 # jar 파일을 잡고 있는 실행 중 MCP/테스트 java 프로세스 정리 (안 그러면 jar 쓰기가 조용히 실패)
 $jarPath = Join-Path $proj "clip-report-mcp.jar"
 Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction SilentlyContinue |

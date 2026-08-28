@@ -28,7 +28,8 @@ argument-hint: [.crf|화면.xfdl/.vue|PDF|SQL|테이블|폴더] "할말" (※일
 → **도구는 "있는 입력 + 의도"로 선택**(고정 순서 아님). 없는 입력을 전제로 한 단계는 그냥 건너뛴다.
 
 ## 1) 있는 자료만 읽어 확보 (해당될 때만)
-- `.crf` 있으면 → `crf_summary` (+`crf_describe_layout`): 데이터셋·필드·그룹·섹션·표 셀
+- `.crf` 있으면 → `crf_summary` (+`crf_describe_layout`): 데이터셋·필드·그룹·섹션/서브섹션·표 셀. **쿼리 본문이 필요하면 `crf_get_query`**(JS 동적쿼리는 평문 복원본 포함), 공식은 `crf_get_formula`
+- "어떤 리포트가 테이블/컬럼/매개변수/문구 X 를 쓰나" → `crf_search(dir, text, scope=query|field|formula|param|control|any)` (폴더 재귀, 파일명 필터 `like`)
 - 화면 있으면 → **Read**: 항목·조회조건·그리드·트랜잭션/데이터셋ID·테이블명
 - PDF 있으면 → `pdf_text`: 양식 항목·레이아웃
 - 쿼리 텍스트 있으면 → 그대로 파싱: 컬럼·파라미터·동적조건
@@ -44,7 +45,7 @@ argument-hint: [.crf|화면.xfdl/.vue|PDF|SQL|테이블|폴더] "할말" (※일
 - **예외**: 유저가 "추정해서 진행"을 명시한 경우에만 가정을 밝히고 진행.
 
 ## 3) 수행 + 보고
-- 의도→도구: 설명·제안=`crf_summary`+`crf_describe_layout` · 쿼리 `crf_set_query` · 그룹 `crf_add_group` · 본문필드 `crf_place_detail_fields` · 셀 값/형식 `crf_set_cell` · 셀 스타일 `crf_set_cell_style` · 계산필드 `crf_add_formula_field` · 필드/라벨 `crf_add_data_field`/`crf_add_label` · 용지 `crf_set_paper` · 비교 `crf_diff` · 생성 `crf_generate`
+- 의도→도구: 설명·제안=`crf_summary`+`crf_get_query`+`crf_describe_layout` · 리포트 찾기 `crf_search`/`crf_list_reports` · 공식 읽기 `crf_get_formula` · 쿼리 `crf_set_query` · 그룹 `crf_add_group` · 본문필드 `crf_place_detail_fields` · 셀 값/형식 `crf_set_cell` · 셀 스타일 `crf_set_cell_style` · 계산필드 `crf_add_formula_field` · 필드/라벨 `crf_add_data_field`/`crf_add_label` · 용지 `crf_set_paper` · 비교 `crf_diff` · 생성 `crf_generate`
 - 쓰기는 `<원본>_edited.crf` 로 **원본 보존**. 끝에 **[사용한 입력 / 가정·추정 / 건너뛴 단계 / 출력경로]** 를 한 번에 보고.
 
 ## 규칙

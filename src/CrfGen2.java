@@ -44,11 +44,28 @@ public class CrfGen2 {
   static DataType guessType(String n){ String u=n.toUpperCase(); if(u.matches(".*(AMT|AMOUNT|PRICE|SUM|TOT|PAY|SAL).*"))return DataType.Currency; if(u.matches(".*(CNT|COUNT|QTY|NUM|SEQ)$"))return DataType.Number; if(u.matches(".*(YMD|YM|DATE|DT)$"))return DataType.DateTime; return DataType.String; }
 
   // ---------- token substitution: #{x}->'{parameter.x}'  ${x}->{parameter.x} ----------
+  /** Quote-aware: outside string literals  #{x}->'{parameter.x}'  ${x}->{parameter.x}  :x->'{parameter.x}' ;
+   *  inside '...' literals  #{x}/${x}->{parameter.x} (the literal's own quotes are kept, so '#{x}' -> '{parameter.x}') and :x is left alone. */
   static String subParamsQuoted(String s){
+    StringBuilder out=new StringBuilder(); int i=0, n=s.length();
+    while(i<n){
+      int q=s.indexOf('\'',i); if(q<0){ out.append(subOutside(s.substring(i))); break; }
+      out.append(subOutside(s.substring(i,q)));
+      int e=q+1; while(e<n){ int nq=s.indexOf('\'',e); if(nq<0){ e=n; break; } if(nq+1<n && s.charAt(nq+1)=='\''){ e=nq+2; continue; } e=nq+1; break; }
+      out.append(subInside(s.substring(q,e))); i=e;
+    }
+    return out.toString();
+  }
+  static String subOutside(String s){
     s=s.replaceAll("#\\{\\s*([A-Za-z_][A-Za-z0-9_]*)[^}]*\\}","'{parameter.$1}'");
     s=s.replaceAll("\\$\\{\\s*([A-Za-z_][A-Za-z0-9_]*)[^}]*\\}","{parameter.$1}");
     s=s.replaceAll("(?<![:\\w]):([A-Za-z_][A-Za-z0-9_]*)","'{parameter.$1}'");   // :colNm (Oracle/JDBC bind) -> CLIP token
     return s;
+  }
+  static String subInside(String lit){
+    lit=lit.replaceAll("#\\{\\s*([A-Za-z_][A-Za-z0-9_]*)[^}]*\\}","{parameter.$1}");
+    lit=lit.replaceAll("\\$\\{\\s*([A-Za-z_][A-Za-z0-9_]*)[^}]*\\}","{parameter.$1}");
+    return lit;
   }
   // ---------- report param name = screen name UPPERCASED, underscores preserved ----------
   // empNm -> EMPNM ; emp_nm / EMP_NM -> EMP_NM. DEFAULT: upper. Override: env CLIP_PARAM_MODE = upper | asis | uppernosep

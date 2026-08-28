@@ -7,3 +7,8 @@ clip-report.mcp.json
 *.class
 
 # Clipsoft 엔진 jar는 라이선스 자산 — 포함 금지 (classpath로 참조)
+
+# 로컬 작업 상태 / 테스트 산출물
+.fablize/
+.smoke-out/
+__pycache__/
