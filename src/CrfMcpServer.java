@@ -45,6 +45,8 @@ public class CrfMcpServer {
     "[★쿼리 읽기/찾기] 리포트의 SQL 본문은 crf_get_query(JS 동적쿼리는 평문 복원본 포함), 공식 스크립트는 crf_get_formula, '어떤 리포트가 테이블 X/매개변수 Y/문구 Z 를 쓰나'는 crf_search(dir, text, scope) 로 확인하세요. crf_summary 는 개요만 줍니다.\n"+
     "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
     "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값), 글상자=crf_set_label, 밴드 행=crf_set_subsection(높이/숨김/페이지바꿈), 표 생성=crf_add_table(columns JSON), 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section/crf_remove_field. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
+    "[★체크박스] 체크 표시는 ■/□·●/○ 글자로 흉내내지 말고 crf_set_cell_checkbox(셀 내용=체크박스 + 참/거짓 조건: field/true_value/false_value)로 만드세요. 조건이 비어 있으면 값이 뭐든 항상 빈 상자입니다. 기본은 색칠(check_type=Rectangle), V 체크/원은 옵션.\n"+
+    "[★문서형(양식) 리포트] 통지서·서약서·신고서처럼 레코드 1건짜리 양식은 본문 밴드 하나에 글상자/표를 좌표로 배치합니다. 좌표 단위 0.1mm(A4=2100×2970), 색은 #RRGGBB, 줄바꿈 텍스트는 linespace(pt, 10pt 글꼴이면 5.5≈HWP 160%), 셀 병합=crf_merge_cells, 글상자 테두리=border, 글자색/밑줄=color/underline. 양식(HWPX/PDF)의 정렬(가운데/좌/우, 표 앵커 문단 정렬 포함)을 요소별로 대조하세요. 자세한 절차는 docs/document-report-recipe.md.\n"+
     "쓰기 도구는 항상 output 경로를 따로 받아 원본을 보존합니다(output=원본이면 거부). 도구 실패는 'ERROR: …' 메시지(isError)로 옵니다 — 그대로 유저에게 설명하고 임의로 재시도하지 마세요. crf_describe_layout 의 표 셀 중 ‹병합› 은 병합되어 숨은 자리라 편집 불가(기준 셀에 설정), {…} 는 출력양식입니다.\n"+
     "[★열린 파일 주의] .crf가 CLIP report 앱에서 열려 있는 동안 쓰기 도구로 수정하면 파일 잠금/상태 충돌(앱에서 저장 시 편집이 덮어써짐, 또는 편집이 앱에 반영 안 됨)이 납니다. 이미 만든 _edited.crf에 추가 수정이 필요할 때 그 파일이 열려 있을 수 있으면, 먼저 유저에게 '저장 후 잠깐 닫기'를 요청하고 → 수정 → '다시 열기'를 안내하세요(저장→닫기→수정→재오픈).";
 
@@ -156,7 +158,7 @@ public class CrfMcpServer {
     arr.add(tool("crf_validate","Lint a report: dangling bindings (cells/labels/groups bound to fields that no longer exist), broken formula references (#unknown#, missing fields, no return), undeclared/unused parameters, query columns vs fields, scriptType mismatches, duplicate names, hidden subsections, missing linked subreport files. Read-only.",
         strSchema(new String[]{"path"}, "path",".crf file")));
     arr.add(tool("crf_set_label","Edit a 글상자(label) or other named control: bind field / static text / new formula, output format, alignment, font size/bold, wrap, can-grow, background, position/size, visibility. Saves to a new file.",
-        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format e.g. #,##0 (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "bgcolor","#RRGGBB (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "visible","true/false (optional)", "output","destination .crf")));
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format e.g. #,##0 (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "bgcolor","#RRGGBB (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "visible","true/false (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt (optional)", "padding","inner margins 'l,t,r,b' in 0.1mm (optional)", "border","true/false: draw a rectangle border around the label (optional)", "linewidth","border width W025|W050|W075|W100|W150|W200|W300 (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_subsection","Edit a subsection (band row) of a section: height, visible, name, page break. Saves to a new file.",
         strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English)", "index","subsection index within the section (default 0; see crf_describe_layout sub[j])", "height","new height (optional)", "visible","true/false (optional)", "name","new subsection name (optional)", "new_page","None|Before|After|BeforeAfter page break (optional)", "output","destination .crf")));
     arr.add(tool("crf_remove_control","Remove a control (label/table/line/image/subreport…) by name from its band. Saves to a new file.",
@@ -174,15 +176,19 @@ public class CrfMcpServer {
     arr.add(tool("crf_place_detail_fields","Place a field-bound data label in the DETAIL band for every field of the first dataset (a simple list row), and save to a new file.",
         strSchema(new String[]{"path","output"}, "path","source .crf", "output","destination .crf")));
     arr.add(tool("crf_set_cell","Edit one table cell: bind a field / static text / a new formula, output format, alignment, font size/bold, wrap, can-grow, merge-duplicates, background, font. Use the table name and row/col from crf_describe_layout; cells shown as ‹병합› are merged-away and cannot be edited (edit the anchor cell). Saves to a new file.",
-        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name (from describe_layout)", "row","row index (0-based)", "col","column index (0-based)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format string e.g. #,##0 (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "merge","true/false merge duplicate values (optional)", "bgcolor","#RRGGBB (optional)", "output","destination .crf")));
+        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name (from describe_layout)", "row","row index (0-based)", "col","column index (0-based)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format string e.g. #,##0 (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "merge","true/false merge duplicate values (optional)", "bgcolor","#RRGGBB (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt for wrapped text, e.g. 5.5 for 10pt≈HWP 160% (optional)", "padding","cell/label inner margins 'left,top,right,bottom' in 0.1mm (optional)", "output","destination .crf")));
+    arr.add(tool("crf_set_cell_checkbox","Turn a table cell into a native CLIP 체크박스 cell (셀 내용=체크박스) with a check condition: checked when `field` `operator` `true_value` (default Equal '1'), unchecked when == `false_value` (default '0'). NOTE: with no condition the box is always empty (a bound ■/□ text is ignored). check_type=Rectangle(색칠, default)|V|Ellipse|RoundRectangle. Use this instead of ■/□ characters. Saves to a new file.",
+        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name", "row","row index (0-based)", "col","col index (0-based)", "field","condition field name (data field) — required unless off=true", "true_value","value that means checked (default 1)", "false_value","value that means unchecked (default 0; empty string to skip)", "operator","Equal|NotEqual|LessThen|GreateThen|LessEqual|GreateEqual|Between (default Equal; Between uses true_value..true_value2)", "true_value2","upper bound for Between (optional)", "check_type","check mark: Rectangle(filled, default)|V|Ellipse|RoundRectangle", "shape","box shape: Rectangle(default)|Ellipse|RoundRectangle|None", "color","check color #RRGGBB (default black)", "size","check size (0=auto)", "default","true/false: state when neither condition matches (default false)", "off","true to revert the cell to a normal text cell", "output","destination .crf")));
+    arr.add(tool("crf_merge_cells","Merge table cells: the anchor cell (row,col) spans `rowspan`×`colspan` (covered cells become merged-away ‹병합› cells); rowspan=1 & colspan=1 splits a merged cell back. Saves to a new file.",
+        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name", "row","anchor row (0-based)", "col","anchor col (0-based)", "rowspan","rows to span (default 1)", "colspan","columns to span (default 1)", "output","destination .crf")));
     arr.add(tool("crf_add_formula_field","Create a formula (computed) field with a JavaScript expression that MUST end with `return`. Refs via rexpert.field(\"data.COL\"); aggregates via rexpert.sum/avg/count/min/max(0,\"data.COL\",0,\"\",\"\"). Then bind it to a cell with crf_set_cell. Saves to a new file.",
         strSchema(new String[]{"path","name","script","output"}, "path","source .crf", "name","new formula field name", "script","JavaScript, MUST end with return;. Field ref=rexpert.field(\"ns.COL\") (ns=data/system/parameter/formula/runningtotal). Aggregate=rexpert.sum(범위,\"data.COL\",옵션,\"그룹|''\",\"조건식|''\"). e.g.  return rexpert.sum(0,\"data.PRVDD_BAL_AMT\",0,\"\",\"\");", "force","true to skip the return/bind-syntax checks (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_cell_style","Style a table cell: background color (hex #RRGGBB), font name, can-grow, and merge-duplicate. Saves to a new file.",
         strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name", "row","row index", "col","col index", "bgcolor","background hex #RRGGBB (optional)", "font","font name e.g. 굴림 (optional)", "cangrow","true/false (optional)", "merge","true/false: merge duplicate values (optional)", "output","destination .crf")));
     arr.add(tool("crf_add_data_field","Add a data field (column) to a dataset. Saves to a new file.",
         strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","field name", "type","String|Number|Currency|DateTime|Boolean (default String)", "dataset","dataset name or 0-based index (default: first)", "output","destination .crf")));
-    arr.add(tool("crf_add_label","Add a 글상자(label) to a section band, bound to a field or with static text. Saves to a new file.",
-        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English ReportHeader/PageHeader/Detail/...)", "text","static text (optional)", "field","field name to bind (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "output","destination .crf")));
+    arr.add(tool("crf_add_label","Add a 글상자(label) to a section band, bound to a field / static text / formula, with optional font/align/color/border style. Saves to a new file.",
+        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English ReportHeader/PageHeader/Detail/...)", "text","static text (optional)", "field","field name to bind (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "underline","true/false (optional)", "color","font color #RRGGBB (optional)", "font","font name (optional)", "align","Left|Center|Right (optional)", "valign","Top|Center|Bottom (optional)", "wrap","true/false (optional)", "linespace","extra line spacing pt (optional)", "border","true/false rectangle border (optional)", "linewidth","W025|W050|W075|W100|W150|W200|W300 (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_paper","Set paper type/orientation/margins. Saves to a new file.",
         strSchema(new String[]{"path","output"}, "path","source .crf", "paper","A4|A3|B4|B5|Letter ... (optional)", "orientation","Potrait|Landscape (optional)", "marginL","left margin (optional)", "marginT","top (optional)", "marginR","right (optional)", "marginB","bottom (optional)", "output","destination .crf")));
     arr.add(tool("crf_diff","Compare two reports: datasets/fields/groups/sections and what was added or removed.",
@@ -256,6 +262,8 @@ public class CrfMcpServer {
       case "crf_add_table":return textContent(addTable(args));
       case "crf_place_detail_fields":return textContent(placeDetailFields((String)args.get("path"),(String)args.get("output")));
       case "crf_set_cell":return textContent(setCell(args));
+      case "crf_set_cell_checkbox":return textContent(setCellCheckbox(args));
+      case "crf_merge_cells":return textContent(mergeCells(args));
       case "crf_add_formula_field":return textContent(addFormulaField(args));
       case "crf_set_cell_style":return textContent(setCellStyle(args));
       case "crf_add_data_field":return textContent(addDataField(args));
@@ -397,6 +405,13 @@ public class CrfMcpServer {
       if(bold!=null&&!bold.isEmpty()){ call(ti,"setFontBold",boolean.class,Boolean.parseBoolean(bold)); did.append(" 굵게="+bold); }
       if(font!=null&&!font.isEmpty()){ call(ti,"setFontName",String.class,font); did.append(" 폰트="+font); }
       if(wrap!=null&&!wrap.isEmpty()){ call(ti,"setWordWrap",boolean.class,Boolean.parseBoolean(wrap)); did.append(" 줄바꿈="+wrap); } }
+    String fcol=s(args,"color"), ul=s(args,"underline"), it=s(args,"italic"), lsp=s(args,"linespace"), pad=s(args,"padding");
+    if((fcol!=null&&!fcol.isEmpty())||(ul!=null&&!ul.isEmpty())||(it!=null&&!it.isEmpty())||(lsp!=null&&!lsp.isEmpty())||(pad!=null&&!pad.isEmpty())){ Object ti=go(target,"getTextInfo"); if(ti==null) throw new RuntimeException("이 컨트롤은 텍스트 속성(TextInfo)이 없습니다");
+      if(fcol!=null&&!fcol.isEmpty()){ call(ti,"setForeColor",int.class,parseColor(fcol)); did.append(" 글자색="+fcol); }
+      if(ul!=null&&!ul.isEmpty()){ call(ti,"setFontUnderline",boolean.class,Boolean.parseBoolean(ul)); did.append(" 밑줄="+ul); }
+      if(it!=null&&!it.isEmpty()){ call(ti,"setFontItalic",boolean.class,Boolean.parseBoolean(it)); did.append(" 기울임="+it); }
+      if(lsp!=null&&!lsp.isEmpty()){ call(ti,"setLineSpace",float.class,Float.parseFloat(lsp.trim())); did.append(" 줄간격="+lsp.trim()+"pt"); }
+      if(pad!=null&&!pad.isEmpty()){ String[] pp=pad.split(","); if(pp.length!=4) throw new RuntimeException("padding 은 'left,top,right,bottom' 4개 (0.1mm)"); call(ti,"setLeftMargin",int.class,Integer.parseInt(pp[0].trim())); call(ti,"setTopMargin",int.class,Integer.parseInt(pp[1].trim())); call(ti,"setRightMargin",int.class,Integer.parseInt(pp[2].trim())); call(ti,"setBottomMargin",int.class,Integer.parseInt(pp[3].trim())); did.append(" 여백="+pad); } }
     String cg=s(args,"cangrow"), mg=s(args,"merge"), bg=s(args,"bgcolor");
     if(cg!=null&&!cg.isEmpty()){ call(target,"setCanGrow",boolean.class,Boolean.parseBoolean(cg)); did.append(" 확장가능="+cg); }
     if(mg!=null&&!mg.isEmpty()){ call(target,"setCellMergeRowDataDuplication",boolean.class,Boolean.parseBoolean(mg)); did.append(" 셀합치기="+mg); }
@@ -434,6 +449,7 @@ public class CrfMcpServer {
     if(args.get("left")!=null){ c.setX1(pInt(args.get("left"),c.getX1())); did.append(" left="+c.getX1()); } if(args.get("top")!=null){ c.setY1(pInt(args.get("top"),c.getY1())); did.append(" top="+c.getY1()); }
     if(args.get("width")!=null){ call(c,"setWidth",int.class,pInt(args.get("width"),0)); did.append(" width="+s(args,"width")); } if(args.get("height")!=null){ call(c,"setHeight",int.class,pInt(args.get("height"),0)); did.append(" height="+s(args,"height")); }
     String vis=s(args,"visible"); if(vis!=null&&!vis.isEmpty()){ c.setVisible(Boolean.parseBoolean(vis)); did.append(" visible="+vis); }
+    did.append(applyBorder(c,args));
     if(did.length()==0) return "ERROR: nothing to set";
     String wrote=save(rf,output,path);
     Object[] v=findControlLoc(open(output),name); if(v==null) return "ERROR: 저장 후 되읽기 검증 실패";
@@ -527,8 +543,13 @@ public class CrfMcpServer {
     String did;
     if(field!=null && !field.isEmpty()){ Field f=findField(rf,field); if(f==null) return "ERROR: field '"+field+"' not found"; c.setApplyValueType(ApplyValueType.Field); c.setApplyValueField(f); did="field="+field; }
     else { c.setApplyValueType(ApplyValueType.Text); c.setApplyValueText(text==null?"":text); did="text=\""+(text==null?"":text)+"\""; }
+    // 글상자 기본: 테두리 없음·투명 배경(디자이너 기본과 동일). 스타일/공식/테두리 옵션은 applyProps/applyBorder 로.
+    c.setShapeType(com.clipsoft.clipreport.common.enums.ShapeType.Rectangle); c.setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None); c.setBackStyle(BackStyleType.Transparent);
+    if(c.getLineInfo()!=null) c.getLineInfo().setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None);
+    JSONObject style=new JSONObject(); for(Object k: args.keySet()){ String key=String.valueOf(k); if(!key.equals("field")&&!key.equals("text")&&!key.equals("clear")) style.put(key,args.get(k)); }
+    String did2=applyProps(rf,c,style,"F_"+c.getName())+applyBorder(c,args);
     cl.add(c); save(rf,output,path);
-    return "OK: added label("+did+") to "+sec.getClass().getSimpleName().replace("Section","")+", wrote "+output;
+    return "OK: added label \""+c.getName()+"\"("+did+did2+") to "+sec.getClass().getSimpleName().replace("Section","")+", wrote "+output;
   }
 
   static String setSubsection(JSONObject args) throws Exception {
@@ -581,7 +602,13 @@ public class CrfMcpServer {
     for(int i=0;i<dss.size();i++){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) dss.get(i).getFieldDataList(); for(int j=0;j<fl.size();j++) s.add(fl.get(j).getName()); } return s; }
   static String sectionsOf(TheReportFile rf){ RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); StringBuilder b=new StringBuilder(); for(int i=0;i<secs.size();i++) b.append(secs.get(i).getClass().getSimpleName().replace("Section","")).append(i<secs.size()-1?",":""); return b.toString(); }
   static java.util.Map<String,String> cellGrid(Control t){ java.util.Map<String,String> m=new java.util.LinkedHashMap<>(); Object rc=go(t,"getRowCount"), cc=go(t,"getColumnCount"); if(!(rc instanceof Integer)||!(cc instanceof Integer)) return m;
-    for(int r=0;r<(Integer)rc;r++) for(int c=0;c<(Integer)cc;c++){ Object cell=tableCell(t,r,c); String v; if(!isNormalCell(cell)) v="‹병합›"; else { Object cf=go(cell,"getApplyValueField"); String ct=g(cell,"getApplyValueText"), fmt=g(cell,"getOutputFormat"); v=cf!=null?fieldKindKo(cf)+":"+nameOf(cf):(ct!=null&&!ct.isEmpty()?"\""+ct+"\"":"·"); if(fmt!=null&&!fmt.isEmpty()) v+="{"+fmt+"}"; } m.put("["+r+","+c+"]",v); } return m; }
+    for(int r=0;r<(Integer)rc;r++) for(int c=0;c<(Integer)cc;c++){ Object cell=tableCell(t,r,c); String v; if(!isNormalCell(cell)) v="‹병합›"; else { Object cf=go(cell,"getApplyValueField"); String ct=g(cell,"getApplyValueText"), fmt=g(cell,"getOutputFormat"); v=cf!=null?fieldKindKo(cf)+":"+nameOf(cf):(ct!=null&&!ct.isEmpty()?"\""+ct+"\"":"·"); if("Checkbox".equals(String.valueOf(go(cell,"getCellContent")))) v=checkboxText(cell); if(fmt!=null&&!fmt.isEmpty()) v+="{"+fmt+"}"; } m.put("["+r+","+c+"]",v); } return m; }
+  /** 체크박스 셀 표기: ☐체크박스[필드 연산 값] (조건 없으면 ⚠ 항상 빈 상자) */
+  static String checkboxText(Object cell){
+    Object tc=go(cell,"getCheckValueTrueCondition"); Object f=go(tc,"getConditionField");
+    String cond = f==null ? "⚠조건없음(항상 빈 상자)" : nameOf(f)+" "+go(tc,"getCompareOperator")+" '"+q(g(tc,"getCompareValue1Text"))+"'";
+    return "☐체크박스("+go(cell,"getCheckType")+")["+cond+"]";
+  }
   static java.util.Map<String,String> formulaMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); RexObjectList<?> fl=rf.getGlobe().getMainReport().getReportObjectManager().getFieldFormulaList(); for(int i=0;i<fl.size();i++) m.put(nameOf(fl.get(i)),q(g(fl.get(i),"getScript"))); return m; }
   static java.util.Map<String,String> paramMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); for(int i=0;i<gp.size();i++) m.put(nameOf(gp.get(i)),q(g(gp.get(i),"getDataType"))+"="+q(g(gp.get(i),"getDefaultValue"))); return m; }
   static java.util.Map<String,String> controlMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; Object f=go(c,"getApplyValueField"); String t=g(c,"getApplyValueText"); m.put(c.getName(), ((Section)e[0]).getClass().getSimpleName().replace("Section","")+" "+c.getClass().getSimpleName().replace("Control","")+(f!=null?" ["+nameOf(f)+"]":(t!=null&&!t.isEmpty()?" \""+oneLine(t,30)+"\"":""))+" @"+c.getX1()+","+c.getY1()); } return m; }
@@ -1213,6 +1240,7 @@ public class CrfMcpServer {
               for(int cn=0;cn<colsN && cn<20;cn++){ Object cell=null; try{ cell=c.getClass().getMethod("getTableCell",int.class,int.class).invoke(c,rr,cn); }catch(Exception e){}
                 Object cf=go(cell,"getApplyValueField"); String ct=g(cell,"getApplyValueText");
                 String cb = !isNormalCell(cell)? "‹병합›" : cf!=null? fieldKindKo(cf)+":"+nameOf(cf) : (ct!=null && !ct.isEmpty()? "\""+ct+"\"" : "·");
+                if(isNormalCell(cell) && "Checkbox".equals(String.valueOf(go(cell,"getCellContent")))) cb=checkboxText(cell);
                 String cfmt=g(cell,"getOutputFormat"); if(isNormalCell(cell) && cfmt!=null && !cfmt.isEmpty()) cb+="{"+cfmt+"}";
                 if(detail && isNormalCell(cell)){ String st=styleInfo(cell).trim(); if(!st.isEmpty()) cb+=" «"+st.replace(" ", ", ")+"»"; }
                 row.append(cb).append(cn<colsN-1 && cn<19?" | ":""); }
@@ -1310,9 +1338,101 @@ public class CrfMcpServer {
     com.clipsoft.clipreport.base.controls.ControlTable t=new com.clipsoft.clipreport.base.controls.ControlTable(); t.setName(name); t.setVisible(true);
     com.clipsoft.clipreport.base.controls.Tables.TableRow row=new com.clipsoft.clipreport.base.controls.Tables.TableRow(); row.setHeight(rowH); t.getTableRowList().add(row);
     int tw=0; for(int c=0;c<widths.length;c++){ com.clipsoft.clipreport.base.controls.Tables.TableColumn col=new com.clipsoft.clipreport.base.controls.Tables.TableColumn(); col.setWidth(widths[c]); t.getTableColumnList().add(col); tw+=widths[c];
-      com.clipsoft.clipreport.base.controls.Tables.TableCellNormal cell=new com.clipsoft.clipreport.base.controls.Tables.TableCellNormal(); cell.setName(name+"_c"+c); cell.setTableRow(row); cell.setTableColumn(col); cell.setRowSpan(1); cell.setColSpan(1); row.getTableCellList().add(cell); col.getTableCellList().add(cell); }
+      com.clipsoft.clipreport.base.controls.Tables.TableCellNormal cell=new com.clipsoft.clipreport.base.controls.Tables.TableCellNormal(); cell.setName(name+"_c"+c); cell.setTableRow(row); cell.setTableColumn(col); cell.setRowSpan(1); cell.setColSpan(1); row.getTableCellList().add(cell); col.getTableCellList().add(cell);
+      noDiagonal(cell); }
     try{ t.linkBaseCell(); t.setBaseCellRowColIndex(); }catch(Throwable e){}
+    try{ t.getLineInfoSplit().setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None); t.getLineInfoFDiagona().setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None); t.getLineInfoBDiagona().setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None); }catch(Throwable e){}
     t.setWidth(tw); t.setHeight(rowH); return t; }
+  /** SDK 로 새로 만든 셀은 대각선(FDiagona/BDiagona) 기본이 Solid 라 X 표시가 그려진다 → None 으로. */
+  static void noDiagonal(com.clipsoft.clipreport.base.controls.Tables.TableCellNormal cell){
+    try{ cell.getLineInfoFDiagona().setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None); cell.getLineInfoBDiagona().setLineStyle(com.clipsoft.clipreport.common.enums.LineStyle.None); }catch(Throwable e){}
+  }
+  /** 글상자 테두리: border=true/false (+linewidth). ShapeType Rectangle + LineStyle + LineInfo 를 함께 맞춘다. */
+  static String applyBorder(Control c,JSONObject args){
+    String border=s(args,"border"), lw=s(args,"linewidth"); if((border==null||border.isEmpty())&&(lw==null||lw.isEmpty())) return "";
+    StringBuilder did=new StringBuilder(); Object li=go(c,"getLineInfo");
+    if(border!=null&&!border.isEmpty()){ boolean on=Boolean.parseBoolean(border); com.clipsoft.clipreport.common.enums.LineStyle ls=on?com.clipsoft.clipreport.common.enums.LineStyle.Solid:com.clipsoft.clipreport.common.enums.LineStyle.None;
+      call(c,"setShapeType",com.clipsoft.clipreport.common.enums.ShapeType.class,com.clipsoft.clipreport.common.enums.ShapeType.Rectangle); call(c,"setLineStyle",com.clipsoft.clipreport.common.enums.LineStyle.class,ls); if(li!=null) call(li,"setLineStyle",com.clipsoft.clipreport.common.enums.LineStyle.class,ls);
+      if(on){ call(c,"setLineColor",int.class,0); if(li!=null) call(li,"setLineColor",int.class,0); } did.append(" 테두리="+on); }
+    if(lw!=null&&!lw.isEmpty()){ com.clipsoft.clipreport.common.enums.LineWidth w; try{ w=com.clipsoft.clipreport.common.enums.LineWidth.valueOf(lw.trim()); }catch(Exception e){ throw new RuntimeException("linewidth 는 W025|W050|W075|W100|W150|W200|W300"); } call(c,"setLineWidth",com.clipsoft.clipreport.common.enums.LineWidth.class,w); if(li!=null) call(li,"setLineWidth",com.clipsoft.clipreport.common.enums.LineWidth.class,w); did.append(" 선굵기="+w); }
+    return did.toString();
+  }
+  /** crf_set_cell_checkbox: 셀 내용=체크박스 + 참/거짓 조건. 조건이 없으면 항상 빈 상자(값 바인딩은 무시됨). */
+  static String setCellCheckbox(JSONObject args) throws Exception {
+    String path=s(args,"path"), table=s(args,"table"), output=s(args,"output");
+    int row=Integer.parseInt(q(s(args,"row")).trim()), col=Integer.parseInt(q(s(args,"col")).trim());
+    TheReportFile rf=open(path); Control tbl=findTable(rf,table); if(tbl==null) return "ERROR: table '"+table+"' not found (use crf_describe_layout for names)";
+    com.clipsoft.clipreport.base.controls.Tables.TableCellNormal n=(com.clipsoft.clipreport.base.controls.Tables.TableCellNormal) cellOf(tbl,row,col);
+    StringBuilder did=new StringBuilder();
+    if("true".equalsIgnoreCase(s(args,"off"))){ n.setCellContent(com.clipsoft.clipreport.common.enums.CellContentType.Text); String wrote=save(rf,output,path); return "OK: 표 '"+table+"' ["+row+","+col+"] 셀 내용을 텍스트로 되돌림, wrote "+wrote; }
+    String field=s(args,"field"); if(field==null||field.trim().isEmpty()) return "ERROR: field(조건 필드) 가 필요합니다 — 조건 없는 체크박스는 항상 빈 상자로 나옵니다";
+    Field f=findField(rf,field.trim()); if(f==null) return "ERROR: field '"+field+"' not found (crf_summary 로 이름 확인)";
+    String tv=s(args,"true_value"), fv=s(args,"false_value"), tv2=s(args,"true_value2"), op=s(args,"operator"), ct=s(args,"check_type"), shape=s(args,"shape"), color=s(args,"color"), size=s(args,"size"), def=s(args,"default");
+    if(tv==null||tv.isEmpty()) tv="1"; if(fv==null) fv="0";
+    CompareOperator o=CompareOperator.Equal; if(op!=null&&!op.trim().isEmpty()){ try{ o=CompareOperator.valueOf(op.trim()); }catch(Exception e){ return "ERROR: operator 는 Equal|NotEqual|LessThen|GreateThen|LessEqual|GreateEqual|Between"; } }
+    n.setCellContent(com.clipsoft.clipreport.common.enums.CellContentType.Checkbox);
+    com.clipsoft.clipreport.common.enums.CheckType cty=com.clipsoft.clipreport.common.enums.CheckType.Rectangle; if(ct!=null&&!ct.trim().isEmpty()){ try{ cty=com.clipsoft.clipreport.common.enums.CheckType.valueOf(ct.trim()); }catch(Exception e){ return "ERROR: check_type 은 Rectangle|V|Ellipse|RoundRectangle"; } }
+    n.setCheckType(cty); did.append(" 체크모양="+cty);
+    if(shape!=null&&!shape.trim().isEmpty()){ try{ n.setCheckShapeType(com.clipsoft.clipreport.common.enums.ShapeType.valueOf(shape.trim())); }catch(Exception e){ return "ERROR: shape 는 Rectangle|Ellipse|RoundRectangle|None"; } did.append(" 상자="+shape.trim()); } else n.setCheckShapeType(com.clipsoft.clipreport.common.enums.ShapeType.Rectangle);
+    if(color!=null&&!color.isEmpty()){ n.setCheckColor(parseColor(color)); did.append(" 색="+color); } else n.setCheckColor(0);
+    if(size!=null&&!size.isEmpty()){ n.setCheckSize(pInt(size,0)); did.append(" 크기="+size); }
+    if(def!=null&&!def.isEmpty()){ n.setCheckValueDefault(Boolean.parseBoolean(def)); did.append(" 기본="+def); } else n.setCheckValueDefault(false);
+    com.clipsoft.clipreport.base.functions.Condition tc=n.getCheckValueTrueCondition(); tc.setConditionField(f); tc.setCompareOperator(o); tc.setCompareValue1Type(ApplyValueType.Text); tc.setCompareValue1Text(tv);
+    if(o==CompareOperator.Between){ if(tv2==null||tv2.isEmpty()) return "ERROR: Between 은 true_value2 가 필요합니다"; tc.setCompareValue2Type(ApplyValueType.Text); tc.setCompareValue2Text(tv2); }
+    did.append(" 참조건="+f.getName()+" "+o+" '"+tv+"'"+(o==CompareOperator.Between?"~'"+tv2+"'":""));
+    com.clipsoft.clipreport.base.functions.Condition fc=n.getCheckValueFalseCondition();
+    if(!fv.isEmpty()){ fc.setConditionField(f); fc.setCompareOperator(CompareOperator.Equal); fc.setCompareValue1Type(ApplyValueType.Text); fc.setCompareValue1Text(fv); did.append(" 거짓조건="+f.getName()+" Equal '"+fv+"'"); }
+    // 체크박스 셀은 텍스트/필드 값을 그리지 않으므로 바인딩을 비운다
+    n.setApplyValueType(ApplyValueType.Text); n.setApplyValueText(""); try{ n.setApplyValueField(null); }catch(Throwable e){}
+    String wrote=save(rf,output,path);
+    TheReportFile v=open(output); Control vt=findTable(v,table); com.clipsoft.clipreport.base.controls.Tables.TableCellNormal vn=(com.clipsoft.clipreport.base.controls.Tables.TableCellNormal) cellOf(vt,row,col);
+    if(vn.getCellContent()!=com.clipsoft.clipreport.common.enums.CellContentType.Checkbox || vn.getCheckValueTrueCondition().getConditionField()==null) return "ERROR: 저장 후 되읽기 검증 실패 — 체크박스/조건이 반영되지 않음";
+    return "OK: 표 '"+table+"' ["+row+","+col+"] → 체크박스"+did+", verified[content="+vn.getCellContent()+" cond="+nameOf(vn.getCheckValueTrueCondition().getConditionField())+"], wrote "+wrote;
+  }
+  /** crf_merge_cells: 기준 셀 (row,col) 을 rowspan×colspan 으로 병합(덮이는 셀은 TableCellDumy). 1×1 이면 병합 해제. */
+  static String mergeCells(JSONObject args) throws Exception {
+    String path=s(args,"path"), table=s(args,"table"), output=s(args,"output");
+    int row=Integer.parseInt(q(s(args,"row")).trim()), col=Integer.parseInt(q(s(args,"col")).trim()), rs=pInt(args.get("rowspan"),1), cs=pInt(args.get("colspan"),1);
+    if(rs<1||cs<1) return "ERROR: rowspan/colspan 은 1 이상";
+    TheReportFile rf=open(path); Control c0=findTable(rf,table); if(c0==null) return "ERROR: table '"+table+"' not found (use crf_describe_layout for names)";
+    com.clipsoft.clipreport.base.controls.ControlTable t=(com.clipsoft.clipreport.base.controls.ControlTable) c0;
+    int rows=t.getRowCount(), cols=t.getColumnCount();
+    if(row<0||col<0||row>=rows||col>=cols) return "ERROR: 기준 셀 ["+row+","+col+"] 범위 밖 — 표는 "+rows+"행×"+cols+"열";
+    if(row+rs>rows||col+cs>cols) return "ERROR: 병합 범위가 표를 벗어남 — "+rows+"행×"+cols+"열, 요청 ["+row+".."+(row+rs-1)+","+col+".."+(col+cs-1)+"]";
+    com.clipsoft.clipreport.base.controls.Tables.TableCell a=t.getTableCell(row,col);
+    if(!(a instanceof com.clipsoft.clipreport.base.controls.Tables.TableCellNormal)) return "ERROR: 기준 셀 ["+row+","+col+"] 은 다른 셀에 병합된 자리입니다 — 그 기준 셀에서 해제하세요";
+    com.clipsoft.clipreport.base.controls.Tables.TableCellNormal base=(com.clipsoft.clipreport.base.controls.Tables.TableCellNormal) a;
+    int oldRs=Math.max(1,base.getRowSpan()), oldCs=Math.max(1,base.getColSpan());
+    // 1) 기존 병합 해제: base 에 속한 dummy 를 새 normal 셀로 복구
+    int restored=0;
+    for(int r=row;r<row+oldRs&&r<rows;r++) for(int c=col;c<col+oldCs&&c<cols;c++){ if(r==row&&c==col) continue; com.clipsoft.clipreport.base.controls.Tables.TableCell old=t.getTableCell(r,c);
+      if(old instanceof com.clipsoft.clipreport.base.controls.Tables.TableCellDumy){ com.clipsoft.clipreport.base.controls.Tables.TableCellNormal n=new com.clipsoft.clipreport.base.controls.Tables.TableCellNormal(); n.setName(t.getName()+"_"+r+"_"+c); n.setTableRow(t.getTableRow(r)); n.setTableColumn(t.getTableColumn(c)); n.setRowSpan(1); n.setColSpan(1); n.setApplyValueType(ApplyValueType.Text); n.setApplyValueText(""); noDiagonal(n); copyCellStyle(base,n); replaceCell(t,r,c,old,n); restored++; } }
+    // 2) 새 병합: 덮이는 셀이 다른 병합에 속해 있으면 거부
+    for(int r=row;r<row+rs;r++) for(int c=col;c<col+cs;c++){ if(r==row&&c==col) continue; com.clipsoft.clipreport.base.controls.Tables.TableCell old=t.getTableCell(r,c);
+      if(old instanceof com.clipsoft.clipreport.base.controls.Tables.TableCellDumy) return "ERROR: 셀 ["+r+","+c+"] 은 이미 다른 셀에 병합되어 있습니다 — 먼저 그 기준 셀을 1×1 로 해제하세요";
+      if(old instanceof com.clipsoft.clipreport.base.controls.Tables.TableCellNormal){ com.clipsoft.clipreport.base.controls.Tables.TableCellNormal on=(com.clipsoft.clipreport.base.controls.Tables.TableCellNormal) old; if(on.getRowSpan()>1||on.getColSpan()>1) return "ERROR: 셀 ["+r+","+c+"] 은 자체 병합("+on.getRowSpan()+"×"+on.getColSpan()+") 기준 셀입니다 — 먼저 해제하세요"; } }
+    int merged=0;
+    for(int r=row;r<row+rs;r++) for(int c=col;c<col+cs;c++){ if(r==row&&c==col) continue; com.clipsoft.clipreport.base.controls.Tables.TableCell old=t.getTableCell(r,c);
+      com.clipsoft.clipreport.base.controls.Tables.TableCellDumy d=new com.clipsoft.clipreport.base.controls.Tables.TableCellDumy(); d.setTableRow(t.getTableRow(r)); d.setTableColumn(t.getTableColumn(c)); d.setBaseCell(base); d.setBaseCellRowIndex(row); d.setBaseCellColIndex(col); replaceCell(t,r,c,old,d); merged++; }
+    base.setRowSpan(rs); base.setColSpan(cs);
+    try{ t.linkBaseCell(); t.setBaseCellRowColIndex(); }catch(Throwable e){}
+    String wrote=save(rf,output,path);
+    com.clipsoft.clipreport.base.controls.ControlTable vt=(com.clipsoft.clipreport.base.controls.ControlTable) findTable(open(output),table);
+    com.clipsoft.clipreport.base.controls.Tables.TableCell vb=vt.getTableCell(row,col); int vrs=go(vb,"getRowSpan") instanceof Integer?(Integer)go(vb,"getRowSpan"):-1, vcs=go(vb,"getColSpan") instanceof Integer?(Integer)go(vb,"getColSpan"):-1;
+    if(vrs!=rs||vcs!=cs) return "ERROR: 저장 후 되읽기 검증 실패 — span="+vrs+"×"+vcs;
+    return "OK: 표 '"+table+"' ["+row+","+col+"] "+(rs==1&&cs==1?"병합 해제(복구 "+restored+"셀)":"→ "+rs+"×"+cs+" 병합(덮인 셀 "+merged+(restored>0?", 이전 병합 복구 "+restored:"")+")")+", verified[span="+vrs+"×"+vcs+"], wrote "+wrote;
+  }
+  static void replaceCell(com.clipsoft.clipreport.base.controls.ControlTable t,int r,int c,com.clipsoft.clipreport.base.controls.Tables.TableCell old,com.clipsoft.clipreport.base.controls.Tables.TableCell nw){
+    RexObjectList<com.clipsoft.clipreport.base.controls.Tables.TableCell> rl=t.getTableRow(r).getTableCellList(); for(int i=0;i<rl.size();i++) if(rl.get(i)==old){ rl.remove(i); rl.add(i,nw); break; }
+    RexObjectList<com.clipsoft.clipreport.base.controls.Tables.TableCell> cl2=t.getTableColumn(c).getTableCellList(); for(int i=0;i<cl2.size();i++) if(cl2.get(i)==old){ cl2.remove(i); cl2.add(i,nw); break; }
+  }
+  /** 병합 해제로 복구되는 셀에 기준 셀의 글꼴/테두리를 복사(디자이너 기본과 비슷하게). */
+  static void copyCellStyle(com.clipsoft.clipreport.base.controls.Tables.TableCellNormal from,com.clipsoft.clipreport.base.controls.Tables.TableCellNormal to){
+    try{ com.clipsoft.clipreport.base.functions.TextInfo a=from.getTextInfo(), b=to.getTextInfo(); b.setFontName(a.getFontName()); b.setFontSize(a.getFontSize()); b.setFontBold(a.getFontBold()); b.setHorizontalAlignment(a.getHorizontalAlignment()); b.setVerticalAlignment(a.getVerticalAlignment()); b.setWordWrap(a.getWordWrap());
+      com.clipsoft.clipreport.base.functions.LineInfo[] src={from.getLineInfoLeft(),from.getLineInfoRight(),from.getLineInfoTop(),from.getLineInfoBottom()}, dst={to.getLineInfoLeft(),to.getLineInfoRight(),to.getLineInfoTop(),to.getLineInfoBottom()};
+      for(int i=0;i<4;i++){ dst[i].setLineStyle(src[i].getLineStyle()); dst[i].setLineWidth(src[i].getLineWidth()); dst[i].setLineColor(src[i].getLineColor()); }
+      to.setVisibleLeftLine(from.getVisibleLeftLine()); to.setVisibleRightLine(from.getVisibleRightLine()); to.setVisibleTopLine(from.getVisibleTopLine()); to.setVisibleBottomLine(from.getVisibleBottomLine()); }catch(Throwable e){}
+  }
   @SuppressWarnings("unchecked")
   static String addTable(JSONObject args) throws Exception {
     String path=s(args,"path"), output=s(args,"output"), colsJson=s(args,"columns"), sectionKey=q(s(args,"section")).trim(), headKey=q(s(args,"header_section")).trim(), name=q(s(args,"name")).trim();

@@ -138,7 +138,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 ---
 
-## MCP 도구 (38)
+## MCP 도구 (40)
 
 ### 리포트(.crf) 도구
 
@@ -161,15 +161,17 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_add_group(path, column, output, [level|label|subtotal|sort])` | 그룹 머리/바닥글 추가 — `level=inner|outer|N` 로 중첩 위치, `label=true` 머리글에 그룹필드 라벨, `subtotal=F1,F2` 바닥글에 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 소계 공식 |
 | 수정 | `crf_set_group(path, group, output, [column|sort])` / `crf_remove_group(path, group, output, [force])` | 그룹 필드/정렬 변경 / 그룹 삭제(머리·바닥글 밴드 대칭 제거, 컨트롤·그룹이름 참조 있으면 거부) |
 | 수정 | `crf_place_detail_fields(path, output)` | 본문에 필드 바인딩 데이터 라벨 배치 |
-| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|align|valign|fontsize|bold|font|wrap|cangrow|merge|bgcolor])` | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
-| 수정 | `crf_set_label(path, name, output, [같은 속성 + left|top|width|height|visible])` | **글상자/컨트롤** 편집 — 값·공식·스타일·위치·크기·표시 |
+| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|align|valign|fontsize|bold|font|wrap|cangrow|merge|bgcolor|color|underline|italic|linespace|padding])` | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
+| 수정 | `crf_set_label(path, name, output, [같은 속성 + left|top|width|height|visible|border|linewidth])` | **글상자/컨트롤** 편집 — 값·공식·스타일(글자색/밑줄/줄간격/여백)·위치·크기·표시·**테두리** |
+| 수정 | `crf_set_cell_checkbox(path, table, row, col, field, output, [true_value|false_value|operator|true_value2|check_type|shape|color|size|default|off])` | 셀을 **기본 체크박스**(셀 내용=체크박스)로 — `field operator true_value` 면 체크(기본 `Equal '1'`), `false_value` 면 해제. 조건이 없으면 항상 빈 상자. `check_type=Rectangle(색칠, 기본)|V|Ellipse|RoundRectangle`. ■/□ 글자 대신 이걸 쓸 것 |
+| 수정 | `crf_merge_cells(path, table, row, col, output, [rowspan|colspan])` | 셀 **병합**(기준 셀이 rowspan×colspan 차지, 덮인 자리는 ‹병합›) / 1×1 로 **해제** |
 | 수정 | `crf_set_subsection(path, section, output, [index|height|visible|name|new_page])` | 밴드 행(서브섹션) 높이·숨김·이름·페이지바꿈 |
 | 수정 | `crf_add_table(path, columns, output, [section|header_section|left|top|row_height|name])` | **표 생성** — `columns` JSON(`field,title,width,format,align`)로 본문 1행 데이터 표 + 머리글 밴드 제목 표(같은 열 너비). SDK 생성이라 디자이너에서 한 번 확인 권장 |
 | 수정 | `crf_remove_control(path, name, output)` / `crf_remove_section(path, section, output, [force])` | 컨트롤 삭제 / 밴드 삭제(컨트롤 있으면 거부) |
 | 수정 | `crf_set_cell_style(path, table, row, col, [bgcolor|font|cangrow|merge], output)` | 셀 **스타일** — 배경색/폰트/확장가능/셀합치기 |
 | 수정 | `crf_add_formula_field(path, name, script, output, [force])` | **공식필드** 생성 (JS, 끝에 `return`; 예: `return rexpert.sum(0,"data.AMT",0,"","")`) → 셀에 바인딩. 이름 중복 / `return` 누락 / `:col` `#{}` 바인드 표기는 거부(`force=true`로 강행) |
 | 수정 | `crf_add_data_field(path, name, [type], output)` | 데이터셋에 **필드(컬럼)** 추가 |
-| 수정 | `crf_add_label(path, section, [text|field], [위치], output)` | 밴드에 **글상자** 추가(없는 표준밴드는 자동생성) |
+| 수정 | `crf_add_label(path, section, [text|field|formula], [위치], output, [fontsize|bold|underline|color|font|align|valign|wrap|linespace|border|linewidth])` | 밴드에 **글상자** 추가(없는 표준밴드는 자동생성) — 글꼴/정렬/글자색/테두리까지 한 번에 |
 | 수정 | `crf_set_paper(path, [paper|orientation|margin*], output)` | **용지** 종류/방향/여백 |
 | 설명 | `crf_diff(a, b)` | 두 리포트 **비교** — 데이터셋/필드/쿼리(줄 단위 ±)/scriptType/매개변수/공식 스크립트/그룹/섹션/컨트롤/표 셀 바인딩 |
 
@@ -279,6 +281,10 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 - **그룹**: `new Group(2800)` + `setGroupingField(field)` + `SectionGroupHeader.setGroup(g)` + `SectionGroupFooter`.
 - **필드↔컨트롤 바인딩**: `control.setApplyValueType(ApplyValueType.Field)` + `setApplyValueField(field)` (정적텍스트는 `Text`+`setApplyValueText`).
 - **페이지바닥글 공통**: `ControlSubreport.getLinkedSubreportPath().setUrlText("../../../images/bottom_logo.crf")`.
+- **좌표 단위 0.1mm**(A4=2100×2970), **색은 BGR int**(`(b<<16)|(g<<8)|r`; 도구엔 `#RRGGBB`), 줄바꿈 텍스트 **`LineSpace` 단위 pt**(10pt 글꼴 HWP 160% ≈ 5.5).
+- **새 표 셀은 대각선(FDiagona/BDiagona) 기본 Solid** → None 으로 안 바꾸면 셀마다 X. v0.7.0 부터 `crf_add_table`/`crf_merge_cells` 가 처리.
+- **체크박스 셀**(`CellContentType.Checkbox`)은 `CheckValueTrueCondition/FalseCondition`(`Condition`: 필드·연산자·값)으로만 체크가 결정된다 — 조건이 비면 값이 뭐든 항상 빈 상자. 체크 모양 `CheckType` Rectangle(색칠)/V/Ellipse/RoundRectangle.
+- **양식(HWPX/PDF) → 문서형 리포트** 절차·정렬 체크리스트·실서버 렌더 검증: [docs/document-report-recipe.md](docs/document-report-recipe.md), 샘플 [samples/document/](samples/document/).
 
 ---
 
@@ -286,7 +292,7 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 
 - 본문은 데이터 **라벨** 배치까지. 정식 **표(ControlTable)** 생성은 미구현(셀 바인딩은 동일 `setApplyValueField`라 기계적 확장).
 - 필드 동기화는 SELECT 파싱(별칭 없는 식은 제외) 또는 DB 실행 기반. `mode=db` 는 `.env` DB 연결이 필요하고, 매개변수 값이 없으면 `''`/NULL 로 바인딩해 메타데이터만 읽는다(조건에 따라 타입 오류가 나면 `params` 로 값 지정).
-- `crf_add_table` 로 만든 표는 SDK 기본 속성(테두리/여백)을 쓴다 — 디자이너에서 한 번 열어 확인. 그룹 소계 공식의 `rexpert.sum` 인자 의미(범위/리셋)는 실행으로 확인한 값이 아니므로 결과가 다르면 `crf_set_cell formula=` 로 조정.
+- `crf_add_table` 로 만든 표는 SDK 기본 속성(테두리/여백)을 쓴다(대각선은 v0.7.0 부터 자동 제거) — 디자이너에서 한 번 열어 확인. 그룹 소계 공식의 `rexpert.sum` 인자 의미(범위/리셋)는 실행으로 확인한 값이 아니므로 결과가 다르면 `crf_set_cell formula=` 로 조정.
 - 남은 로드맵(생성기 개선 등)은 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) v0.7.
 - `crf_get_query` 의 JS→평문 복원은 문자열 연결을 풀고 `if` 블록을 주석으로 표시한 **추정본**(실제 SQL 은 매개변수 조건에 따라 달라짐). 테이블 목록도 FROM/JOIN 정규식 추정.
 - 도구 실패는 `ERROR: …`(MCP `isError`)로 반환. 쓰기 도구는 `output` 이 원본과 같으면 거부.

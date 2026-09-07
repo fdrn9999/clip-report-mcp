@@ -3,7 +3,7 @@
 
   python tools/smoke.py            # 전부
   python tools/smoke.py -v         # 각 도구 응답 출력
-픽스처 경로는 CLIP_SMOKE_A / CLIP_SMOKE_B 환경변수로 바꿀 수 있다. 없으면 해당 케이스 skip.
+픽스처 경로는 CLIP_SMOKE_A / CLIP_SMOKE_B / CLIP_SMOKE_C 환경변수로 바꿀 수 있다. 없으면 해당 케이스 skip.
 쓰기 결과는 <proj>/.smoke-out/ 에 기록(gitignore).
 """
 import os, sys, json, re
@@ -13,6 +13,7 @@ import mcpcall
 PROJ = mcpcall.PROJ
 A = os.environ.get("CLIP_SMOKE_A", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmrc/ahrmrc0460_prn01.crf")
 B = os.environ.get("CLIP_SMOKE_B", "C:/eGovFrameDev-4.3.1/workspace/report/meta/sch/ssrm/ssrmva/ssrmva0350_prn17.crf")
+C = os.environ.get("CLIP_SMOKE_C", "C:/eGovFrameDev-4.3.1/workspace/report/meta/sch/ssrm/ssrmet/ssrmet0220_prn01.crf")  # 문서형(양식) 리포트: 표_신고자 2x4, 표_동의 체크박스
 OUT = os.path.join(PROJ, ".smoke-out").replace("\\", "/")
 os.makedirs(OUT, exist_ok=True)
 VERBOSE = "-v" in sys.argv
@@ -234,6 +235,43 @@ if os.path.isfile(B):
     case("diff group add", "crf_diff", {"a": B, "b": OUT + "/b_g1.crf"}, contains("그룹: +1 [DEPT_CD]", "컨트롤: +3 [grp_DEPT_CD, sub_CDT_NUM_TOT, sub_TOT_CDT_PASS]", "섹션: GroupHeader,Detail"))
     case("diff query change", "crf_diff", {"a": B, "b": OUT + "/b_sq.crf"}, contains("SQLDS2 필드: +6", "SQLDS2 쿼리 변경", "매개변수(타입=기본값): +1 [SALYYM]"))
     case("diff identical", "crf_diff", {"a": B, "b": B}, contains("차이 없음"))
+
+# ---- v0.7.0 체크박스 / 병합 / 스타일 ----
+case("set_cell_checkbox missing field -> ERROR", "crf_set_cell_checkbox",
+     {"path": A if os.path.isfile(A) else C, "table": "표3" if os.path.isfile(A) else "표_동의", "row": "0", "col": "0", "output": OUT + "/chk_nofield.crf"}, err_contains("field"))
+if os.path.isfile(C):
+    case("set_cell_checkbox -> OK (Rectangle, cond)", "crf_set_cell_checkbox",
+         {"path": C, "table": "표_동의", "row": "1", "col": "2", "field": "INDIN_PROVD_AGREE_YN", "true_value": "1", "false_value": "0", "output": OUT + "/c_chk.crf"},
+         contains("OK", "체크모양=Rectangle", "참조건=INDIN_PROVD_AGREE_YN Equal '1'", "verified[content=Checkbox"))
+    case("describe shows checkbox cell", "crf_describe_layout", {"path": OUT + "/c_chk.crf"}, contains("☐체크박스(Rectangle)[INDIN_PROVD_AGREE_YN Equal '1']"))
+    case("set_cell_checkbox V + Between", "crf_set_cell_checkbox",
+         {"path": C, "table": "표_동의", "row": "1", "col": "2", "field": "INDIN_PROVD_AGREE_YN", "operator": "Between", "true_value": "1", "true_value2": "9", "check_type": "V", "output": OUT + "/c_chk2.crf"}, contains("OK", "체크모양=V", "Between '1'~'9'"))
+    case("set_cell_checkbox bad operator -> ERROR", "crf_set_cell_checkbox",
+         {"path": C, "table": "표_동의", "row": "1", "col": "2", "field": "INDIN_PROVD_AGREE_YN", "operator": "Like", "output": OUT + "/c_chk3.crf"}, err_contains("operator"))
+    case("set_cell_checkbox off -> text cell", "crf_set_cell_checkbox",
+         {"path": OUT + "/c_chk.crf", "table": "표_동의", "row": "1", "col": "2", "off": "true", "output": OUT + "/c_chk_off.crf"}, contains("OK", "텍스트로 되돌림"))
+    case("merge_cells 1x3 -> OK", "crf_merge_cells",
+         {"path": C, "table": "표_신고자", "row": "0", "col": "1", "colspan": "3", "output": OUT + "/c_merge.crf"}, contains("OK", "1×3 병합(덮인 셀 2)", "verified[span=1×3]"))
+    case("merge_cells describe shows ‹병합›", "crf_describe_layout", {"path": OUT + "/c_merge.crf"}, contains("데이터:EMP_NM | ‹병합› | ‹병합›"))
+    case("merge_cells on covered cell -> ERROR", "crf_merge_cells",
+         {"path": OUT + "/c_merge.crf", "table": "표_신고자", "row": "0", "col": "2", "colspan": "2", "output": OUT + "/c_merge_bad.crf"}, err_contains("병합된 자리"))
+    case("merge_cells unmerge 1x1 -> OK", "crf_merge_cells",
+         {"path": OUT + "/c_merge.crf", "table": "표_신고자", "row": "0", "col": "1", "output": OUT + "/c_unmerge.crf"}, contains("OK", "병합 해제(복구 2셀)", "verified[span=1×1]"))
+    case("merge_cells out of range -> ERROR", "crf_merge_cells",
+         {"path": C, "table": "표_신고자", "row": "1", "col": "3", "rowspan": "2", "output": OUT + "/c_merge_oor.crf"}, err_contains("벗어남"))
+    case("set_cell color/underline/linespace/padding", "crf_set_cell",
+         {"path": C, "table": "표_신고자", "row": "0", "col": "1", "color": "#0000FF", "underline": "true", "linespace": "5.5", "padding": "20,0,0,0", "output": OUT + "/c_style.crf"},
+         contains("OK", "글자색=#0000FF", "밑줄=true", "줄간격=5.5pt", "여백=20,0,0,0"))
+    case("set_cell bad padding -> ERROR", "crf_set_cell",
+         {"path": C, "table": "표_신고자", "row": "0", "col": "1", "padding": "1,2", "output": OUT + "/c_style_bad.crf"}, err_contains("padding"))
+    case("add_label styled + border", "crf_add_label",
+         {"path": C, "section": "본문", "text": "테두리 글상자", "left": "0", "top": "2140", "width": "600", "height": "80", "fontsize": "12", "bold": "true", "color": "#FF0000", "align": "Center", "border": "true", "linewidth": "W150", "output": OUT + "/c_label.crf"},
+         contains("OK", "글자색=#FF0000", "테두리=true", "선굵기=W150"))
+    case("set_label border off + bad linewidth -> ERROR", "crf_set_label",
+         {"path": OUT + "/c_label.crf", "name": "label_text", "linewidth": "W999", "output": OUT + "/c_label_bad.crf"}, err_contains("linewidth"))
+    case("add_table (no diagonal) then validate", "crf_add_table",
+         {"path": C, "columns": '[{"field":"EMP_NM","title":"성명","width":300},{"field":"DEPT_NM","title":"부서","width":500}]', "header_section": "none", "top": "2230", "name": "표_테스트", "output": OUT + "/c_table.crf"}, contains("OK", "표 '표_테스트'"))
+    case("validate after edits", "crf_validate", {"path": OUT + "/c_table.crf"}, contains("ERROR 0", "문제 없음"))
 
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))

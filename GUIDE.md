@@ -122,6 +122,17 @@ return txt;
 
 ---
 
+## 9-1. 체크박스
+
+셀 우클릭 → **[셀 내용] 체크박스** (또는 체크박스 컨트롤). [체크박스] 대화상자의 **체크 조건**(필드 · 연산자 · 값)이 TRUE 면 체크, FALSE 면 빈 상자.
+- 조건을 비워 두면 **값이 무엇이든 항상 빈 상자**이고 셀에 바인딩한 텍스트/필드는 그려지지 않는다 → ■/□ 글자를 넣는 방식과 섞지 말 것.
+- 체크 모양: 색칠(사각형 채움)·V·원·둥근사각형. 상자 모양/색/크기 별도.
+- 도구: `crf_set_cell_checkbox(field, true_value, false_value, check_type=Rectangle|V|Ellipse|RoundRectangle)`. `crf_describe_layout` 은 `☐체크박스(모양)[조건]` 으로 표시하고 조건이 없으면 ⚠ 경고.
+
+## 9-2. 문서형(양식) 리포트
+
+통지서·서약서·신고서처럼 레코드 1건짜리 양식은 **본문 밴드 하나**에 글상자/표를 좌표(0.1mm)로 배치한다. 양식(HWPX/PDF)의 세로 위치·정렬을 요소별로 옮기고, 줄바꿈 문단은 `linespace`(pt) 로 행간을 맞추며, 셀 병합·테두리·색칠 체크박스로 표를 재현한다. 절차와 함정은 [docs/document-report-recipe.md](docs/document-report-recipe.md).
+
 ## 10. 본 도구(MCP)와 개념 매핑
 
 | 하고 싶은 것 | 도구 |
@@ -140,6 +151,8 @@ return txt;
 | 쿼리 컬럼↔필드 맞추기 (`SELECT *` 는 DB 실행) | `crf_sync_fields` (`mode=sql|db`) |
 | 데이터셋 추가·삭제 / 매개변수 생성·수정·삭제 | `crf_add_dataset`·`crf_remove_dataset` / `crf_set_param`·`crf_remove_param` |
 | 필드 이름변경·삭제 (참조 검사) / 참조 위치 보기 | `crf_rename_field`·`crf_remove_field` / `crf_field_refs` |
+| 셀을 **체크박스**로(조건 기반 체크, 색칠/V/원) / 셀 **병합·해제** | `crf_set_cell_checkbox` / `crf_merge_cells` |
+| 글상자 추가(글꼴·정렬·글자색·테두리) / 글자색·밑줄·줄간격·여백 | `crf_add_label` / `crf_set_cell`·`crf_set_label` (`color|underline|linespace|padding|border`) |
 
 > **편집 제안**: Claude가 `crf_summary` + `crf_describe_layout` 로 구조를 읽고, 위 개념에 비추어 개선점을 자연어로 제시합니다.
 

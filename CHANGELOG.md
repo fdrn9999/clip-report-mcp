@@ -3,6 +3,18 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.7.0] - 2026-09-07
+### Added
+- **`crf_set_cell_checkbox`**: 표 셀을 CLIP **기본 체크박스**(셀 내용=체크박스)로 바꾸고 **참/거짓 조건**(`field` `operator` `true_value` / `false_value`, `Between` 은 `true_value2`)을 건다. 체크 모양 `check_type=Rectangle(색칠, 기본)|V|Ellipse|RoundRectangle`, 상자 `shape`, `color`, `size`, `default`, 되돌리기 `off`. 저장 후 되읽어 셀 내용·조건 필드를 검증. 조건 없는 체크박스는 항상 빈 상자라는 점을 도구 설명/서버 instructions 에 명시.
+- **`crf_merge_cells`**: 기준 셀을 `rowspan`×`colspan` 으로 **병합**(덮이는 자리는 TableCellDumy → describe 의 ‹병합›), 1×1 이면 **해제**(복구 셀은 기준 셀 글꼴/테두리 복사). 다른 병합에 걸린 셀/표 범위 초과는 거부.
+- `crf_set_cell` / `crf_set_label`: **`color`(글자색 #RRGGBB), `underline`, `italic`, `linespace`(pt), `padding`("l,t,r,b" 0.1mm)**. `crf_set_label`: **`border`(글상자 사각 테두리), `linewidth`**.
+- **`crf_add_label` v2**: `formula` 바인딩 + 위 스타일 옵션 + `border/linewidth` 를 생성 시 한 번에. 새 글상자는 디자이너 기본처럼 테두리 없음·투명 배경으로 초기화.
+- `crf_describe_layout`: 체크박스 셀을 `☐체크박스(모양)[필드 연산 값]` 으로 표시, 조건이 없으면 `⚠조건없음(항상 빈 상자)`.
+- 서버 instructions: [★체크박스](글자 대신 기본 체크박스) · [★문서형(양식) 리포트](좌표 0.1mm·색·줄간격·병합·테두리·정렬 대조) 항목 추가.
+- 문서/샘플: **[docs/document-report-recipe.md](docs/document-report-recipe.md)** — HWPX/PDF 양식 → 문서형 리포트 제작 레시피(단위·색·글꼴, 표/대각선, 체크박스 조건, 공식 패턴, 실서버 렌더 검증, 정렬 체크리스트, SDK 직접 생성). `samples/document/` — `parse_hwpx.py`(HWPX 문단/표/도형/정렬/세로위치 덤프), `render_report.cjs`(CDP Chrome 으로 callReport.jsp 렌더 스크린샷), `SampleDocumentReport.java`(SDK 로 양식 리포트 전체 생성 예제, 체크박스/병합/테두리 헬퍼 포함).
+### Fixed
+- **`crf_add_table` 로 만든 표의 셀마다 X(대각선)가 그려지던 문제**: SDK 가 새 `TableCellNormal` 의 FDiagona/BDiagona 를 Solid 로 초기화함 → 생성 시 None 으로 설정(표의 분할선/대각선도 None).
+
 ## [0.6.0] - 2026-08-28
 ### Added
 - **`crf_validate`**(lint): 끊어진 바인딩(없는 필드/빈 바인딩, 셀 좌표까지), 공식 `#unknown#`·없는 필드 참조·`return` 누락, 그룹 필드 null, 머리글/바닥글/그룹 수 불일치, 미선언·미사용 매개변수, 쿼리 SELECT↔필드 불일치, scriptType 불일치, 중복 이름, 숨김 밴드/컨트롤, 링크 서브리포트 파일 없음. 임베디드 서브리포트의 매개변수 링크 대상은 오탐하지 않음.
