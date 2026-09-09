@@ -14,6 +14,7 @@ PROJ = mcpcall.PROJ
 A = os.environ.get("CLIP_SMOKE_A", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmrc/ahrmrc0460_prn01.crf")
 B = os.environ.get("CLIP_SMOKE_B", "C:/eGovFrameDev-4.3.1/workspace/report/meta/sch/ssrm/ssrmva/ssrmva0350_prn17.crf")
 C = os.environ.get("CLIP_SMOKE_C", "C:/eGovFrameDev-4.3.1/workspace/report/meta/sch/ssrm/ssrmet/ssrmet0220_prn01.crf")  # 문서형(양식) 리포트: 표_신고자 2x4, 표_동의 체크박스
+D = os.environ.get("CLIP_SMOKE_D", "C:/eGovFrameDev-4.3.1/workspace/report/meta/sch/ssrm/ssrmet/ssrmet0230_prn02.crf")  # 서약서: 글상자3,4,5 / 7,8 세로 연속(v0.7.1 merge/split/font 검증용)
 OUT = os.path.join(PROJ, ".smoke-out").replace("\\", "/")
 os.makedirs(OUT, exist_ok=True)
 VERBOSE = "-v" in sys.argv
@@ -272,6 +273,46 @@ if os.path.isfile(C):
     case("add_table (no diagonal) then validate", "crf_add_table",
          {"path": C, "columns": '[{"field":"EMP_NM","title":"성명","width":300},{"field":"DEPT_NM","title":"부서","width":500}]', "header_section": "none", "top": "2230", "name": "표_테스트", "output": OUT + "/c_table.crf"}, contains("OK", "표 '표_테스트'"))
     case("validate after edits", "crf_validate", {"path": OUT + "/c_table.crf"}, contains("ERROR 0", "문제 없음"))
+
+# ---- v0.7.1: 글상자↔표 붙이기/나누기, 글꼴 상속/일괄, lint ----
+if os.path.isfile(D):
+    case("validate D: stacked labels WARN", "crf_validate", {"path": D},
+         contains("글상자3,글상자4,글상자5", "글상자7,글상자8", "crf_merge_labels"))
+    case("merge_labels 3,4,5 -> 1-col table", "crf_merge_labels",
+         {"path": D, "names": "글상자5,글상자3,글상자4", "output": OUT + "/d_m1.crf"}, contains("OK", "→ 1열 표", "3행", "위치 0,361", "verified[rows=3"))
+    case("merge_labels 7,8 -> one wrapped label", "crf_merge_labels",
+         {"path": OUT + "/d_m1.crf", "names": "글상자7,글상자8", "into": "label", "output": OUT + "/d_m2.crf"}, contains("OK", "줄바꿈 글상자 하나", "2줄"))
+    case("validate after merge: no stacked WARN", "crf_validate", {"path": OUT + "/d_m2.crf"},
+         lambda t, e: None if not e and "세로 연속" not in t and "WARN 0" in t else f"still warns: {t[:300]}")
+    case("describe merged table keeps style", "crf_describe_layout", {"path": OUT + "/d_m2.crf", "detail": "true"},
+         contains('ControlTable "표_글상자3"', '"1. 업무 수행', "정렬=Both/Center, 폰트=바탕체, 크기=10, 줄바꿈"))
+    case("merge_labels one name -> ERROR", "crf_merge_labels", {"path": D, "names": "글상자3", "output": OUT + "/d_m_bad.crf"}, err_contains("2개 이상"))
+    case("merge_labels bound label into=label -> ERROR", "crf_merge_labels",
+         {"path": D, "names": "글상자9,글상자2", "into": "label", "output": OUT + "/d_m_bad2.crf"}, err_contains("필드 바인딩"))
+    case("split_label table -> labels", "crf_split_label", {"path": OUT + "/d_m2.crf", "name": "표_글상자3", "output": OUT + "/d_s1.crf"},
+         contains("OK", "글상자 3개", "표_글상자3_1(57)", "표_글상자3_3(112)"))
+    case("split_label wrapped label -> 2 labels", "crf_split_label", {"path": OUT + "/d_s1.crf", "name": "글상자7", "output": OUT + "/d_s2.crf"},
+         contains("OK", "2개", "글상자7_2("))
+    case("split_label no line break -> ERROR", "crf_split_label", {"path": D, "name": "글상자6", "output": OUT + "/d_s_bad.crf"}, err_contains("나눌 줄"))
+    case("split_label multi-col table -> ERROR", "crf_split_label", {"path": D, "name": "표_서명", "output": OUT + "/d_s_bad2.crf"}, err_contains("1열 표만"))
+    case("add_table rows= text list", "crf_add_table",
+         {"path": D, "rows": '["1. 첫째","2. 둘째",{"text":"※ 셋째","height":112,"align":"Both"}]', "top": "2100", "name": "표_목록", "output": OUT + "/d_t1.crf"},
+         contains("OK", "문단 목록 표 '표_목록'", "3행×1열", "폰트 바탕체", "verified[rows=3]"))
+    case("add_table neither columns nor rows -> ERROR", "crf_add_table", {"path": D, "output": OUT + "/d_t_bad.crf"}, err_contains("columns", "rows"))
+    case("add_label inherits report font (label)", "crf_add_label",
+         {"path": D, "section": "본문", "text": "새 글상자", "top": "2300", "width": "600", "height": "56", "output": OUT + "/d_l1.crf"}, contains("OK", "폰트=바탕체", "상속:리포트 라벨 글꼴"))
+    case("add_label inherits report font (data) keeps given size", "crf_add_label",
+         {"path": D, "section": "본문", "field": "EMP_NM", "fontsize": "12", "top": "2400", "width": "600", "height": "56", "output": OUT + "/d_l2.crf"},
+         lambda t, e: None if not e and "폰트=바탕체" in t and "상속:리포트 데이터 글꼴" in t and "크기=10" not in t else f"font inherit: {t[:300]}")
+    case("set_font label/data split", "crf_set_font", {"path": D, "font": "돋움체", "data_font": "나눔고딕", "output": OUT + "/d_f1.crf"},
+         contains("OK", "라벨 23곳→돋움체", "데이터 7곳→나눔고딕", "후: 라벨 {돋움체=23} 데이터 {나눔고딕=7}"))
+    case("validate font mismatch INFO", "crf_validate", {"path": OUT + "/d_f1.crf"}, contains("라벨(글자) 글꼴 돋움체", "데이터(숫자) 글꼴 나눔고딕", "글꼴 2종 섞여 있음"))
+    case("set_font only_system with none -> ERROR", "crf_set_font", {"path": D, "font": "돋움체", "only_system": "true", "output": OUT + "/d_f2.crf"}, err_contains("System 글꼴 요소가 없음"))
+    case("set_font nothing given -> ERROR", "crf_set_font", {"path": D, "output": OUT + "/d_f3.crf"}, err_contains("font / data_font / size"))
+    case("set_cell align Both", "crf_set_cell", {"path": D, "table": "표_서명", "row": "0", "col": "1", "align": "Both", "output": OUT + "/d_al.crf"}, contains("OK", "align=Both"))
+if os.path.isfile(A):
+    case("set_subsection repeat=OnPage", "crf_set_subsection", {"path": A, "section": "그룹머리글", "repeat": "OnPage", "output": OUT + "/a_rep.crf"}, contains("OK", "repeat=OnPage"))
+    case("set_subsection bad repeat -> ERROR", "crf_set_subsection", {"path": A, "section": "그룹머리글", "repeat": "Always", "output": OUT + "/a_rep_bad.crf"}, err_contains("repeat"))
 
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))

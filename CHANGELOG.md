@@ -3,6 +3,19 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.7.1] - 2026-09-09
+### Added
+- **`crf_merge_labels`**: 같은 밴드에 세로로 놓인 글상자 여러 개를 **요소 하나로** — `into=table`(기본) 은 1열 표(글상자마다 행; 값/필드 바인딩·글꼴·정렬·줄바꿈·줄간격·여백 유지, 행 높이는 원래 세로 자리를 그대로 채워 다른 요소가 밀리지 않음), `into=label` 은 정적 텍스트를 줄바꿈으로 이어 붙인 글상자 하나(원래 줄바꿈 없던 한 줄 글상자는 너비에서 접힐 수 있어 ⚠ 안내 — 표 병합 권장). 원본 글상자는 제거, 저장 후 되읽어 검증. 실서버 렌더로 원본과 동일 확인(ssrmet0230_prn02).
+- **`crf_split_label`**: 반대 방향 — 줄바꿈 글상자를 줄별 글상자로(`lines`/`heights` JSON 으로 조각·높이 지정 가능), 1열 표를 행별 글상자로(바인딩·스타일 유지). "나눌 때 나누고 붙일 때 붙이는" 두 도구가 한 쌍.
+- **`crf_add_table rows=`**: 문단·번호 목록·※주석 같은 **연속 텍스트 줄을 1열 N행 표 하나**로 생성(`rows` = 문자열 배열 또는 `{text|field, align, bold, height, wrap, cangrow}`), `width`/`border`/`wrap`/`align`. 글상자를 줄마다 따로 만드는 비효율의 대안.
+- **`crf_set_font`**: 글꼴 **일괄** 적용 — `font`(글자/라벨), `data_font`(필드 바인딩 데이터; 기본 = font), `size`, `only_system=true`(SDK 기본 `System` 글꼴만 교체), `section` 한정. 전/후 글꼴 사용 통계를 응답.
+- **글꼴 자동 상속**: `crf_add_label` / `crf_add_table` / `crf_place_detail_fields` / `crf_add_group` 라벨이 만드는 새 글상자·셀은 SDK 기본 `System` 9pt 대신 **리포트의 지배 글꼴(라벨/데이터 각각 집계)** 을 물려받고, 리포트에 글꼴이 없으면 같은 폴더 이웃 리포트(최근 8개) 관례 → 그래도 없으면 돋움체. 응답에 `(상속:근거)` 표시. `font`/`fontsize` 를 직접 주면 그 값이 우선.
+- **`crf_validate` 규칙 추가**: ⚠ `System`(SDK 기본) 글꼴 위치 목록 · ⚠ 같은 스타일(x·너비·글꼴·크기·굵게·테두리)로 세로 연속인 정적 글상자 묶음(→ `crf_merge_labels` 안내; 필드 바인딩이 섞이면 ℹ) · ℹ 라벨 글꼴 ≠ 데이터 글꼴 · ℹ 글꼴 여러 종 섞임(주 글꼴과 소수 글꼴의 위치) · ℹ 엑셀 격자(머리글/바닥글 밴드 3열 이상 표의 열 경계가 본문 표 경계 ±10 에 없으면).
+- `crf_set_subsection repeat=None|OnPage|OnColumn|OnPageAndColumn`: 그룹 머리글 매 페이지 반복 설정/해제.
+- `align` 에 `Both`(양쪽)·`Equal`(배분) 허용(`crf_set_cell`/`crf_set_label`/`crf_add_label`/`crf_add_table`).
+- 서버 instructions 에 **[★요소 구성 원칙]**(연속 문단은 요소 하나로, 나눌 때/붙일 때 기준) · **[★글꼴 관례]**(상속 규칙, 저장소 관례 돋움체/바탕체/나눔고딕, 라벨·데이터 통일) · **[★화면→인쇄물 옮길 때]**(빨간 강조·버튼 문구 제외, 체크 모양은 문서마다 지시, 엑셀 격자, 그룹머리글 반복) 추가, **[★쿼리 파라미터]** 에 TO_DATE 먼저·디자이너 데이터셋 통째 교체 금지 추가 — 로컬 메모리에만 있던 규칙을 서버에 내장해 **어느 PC 에서 연결해도 동일하게 적용**.
+- `tools/smoke.py` 152 케이스(ssrmet0230_prn02 를 4번째 실 리포트 D 로 추가).
+
 ## [0.7.0] - 2026-09-07
 ### Added
 - **`crf_set_cell_checkbox`**: 표 셀을 CLIP **기본 체크박스**(셀 내용=체크박스)로 바꾸고 **참/거짓 조건**(`field` `operator` `true_value` / `false_value`, `Between` 은 `true_value2`)을 건다. 체크 모양 `check_type=Rectangle(색칠, 기본)|V|Ellipse|RoundRectangle`, 상자 `shape`, `color`, `size`, `default`, 되돌리기 `off`. 저장 후 되읽어 셀 내용·조건 필드를 검증. 조건 없는 체크박스는 항상 빈 상자라는 점을 도구 설명/서버 instructions 에 명시.

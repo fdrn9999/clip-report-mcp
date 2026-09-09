@@ -129,7 +129,28 @@ return txt;
 - 체크 모양: 색칠(사각형 채움)·V·원·둥근사각형. 상자 모양/색/크기 별도.
 - 도구: `crf_set_cell_checkbox(field, true_value, false_value, check_type=Rectangle|V|Ellipse|RoundRectangle)`. `crf_describe_layout` 은 `☐체크박스(모양)[조건]` 으로 표시하고 조건이 없으면 ⚠ 경고.
 
-## 9-2. 문서형(양식) 리포트
+## 9-2. 요소 구성 원칙 — 나눌 때 나누고, 붙일 때 붙인다
+
+- **세로로 이어지는 문단·번호 목록·※주석**처럼 x·너비·글꼴·크기가 같은 줄들은 글상자를 줄마다 따로 만들지 않는다. **1열 표 하나**(`crf_add_table rows=[…]`, 줄마다 행 — 줄 높이를 따로 줄 수 있어 목록에 적합) 또는 **줄바꿈 글상자 하나**(`crf_add_label wrap=true`, 텍스트 안 `\n`) 로 만든다.
+- **별개 요소로 나누는 경우**는 정렬·글꼴·굵기·글자색·필드 바인딩·가로 위치가 서로 다를 때뿐이다(예: 제목 14pt 굵게 + 본문 10pt, 라벨 "소속:" + 데이터 `DEPT_NM`).
+- 이미 쪼개진 글상자는 `crf_merge_labels(names="글상자3,글상자4,글상자5", into=table|label)` 로 합치고, 반대로 덩어리를 줄/행별로 손봐야 하면 `crf_split_label(name)` 로 나눈다. 두 도구 모두 값·글꼴·정렬·줄간격을 유지하고 세로 자리를 그대로 두므로 다른 요소가 밀리지 않는다.
+- `crf_validate` 가 같은 스타일로 세로 연속인 정적 글상자 묶음을 ⚠ 로 알려 준다(필드 바인딩이 섞이면 ℹ).
+
+## 9-3. 글꼴 관례
+
+- SDK 로 새로 만든 글상자/셀의 기본 글꼴은 **`System` 9pt** 라 그대로 두면 다른 리포트와 어긋난다. 생성 도구(`crf_add_label`/`crf_add_table`/`crf_place_detail_fields`/`crf_add_group` 라벨)는 **리포트의 지배 글꼴을 라벨(글자)·데이터(숫자) 따로 집계해 상속**하고, 리포트에 글꼴이 없으면 같은 폴더 이웃 리포트 관례, 그래도 없으면 돋움체를 쓴다. `font`/`fontsize` 를 직접 주면 그 값이 우선.
+- 이 저장소 관례(표본 40개): **목록형 = 돋움체**, **문서형(통지서·서약서) = 바탕체**, 일부 모듈(apur/ahrmrc/sles 등) = 나눔고딕. 라벨과 데이터 글꼴은 **같은 리포트 안에서 통일**한다(데이터만 다른 글꼴이면 인쇄물이 어수선하다).
+- 일괄 정리: `crf_set_font(font=돋움체)` / 데이터만 `data_font=` / `only_system=true`(System 만) / `size=`. `crf_validate` 가 System 글꼴 위치, 라벨≠데이터 글꼴, 여러 글꼴 섞임(소수 글꼴 위치)을 알려 준다.
+
+## 9-4. 화면(.vue/.xfdl) → 인쇄물로 옮길 때
+
+- 화면의 **빨간 강조·버튼 문구('제출하기' 등)·안내 배너**는 인쇄물에 넣지 않는다(화면 조작용 요소).
+- 체크 모양(**색칠 Rectangle / V**)은 문서마다 사용자 지시를 따르고, 지시가 없으면 묻는다.
+- **엑셀 저장 격자**: CLIP 엑셀 export 는 페이지 위 모든 컨트롤의 x 경계 합집합으로 열을 만든다(`coordinateErrorLimit=10`). 머리글/바닥글 표의 열 경계는 **본문 표 경계의 부분집합**이어야 본문 셀이 쪼개지지 않는다 → `crf_validate` ℹ 엑셀 격자.
+- 그룹 머리글이 매 페이지 반복되면 `crf_set_subsection(section=그룹머리글, repeat=None)`; 반복시키려면 `OnPage`.
+- 쿼리의 `{parameter.X}` 는 항상 `'문자열'` 로 치환된다 → 날짜 포맷은 `TO_CHAR(TO_DATE('{parameter.DT}','YYYYMMDD'), …)` 처럼 **TO_DATE 먼저**(곧장 TO_CHAR 하면 Tibero JDBC-5075 로 쿼리 전체가 0건). 쿼리 수정은 디자이너에서 데이터셋을 통째로 다시 만들지 말고(셀 바인딩이 끊김) `crf_set_query` 로 문자열만 교체.
+
+## 9-5. 문서형(양식) 리포트
 
 통지서·서약서·신고서처럼 레코드 1건짜리 양식은 **본문 밴드 하나**에 글상자/표를 좌표(0.1mm)로 배치한다. 양식(HWPX/PDF)의 세로 위치·정렬을 요소별로 옮기고, 줄바꿈 문단은 `linespace`(pt) 로 행간을 맞추며, 셀 병합·테두리·색칠 체크박스로 표를 재현한다. 절차와 함정은 [docs/document-report-recipe.md](docs/document-report-recipe.md).
 
@@ -153,6 +174,9 @@ return txt;
 | 필드 이름변경·삭제 (참조 검사) / 참조 위치 보기 | `crf_rename_field`·`crf_remove_field` / `crf_field_refs` |
 | 셀을 **체크박스**로(조건 기반 체크, 색칠/V/원) / 셀 **병합·해제** | `crf_set_cell_checkbox` / `crf_merge_cells` |
 | 글상자 추가(글꼴·정렬·글자색·테두리) / 글자색·밑줄·줄간격·여백 | `crf_add_label` / `crf_set_cell`·`crf_set_label` (`color|underline|linespace|padding|border`) |
+| 연속 문단/목록을 **표 하나**로 / 글상자 여러 개 **합치기** / **나누기** | `crf_add_table rows=[…]` / `crf_merge_labels` / `crf_split_label` |
+| 글꼴 **일괄**(라벨/데이터 따로, System 만) | `crf_set_font` |
+| 그룹 머리글 매 페이지 반복 | `crf_set_subsection repeat=OnPage|None` |
 
 > **편집 제안**: Claude가 `crf_summary` + `crf_describe_layout` 로 구조를 읽고, 위 개념에 비추어 개선점을 자연어로 제시합니다.
 

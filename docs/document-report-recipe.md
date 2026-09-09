@@ -11,7 +11,7 @@
 | 양식 읽기 | HWPX: `samples/document/parse_hwpx.py` (문단·표·도형·글자색·**정렬**·세로위치) / PDF: `pdf_text` 또는 PyMuPDF 로 페이지 이미지 추출 |
 | 데이터 매핑 | 양식의 **파란 글자 = 데이터 자리**(관례). 화면(.xfdl/.vue)→백엔드 매퍼→테이블→`db_columns`/`db_sample` 로 컬럼 확정. 코드값은 `COM.CSYS011` |
 | 리포트 뼈대 | 같은 저장소의 단순 .crf 를 템플릿으로 열어 필드/쿼리/매개변수/섹션을 갈아끼움(DB 연결정보 유지) — `crf_generate` 또는 SDK |
-| 배치 | 본문(Detail) 밴드 하나에 글상자/표를 **0.1mm 좌표**로 배치 — `crf_add_label`(style/border) · `crf_add_table` · `crf_merge_cells` · `crf_set_cell`(color/underline/linespace/padding) · `crf_set_cell_checkbox` |
+| 배치 | 본문(Detail) 밴드 하나에 글상자/표를 **0.1mm 좌표**로 배치 — `crf_add_label`(style/border) · `crf_add_table`(columns / **rows=문단 목록**) · `crf_merge_labels`/`crf_split_label` · `crf_merge_cells` · `crf_set_cell`(color/underline/linespace/padding) · `crf_set_cell_checkbox` · `crf_set_font` |
 | 검증 | `crf_validate` → 실서버 렌더(아래 §5) → **정렬 체크리스트**(§6) 대조 |
 
 ## 1. 단위·색·글꼴
@@ -22,6 +22,12 @@
 - 글꼴: 서버에 있는 글꼴만 PDF 에 박힌다. 이 ERP 는 `바탕체`(문서)·`돋움체`(표) 관례. 함초롬바탕 등 HWP 전용 글꼴은 바탕체로 대체.
 - **줄바꿈 텍스트 줄간격 `linespace` 단위는 pt**. 10pt 글꼴에 HWP 160% 행간을 맞추려면 **5.5** (15 를 주면 두 배로 벌어져 잘림). 기존 계약서 리포트도 12pt 에 6.0 을 쓴다.
 - 한 줄 안에서 색을 섞어야 하면(예 `(필수)` 빨강 + 검정 문장) 셀을 둘로 쪼개 오른쪽/왼쪽 정렬로 붙인다. 텍스트 태그(`TextInfoEx.setUseTag`)는 미검증.
+
+## 1-1. 요소 구성 — 줄마다 글상자를 만들지 말 것
+
+- 번호 목록(1. 2. 3.)·※ 주석·연속 문단처럼 **x·너비·글꼴이 같은 줄들은 요소 하나**로: `crf_add_table rows=["1. …","2. …",{"text":"3. …","height":112,"align":"Both"}]`(1열 N행, 줄 높이 개별 지정, 테두리 없음) 또는 줄바꿈 글상자 하나. 2026-09-08 서약서(ssrmet0230_prn02)에서 글상자3·4·5 / 7·8 을 따로 만든 것이 사용자 지적 사례.
+- 나누는 기준은 정렬·글꼴·굵기·색·바인딩·가로 위치가 다를 때뿐. 이미 쪼갠 건 `crf_merge_labels(names=…)`, 덩어리를 손봐야 하면 `crf_split_label(name)`.
+- **글꼴**: 새 글상자/셀은 리포트 글꼴을 자동 상속한다(문서형 = 바탕체). 직접 SDK 로 만들 때는 `TextInfo.setFontName` 을 반드시 호출(기본 `System`). 마지막에 `crf_validate` 로 System 글꼴·세로 연속 글상자·글꼴 섞임이 없는지 확인.
 
 ## 2. 표(ControlTable)
 

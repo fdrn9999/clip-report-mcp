@@ -115,7 +115,7 @@ cd clip-report-mcp
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-python tools/smoke.py -v        # 실 리포트 2종으로 읽기/쓰기 도구 회귀 (경로는 CLIP_SMOKE_A / CLIP_SMOKE_B 로 변경)
+python tools/smoke.py -v        # 실 리포트 4종으로 읽기/쓰기 도구 회귀 152 케이스 (경로는 CLIP_SMOKE_A~D 로 변경)
 python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
 ```
 `tools/mcpcall.py` 는 `clip-report.mcp.json`(install.ps1 생성)에서 java/classpath 를 읽는다(없으면 `CLIP_JAVA`/`CLIP_CP`). 쓰기 결과는 `.smoke-out/`.
@@ -126,7 +126,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 | 파일 | 역할 |
 |---|---|
-| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 38개 (.crf 33 + DB 4 + PDF 1) |
+| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 43개 (.crf 38 + DB 4 + PDF 1) |
 | **CrfMcpHttp.java** | **MCP 서버 (원격 Streamable HTTP)** — 같은 도구 |
 | **CrfGen3.java** | SQL/MyBatis → 초안 생성기 (필드·쿼리·파라미터·그룹·푸터) |
 | **CrfGen2.java** | 파싱/변환 코어 (SELECT 컬럼 파서, MyBatis→JS, 파라미터 정규화, 타입추정) |
@@ -165,8 +165,10 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_set_label(path, name, output, [같은 속성 + left|top|width|height|visible|border|linewidth])` | **글상자/컨트롤** 편집 — 값·공식·스타일(글자색/밑줄/줄간격/여백)·위치·크기·표시·**테두리** |
 | 수정 | `crf_set_cell_checkbox(path, table, row, col, field, output, [true_value|false_value|operator|true_value2|check_type|shape|color|size|default|off])` | 셀을 **기본 체크박스**(셀 내용=체크박스)로 — `field operator true_value` 면 체크(기본 `Equal '1'`), `false_value` 면 해제. 조건이 없으면 항상 빈 상자. `check_type=Rectangle(색칠, 기본)|V|Ellipse|RoundRectangle`. ■/□ 글자 대신 이걸 쓸 것 |
 | 수정 | `crf_merge_cells(path, table, row, col, output, [rowspan|colspan])` | 셀 **병합**(기준 셀이 rowspan×colspan 차지, 덮인 자리는 ‹병합›) / 1×1 로 **해제** |
-| 수정 | `crf_set_subsection(path, section, output, [index|height|visible|name|new_page])` | 밴드 행(서브섹션) 높이·숨김·이름·페이지바꿈 |
-| 수정 | `crf_add_table(path, columns, output, [section|header_section|left|top|row_height|name])` | **표 생성** — `columns` JSON(`field,title,width,format,align`)로 본문 1행 데이터 표 + 머리글 밴드 제목 표(같은 열 너비). SDK 생성이라 디자이너에서 한 번 확인 권장 |
+| 수정 | `crf_set_subsection(path, section, output, [index|height|visible|name|new_page|repeat])` | 밴드 행(서브섹션) 높이·숨김·이름·페이지바꿈·그룹머리글 반복(`repeat=None|OnPage`) |
+| 수정 | `crf_merge_labels(path, names, output, [into=table\|label|name|border])` / `crf_split_label(path, name, output, [lines|heights])` | 세로로 놓인 **글상자 여러 개 → 1열 표 하나(또는 줄바꿈 글상자 하나)** / 반대로 **줄바꿈 글상자·1열 표 → 줄/행별 글상자** — 값·글꼴·정렬 유지, 세로 자리 그대로 |
+| 수정 | `crf_set_font(path, output, [font|data_font|size|only_system|section])` | **글꼴 일괄** — 라벨(글자)/데이터(숫자) 따로, `only_system=true` 면 SDK 기본 `System` 글꼴만 교체. 전/후 통계 응답 |
+| 수정 | `crf_add_table(path, output, columns \| rows, [section|header_section|left|top|row_height|name|width|border|wrap|align])` | **표 생성** — `columns` JSON(`field,title,width,format,align`)로 본문 1행 데이터 표 + 머리글 밴드 제목 표(같은 열 너비); **`rows` JSON 으로 문단·목록·※주석용 1열 N행 텍스트 표**(글상자를 줄마다 만들지 말 것). 새 셀은 리포트 글꼴 상속. SDK 생성이라 디자이너에서 한 번 확인 권장 |
 | 수정 | `crf_remove_control(path, name, output)` / `crf_remove_section(path, section, output, [force])` | 컨트롤 삭제 / 밴드 삭제(컨트롤 있으면 거부) |
 | 수정 | `crf_set_cell_style(path, table, row, col, [bgcolor|font|cangrow|merge], output)` | 셀 **스타일** — 배경색/폰트/확장가능/셀합치기 |
 | 수정 | `crf_add_formula_field(path, name, script, output, [force])` | **공식필드** 생성 (JS, 끝에 `return`; 예: `return rexpert.sum(0,"data.AMT",0,"","")`) → 셀에 바인딩. 이름 중복 / `return` 누락 / `:col` `#{}` 바인드 표기는 거부(`force=true`로 강행) |
@@ -213,7 +215,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
   }
 }
 ```
-→ 클라이언트 재시작 → 도구 38개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
+→ 클라이언트 재시작 → 도구 43개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
 > DB 도구(`db_*`)를 쓰려면 classpath 에 **Tibero JDBC 드라이버 jar** 도 추가하세요. 접속정보는 `.env` 분리(아래).
 
 ### B. 원격 (HTTP) — 팀 공유 / claude.ai 웹
@@ -283,6 +285,7 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 - **페이지바닥글 공통**: `ControlSubreport.getLinkedSubreportPath().setUrlText("../../../images/bottom_logo.crf")`.
 - **좌표 단위 0.1mm**(A4=2100×2970), **색은 BGR int**(`(b<<16)|(g<<8)|r`; 도구엔 `#RRGGBB`), 줄바꿈 텍스트 **`LineSpace` 단위 pt**(10pt 글꼴 HWP 160% ≈ 5.5).
 - **새 표 셀은 대각선(FDiagona/BDiagona) 기본 Solid** → None 으로 안 바꾸면 셀마다 X. v0.7.0 부터 `crf_add_table`/`crf_merge_cells` 가 처리.
+- **새 글상자/셀의 글꼴 기본값은 `System` 9pt**(`new ControlLabel()`/`new TableCellNormal()`) — 그대로 두면 다른 리포트와 글꼴이 안 맞는다. v0.7.1 부터 생성 도구가 리포트 지배 글꼴(라벨/데이터 각각)을 상속하고 `crf_validate` 가 `System` 을 경고, `crf_set_font(only_system=true)` 로 일괄 정리.
 - **체크박스 셀**(`CellContentType.Checkbox`)은 `CheckValueTrueCondition/FalseCondition`(`Condition`: 필드·연산자·값)으로만 체크가 결정된다 — 조건이 비면 값이 뭐든 항상 빈 상자. 체크 모양 `CheckType` Rectangle(색칠)/V/Ellipse/RoundRectangle.
 - **양식(HWPX/PDF) → 문서형 리포트** 절차·정렬 체크리스트·실서버 렌더 검증: [docs/document-report-recipe.md](docs/document-report-recipe.md), 샘플 [samples/document/](samples/document/).
 
@@ -292,7 +295,7 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 
 - 본문은 데이터 **라벨** 배치까지. 정식 **표(ControlTable)** 생성은 미구현(셀 바인딩은 동일 `setApplyValueField`라 기계적 확장).
 - 필드 동기화는 SELECT 파싱(별칭 없는 식은 제외) 또는 DB 실행 기반. `mode=db` 는 `.env` DB 연결이 필요하고, 매개변수 값이 없으면 `''`/NULL 로 바인딩해 메타데이터만 읽는다(조건에 따라 타입 오류가 나면 `params` 로 값 지정).
-- `crf_add_table` 로 만든 표는 SDK 기본 속성(테두리/여백)을 쓴다(대각선은 v0.7.0 부터 자동 제거) — 디자이너에서 한 번 열어 확인. 그룹 소계 공식의 `rexpert.sum` 인자 의미(범위/리셋)는 실행으로 확인한 값이 아니므로 결과가 다르면 `crf_set_cell formula=` 로 조정.
+- `crf_add_table` 로 만든 표는 SDK 기본 속성(테두리/여백)을 쓴다(대각선은 v0.7.0 부터 자동 제거, 글꼴은 v0.7.1 부터 리포트 글꼴 상속) — 디자이너에서 한 번 열어 확인. 그룹 소계 공식의 `rexpert.sum` 인자 의미(범위/리셋)는 실행으로 확인한 값이 아니므로 결과가 다르면 `crf_set_cell formula=` 로 조정.
 - 남은 로드맵(생성기 개선 등)은 [docs/PLAN-v0.5.md](docs/PLAN-v0.5.md) v0.7.
 - `crf_get_query` 의 JS→평문 복원은 문자열 연결을 풀고 `if` 블록을 주석으로 표시한 **추정본**(실제 SQL 은 매개변수 조건에 따라 달라짐). 테이블 목록도 FROM/JOIN 정규식 추정.
 - 도구 실패는 `ERROR: …`(MCP `isError`)로 반환. 쓰기 도구는 `output` 이 원본과 같으면 거부.
