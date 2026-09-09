@@ -90,6 +90,9 @@
 - **`crf_validate`**(lint): 공식의 `#unknown#`/미존재 필드 참조, 셀·라벨의 미존재 필드 바인딩, 그룹 필드 `null`, 쿼리에서 쓰는데 미선언된 매개변수/선언됐는데 안 쓰는 매개변수, SELECT에 없는 데이터 필드(파싱 가능할 때), JavaScript scriptType인데 `var`/`+` 없는 평문, 중복 이름, `vis=false` 서브섹션 안내. 수정 도구 실행 후 자동으로 요약 한 줄 첨부.
 - **`crf_diff` v2**: 데이터셋 쿼리 텍스트 diff(줄 단위), 공식 스크립트 diff, 셀 바인딩 그리드 diff, 매개변수 diff.
 
+### v0.7.2 — 디자인 결정 질문 규칙 — ✅ 2026-09-09 완료
+- 요소 구성·체크박스 모양·레이아웃·글꼴·쿼리·저장 갈림길을 작업 전/중간에 사용자에게 묻도록 instructions·슬래시 명령·GUIDE 에 내장.
+
 ### v0.7.1 — 요소 구성 유연성 + 글꼴 상속 — ✅ 2026-09-09 완료
 - `crf_merge_labels` / `crf_split_label` / `crf_add_table rows=` / `crf_set_font` / 글꼴 자동 상속 / lint(System 글꼴·세로 연속 글상자·글꼴 섞임·엑셀 격자) / `repeat=` / 로컬 메모리 규칙을 서버 instructions 에 내장. smoke 152.
 

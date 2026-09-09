@@ -8,7 +8,8 @@
 
 | 단계 | 도구/방법 |
 |---|---|
-| 양식 읽기 | HWPX: `samples/document/parse_hwpx.py` (문단·표·도형·글자색·**정렬**·세로위치) / PDF: `pdf_text` 또는 PyMuPDF 로 페이지 이미지 추출 |
+| 결정 질문 | 시작 전에 사용자에게 **결정 목록**(요소 구성·체크 모양·글꼴·저장 위치 등, GUIDE 9-2)을 한 번에 물어 답을 받는다 — 임의로 정하지 않는다 |
+| 양식 읽기 | **형식 불문 모든 요소를 좌표까지 인벤토리**(x,y,w,h mm·정렬·글꼴·색·테두리·데이터 자리). HWPX: `samples/document/parse_hwpx.py` (문단·표·도형·글자색·**정렬**·세로위치) / PDF: PyMuPDF 로 텍스트 블록 bbox + 페이지 이미지(`pdf_text` 만으로는 위치가 사라짐) / DOCX: `word/document.xml`(EMU÷36000=mm) / HTML: 스크린샷 + `getBoundingClientRect` / 이미지: 비율 + 용지 크기 확인. 빠진 요소가 있으면 미완성 |
 | 데이터 매핑 | 양식의 **파란 글자 = 데이터 자리**(관례). 화면(.xfdl/.vue)→백엔드 매퍼→테이블→`db_columns`/`db_sample` 로 컬럼 확정. 코드값은 `COM.CSYS011` |
 | 리포트 뼈대 | 같은 저장소의 단순 .crf 를 템플릿으로 열어 필드/쿼리/매개변수/섹션을 갈아끼움(DB 연결정보 유지) — `crf_generate` 또는 SDK |
 | 배치 | 본문(Detail) 밴드 하나에 글상자/표를 **0.1mm 좌표**로 배치 — `crf_add_label`(style/border) · `crf_add_table`(columns / **rows=문단 목록**) · `crf_merge_labels`/`crf_split_label` · `crf_merge_cells` · `crf_set_cell`(color/underline/linespace/padding) · `crf_set_cell_checkbox` · `crf_set_font` |
