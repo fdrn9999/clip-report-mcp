@@ -178,7 +178,7 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | 리포트 개요·필드 인벤토리·용지·섹션/서브섹션 보기 | `crf_summary` |
 | **쿼리 본문** 읽기 (JS 동적쿼리는 평문 복원본 포함) | `crf_get_query` |
 | **공식 스크립트**·누적합산·그룹이름 읽기 | `crf_get_formula` |
-| 폴더에서 테이블/매개변수/문구로 리포트 **검색** | `crf_search` |
+| 폴더에서 테이블/매개변수/문구/XPath 로 리포트 **검색**(클립소프트 FindQuery 유틸 대체) | `crf_search` |
 | 밴드별 컨트롤·표 셀 바인딩 보기 (설명/제안의 근거; `detail=true` 스타일까지) | `crf_describe_layout` |
 | 리포트 **검증(lint)** — 끊어진 바인딩/공식/매개변수 | `crf_validate` |
 | 셀 값·공식·정렬·폰트 / 글상자 편집 / 밴드 행 높이·숨김 | `crf_set_cell` / `crf_set_label` / `crf_set_subsection` |

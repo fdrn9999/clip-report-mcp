@@ -314,6 +314,14 @@ if os.path.isfile(A):
     case("set_subsection repeat=OnPage", "crf_set_subsection", {"path": A, "section": "그룹머리글", "repeat": "OnPage", "output": OUT + "/a_rep.crf"}, contains("OK", "repeat=OnPage"))
     case("set_subsection bad repeat -> ERROR", "crf_set_subsection", {"path": A, "section": "그룹머리글", "repeat": "Always", "output": OUT + "/a_rep_bad.crf"}, err_contains("repeat"))
 
+# ---- v0.7.3: XML 데이터셋 XPath 읽기/검색 ----
+X = os.environ.get("CLIP_SMOKE_X", "C:/eGovFrameDev-4.3.1/workspace/report/meta/exm/exmn/exmnal/naplm0420_prn.crf")  # SQL 2 + XML 2 데이터셋
+if os.path.isfile(X):
+    case("get_query shows XPath for XML dataset", "crf_get_query", {"path": X, "dataset": "XMLDS1"}, contains("접근=XML", "경로(XPath)", "루트 = "))
+    case("search scope=xpath hits XML root path", "crf_search", {"dir": os.path.dirname(X), "text": "/", "scope": "xpath", "like": "naplm0420_prn"}, contains("[xpath XMLDS"))
+    case("search scope=query also covers xpath", "crf_search", {"dir": os.path.dirname(X), "text": "/", "scope": "query", "like": "naplm0420_prn"}, contains("[xpath XMLDS"))
+    case("search bad scope -> ERROR", "crf_search", {"dir": os.path.dirname(X), "text": "x", "scope": "nope"}, error)
+
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))
 case("db_query DDL refused", "db_query", {"sql": " /*c*/ drop table x"}, error)

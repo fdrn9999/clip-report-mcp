@@ -3,6 +3,10 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.7.3] - 2026-09-09
+### Added
+- **XPath 검색/읽기**: `crf_search` 에 `scope=xpath`(`query`/`any` 에도 포함) — XML/JSON 데이터셋의 루트 XPath(`DataAccessMethodXML/JSON.getRootPath`)·필드별 경로(`FieldData.getXMLPath`)·저장 프로시저명을 검색. `crf_get_query` 는 SQL 이 아닌 데이터셋에 "(SQL 데이터셋 아님)" 대신 루트 XPath 와 필드 경로를 출력. 이로써 클립소프트 유틸 **FindQuery(클립유틸 문자열찾기: 쿼리·XPath·보고서 텍스트 검색)** 의 기능을 모두 포함하고, 정규식·범위(field/formula/param/control)·매치 위치까지 더 제공. 저장소 실측: 데이터셋 4,800개 중 XML 22개(파일 7개)에서 루트 `rexdataset/rexrow` 검색 확인. smoke 156.
+
 ## [0.7.2] - 2026-09-09
 ### Changed
 - **참조 양식은 요소 전부를 좌표까지 판독** 규칙(`[★참조 양식은 요소 전부를 좌표까지 판독]`, 슬래시 명령 1-1 절, GUIDE 9-1-1, 레시피): HWPX/PDF/DOCX/HTML/이미지 어떤 형식이든 모든 요소의 x,y,너비,높이·정렬·글꼴·색·테두리·데이터 자리를 인벤토리한 뒤 배치하고, 형식별 추출 방법(parse_hwpx.py / PyMuPDF bbox / document.xml / getBoundingClientRect / 이미지 비율)과 "빠진 요소가 있으면 미완성, 끝에 렌더를 원본과 요소별 대조" 를 명시.

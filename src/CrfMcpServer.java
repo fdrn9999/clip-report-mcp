@@ -42,7 +42,7 @@ public class CrfMcpServer {
     "[그룹] 그룹 머리글=타이틀, 그룹 바닥글=요약함수(합계 등)로 소계. [조건스타일] 조건 충족 시 배경색 등 변경. [서브리포트] 다른 데이터셋. [다단] 레코드를 단으로 연속 출력.\n"+
     "[★쿼리 파라미터] {parameter.X} 는 항상 작은따옴표 문자열로 치환되므로 날짜 포맷은 TO_CHAR(TO_DATE('{parameter.DT}','YYYYMMDD'),…) 처럼 TO_DATE 먼저(문자열에 곧장 TO_CHAR 하면 Tibero JDBC-5075 로 쿼리 전체가 0건). 쿼리 수정은 디자이너에서 데이터셋을 통째로 다시 만들지 말고(셀 바인딩이 끊김) crf_set_query 로 문자열만 교체. CLIP 리포트 쿼리에서 파라미터는 반드시 '{parameter.COLNM}' 형식(대문자, 언더바는 유지: empNm→EMPNM, emp_nm→EMP_NM)으로 작성하세요. 문자열 조건은 작은따옴표로 감싸 \"= '{parameter.X}'\". 절대 :colNm, #{colNm}, ${colNm}, ? 같은 일반 SQL/MyBatis 바인드 표기를 쓰지 마세요. {dataset.X}는 다른 데이터셋 값 참조용입니다.\n"+
     "[★입력은 상황마다 다름] 화면(.xfdl/.vue)·문서양식(PDF)·쿼리(SQL/MyBatis)·백엔드·DB연결이 항상 다 주어지지는 않습니다(화면만, 쿼리 없이, 글 설명만일 수도). 프롬프트에 실제로 있는 자료만 사용하고, 적용 안 되는 단계는 건너뛰며, 도구는 '있는 입력+의도'에 맞춰 선택합니다(고정 순서 아님). 도구로 직접 확인 가능한 건 먼저 확보(파일 읽기·db_* 도구·백엔드 추적)하되, [★모르면 질문] 그래도 부족하거나 불명확한 정보(대상 파일·테이블·파라미터·조건 등)는 임의 추정·기본값으로 진행하지 말고 반드시 유저에게 질문해 확보하세요(질문은 한 번에 모아 간결히). 유저가 '추정해서 진행'을 명시한 경우에만 가정을 밝히고 진행합니다.\n"+
-    "[★쿼리 읽기/찾기] 리포트의 SQL 본문은 crf_get_query(JS 동적쿼리는 평문 복원본 포함), 공식 스크립트는 crf_get_formula, '어떤 리포트가 테이블 X/매개변수 Y/문구 Z 를 쓰나'는 crf_search(dir, text, scope) 로 확인하세요. crf_summary 는 개요만 줍니다.\n"+
+    "[★쿼리 읽기/찾기] 리포트의 SQL 본문은 crf_get_query(JS 동적쿼리는 평문 복원본 포함; XML/JSON 데이터셋은 루트 XPath·필드 경로), 공식 스크립트는 crf_get_formula, '어떤 리포트가 테이블 X/매개변수 Y/문구 Z 를 쓰나'는 crf_search(dir, text, scope) 로 확인하세요. crf_summary 는 개요만 줍니다.\n"+
     "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
     "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값), 글상자=crf_set_label, 밴드 행=crf_set_subsection(높이/숨김/페이지바꿈), 표 생성=crf_add_table(columns JSON), 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section/crf_remove_field. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
     "[★체크박스] 체크 표시는 ■/□·●/○ 글자로 흉내내지 말고 crf_set_cell_checkbox(셀 내용=체크박스 + 참/거짓 조건: field/true_value/false_value)로 만드세요. 조건이 비어 있으면 값이 뭐든 항상 빈 상자입니다. 기본은 색칠(check_type=Rectangle), V 체크/원은 옵션.\n"+
@@ -152,12 +152,12 @@ public class CrfMcpServer {
         strSchema(new String[]{"path","name"}, "path",".crf file", "name","field / parameter name", "dataset","dataset name/index to disambiguate (optional)")));
     arr.add(tool("crf_list_reports","List .crf report files under a directory (recursive), with total count; filter by name.",
         strSchema(new String[]{"dir"}, "dir","directory to scan", "like","file-name filter: substring or glob with * (optional)", "limit","max files to list (default 500)")));
-    arr.add(tool("crf_get_query","Return the FULL query text of a report's datasets: scriptType, connection, fields, used {parameter.X} (flags undeclared ones), {dataset.X} refs, estimated tables. JavaScript dynamic queries are also shown as reconstructed plain SQL (if-blocks as /*IF*/ comments). Use this to explain or find a report's SQL.",
+    arr.add(tool("crf_get_query","Return the FULL query text of a report's datasets: scriptType, connection, fields, used {parameter.X} (flags undeclared ones), {dataset.X} refs, estimated tables; XML/JSON datasets show their root XPath and per-field paths, stored-procedure datasets the procedure name. JavaScript dynamic queries are also shown as reconstructed plain SQL (if-blocks as /*IF*/ comments). Use this to explain or find a report's SQL.",
         strSchema(new String[]{"path"}, "path",".crf file", "dataset","dataset name or 0-based index (default: all)", "mode","both|raw|plain — for JavaScript queries show original, plain reconstruction, or both (default both)")));
     arr.add(tool("crf_get_formula","Return formula field scripts (JavaScript), running-total definitions (function/field/reset), and group-name fields, with referenced fields and any references to missing fields.",
         strSchema(new String[]{"path"}, "path",".crf file", "name","one field name (default: all)")));
-    arr.add(tool("crf_search","Search .crf files under a directory for text: in queries (plain-SQL view of JS queries), field names, formula scripts, parameters, or control/cell texts and bindings. E.g. find reports using table AHRM1234, parameter DEPTCD, or a label text.",
-        strSchema(new String[]{"dir","text"}, "dir","directory to scan (recursive)", "text","text to find (case-insensitive substring; or a regex when regex=true)", "regex","true for regex (default false)", "scope","query|field|formula|param|control|any (default any)", "like","file-name filter: substring or glob (optional)", "limit","max matching files to report (default 50)", "max_files","max files to scan (default 5000)")));
+    arr.add(tool("crf_search","Search .crf files under a directory for text: in queries (plain-SQL view of JS queries), XPath/JSON root paths and field paths of XML/JSON datasets (and stored-procedure names), field names, formula scripts, parameters, or control/cell texts and bindings. Superset of Clipsoft's FindQuery(클립유틸 문자열찾기) utility. E.g. find reports using table AHRM1234, parameter DEPTCD, an XPath node, or a label text.",
+        strSchema(new String[]{"dir","text"}, "dir","directory to scan (recursive)", "text","text to find (case-insensitive substring; or a regex when regex=true)", "regex","true for regex (default false)", "scope","query|xpath|field|formula|param|control|any (default any; query also covers xpath)", "like","file-name filter: substring or glob (optional)", "limit","max matching files to report (default 50)", "max_files","max files to scan (default 5000)")));
     arr.add(tool("crf_describe_layout","Describe a report's section bands: subsections (type/height/hidden, subreport links), controls with bindings, and table cell grids (‹병합›=merged-away, {fmt}=output format). detail=true adds per-cell/control style (align, font size/bold, can-grow, merge flag, conditional styles).",
         strSchema(new String[]{"path"}, "path",".crf file", "detail","true for style details per cell/control (default false)")));
     arr.add(tool("crf_validate","Lint a report: System(default) fonts and label/data font mismatch, vertically stacked same-style labels that should be one table/label, header-vs-body table column boundaries (Excel grid), dangling bindings (cells/labels/groups bound to fields that no longer exist), broken formula references (#unknown#, missing fields, no return), undeclared/unused parameters, query columns vs fields, scriptType mismatches, duplicate names, hidden subsections, missing linked subreport files. Read-only.",
@@ -1132,7 +1132,7 @@ public class CrfMcpServer {
       DataSetItemNormal n=ds.getDataSetItemNormal(); DataAccessMethodSQL qm=n==null?null:n.getDataAccessMethodSQL();
       b.append("\n=== DS[").append(idx).append("] ").append(ds.getName()).append("  접근=").append(n==null?"?":String.valueOf(n.getDataAccessMethod())).append("  연결=").append(n==null?"-":nameOf(n.getLinkedConnection()));
       b.append("\n  필드(").append(ds.getFieldDataList().size()).append("): ").append(fieldList(ds)).append("\n");
-      if(qm==null){ b.append("  (SQL 데이터셋 아님)\n"); continue; }
+      if(qm==null||!"SQL".equals(String.valueOf(n.getDataAccessMethod()))){ java.util.List<String[]> xp=xpathsOf(ds); if(xp.isEmpty()) b.append("  (SQL 데이터셋 아님 — 쿼리/경로 없음)\n"); else { b.append("  ----- ").append(String.valueOf(n.getDataAccessMethod())).append(" 경로(XPath) -----\n"); for(String[] e: xp) b.append("  ").append(e[0].equals("root")?"루트":e[0].equals("procedure")?"프로시저":"필드 "+e[0]).append(" = ").append(e[1]).append("\n"); } continue; }
       String raw=q(qm.getQueryString()); boolean js=qm.getScriptType()==ScriptType.JavaScript; String plain=js?jsToPlainSql(raw):raw;
       b.append("  scriptType=").append(qm.getScriptType()).append("  길이=").append(raw.length());
       RexObjectList<SQLParameter> sp=qm.getSQLParameterList(); if(sp!=null&&sp.size()>0){ b.append("  SQL매개변수: "); for(int k=0;k<sp.size();k++) b.append(k>0?", ":"").append(sp.get(k).getParameterName()).append("(").append(sp.get(k).getDataType()).append(")"); }
@@ -1177,7 +1177,7 @@ public class CrfMcpServer {
     int limit=pInt(args.get("limit"),50), maxFiles=pInt(args.get("max_files"),5000);
     if(dir==null||!new File(dir).isDirectory()) return "ERROR: dir 폴더 없음: "+dir;
     if(text==null||text.trim().isEmpty()) return "ERROR: text 인자가 비어 있습니다";
-    if(scope.isEmpty()) scope="any"; if(!scope.matches("query|field|formula|param|control|any|all")) return "ERROR: scope 는 query|field|formula|param|control|any";
+    if(scope.isEmpty()) scope="any"; if(!scope.matches("query|xpath|field|formula|param|control|any|all")) return "ERROR: scope 는 query|xpath|field|formula|param|control|any";
     java.util.regex.Pattern pat; try{ pat=java.util.regex.Pattern.compile(regex?text:java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE); }catch(Exception e){ return "ERROR: 정규식 오류: "+e.getMessage(); }
     java.util.List<Path> files=crfFiles(dir,like,maxFiles); Path root=Paths.get(dir);
     long t0=System.currentTimeMillis(); int scanned=0, hitFiles=0, unreadable=0; StringBuilder b=new StringBuilder();
@@ -1189,6 +1189,18 @@ public class CrfMcpServer {
     String head="search '"+text+"' scope="+scope+(regex?" (regex)":"")+" under "+dir+(like==null||like.isEmpty()?"":" like="+like)+": "+hitFiles+" file(s) hit, scanned "+scanned+"/"+files.size()+(unreadable>0?" (unreadable "+unreadable+")":"")+", "+(System.currentTimeMillis()-t0)+" ms"+(hitFiles>=limit?"  ⚠ limit "+limit+" 도달 — like/limit 으로 조정":"")+"\n";
     return head+(b.length()==0?"(일치 없음)":b.toString());
   }
+  /** SQL 이 아닌 데이터셋의 접근 경로: XML/JSON 루트 XPath + 필드별 경로, 저장 프로시저명. 없으면 null */
+  @SuppressWarnings("unchecked")
+  static java.util.List<String[]> xpathsOf(DataSet ds){
+    java.util.List<String[]> out=new java.util.ArrayList<>(); DataSetItemNormal n=ds.getDataSetItemNormal(); if(n==null) return out;
+    Object am=n.getDataAccessMethod(); String kind=am==null?"":String.valueOf(am);
+    Object x=n.getDataAccessMethodXML(), j=n.getDataAccessMethodJSON(), sp=n.getDataAccessMethodStoredProcedure();
+    if(kind.equals("XML")&&x!=null){ String rp=g(x,"getRootPath"); if(rp!=null&&!rp.isEmpty()) out.add(new String[]{"root",rp}); }
+    else if(kind.equals("JSON")&&j!=null){ String rp=g(j,"getRootPath"); if(rp!=null&&!rp.isEmpty()) out.add(new String[]{"root",rp}); }
+    else if(kind.equals("StoredProcedure")&&sp!=null){ String fn=g(sp,"getFunctionName"); if(fn!=null&&!fn.isEmpty()) out.add(new String[]{"procedure",fn}); }
+    if(kind.equals("XML")||kind.equals("JSON")){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList(); for(int i=0;i<fl.size();i++){ String xp=fl.get(i).getXMLPath(); if(xp!=null&&!xp.isEmpty()) out.add(new String[]{fl.get(i).getName(),xp}); } }
+    return out;
+  }
   static String oneLine(String x,int max){ String y=q(x).replaceAll("\\s+"," ").trim(); return y.length()>max?y.substring(0,max)+"…":y; }
   @SuppressWarnings("unchecked")
   static void collectHits(TheReportFile rf,String scope,java.util.regex.Pattern pat,java.util.List<String> hits){
@@ -1197,6 +1209,7 @@ public class CrfMcpServer {
     if(any||scope.equals("query")) for(int i=0;i<dss.size();i++){ DataSet ds=dss.get(i); DataSetItemNormal n=ds.getDataSetItemNormal(); DataAccessMethodSQL qm=n==null?null:n.getDataAccessMethodSQL(); if(qm==null) continue;
       String raw=q(qm.getQueryString()); String txt=qm.getScriptType()==ScriptType.JavaScript?jsToPlainSql(raw):raw; int c=0;
       for(String ln: txt.split("\\r?\\n")){ if(pat.matcher(ln).find()){ if(c++<3) hits.add("[query "+ds.getName()+"] "+oneLine(ln,160)); } } if(c>3) hits.add("[query "+ds.getName()+"] … +"+(c-3)+" lines"); }
+    if(any||scope.equals("query")||scope.equals("xpath")) for(int i=0;i<dss.size();i++){ DataSet ds=dss.get(i); for(String[] e: xpathsOf(ds)) if(pat.matcher(e[1]).find()||(!e[0].equals("root")&&!e[0].equals("procedure")&&pat.matcher(e[0]).find())) hits.add("[xpath "+ds.getName()+(e[0].equals("root")?"":e[0].equals("procedure")?" 프로시저":" 필드 "+e[0])+"] "+oneLine(e[1],160)); }
     if(any||scope.equals("field")){ for(int i=0;i<dss.size();i++){ RexObjectList<?> fl=dss.get(i).getFieldDataList(); for(int j=0;j<fl.size();j++) if(pat.matcher(nameOf(fl.get(j))).find()) hits.add("[field "+dss.get(i).getName()+"] "+nameOf(fl.get(j))); }
       for(RexObjectList<?> l: new RexObjectList<?>[]{rom.getFieldFormulaList(),rom.getFieldRunningTotalList(),rom.getFieldGroupNameList()}) if(l!=null) for(int j=0;j<l.size();j++) if(pat.matcher(nameOf(l.get(j))).find()) hits.add("["+fieldKindKo(l.get(j))+"필드] "+nameOf(l.get(j))); }
     if(any||scope.equals("formula")){ RexObjectList<FieldFormula> fl=(RexObjectList<FieldFormula>) rom.getFieldFormulaList(); for(int j=0;j<fl.size();j++){ String sc=q(fl.get(j).getScript()); if(pat.matcher(sc).find()) hits.add("[formula "+fl.get(j).getName()+"] "+oneLine(sc,140)); } }

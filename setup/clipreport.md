@@ -29,7 +29,7 @@ argument-hint: [.crf|화면.xfdl/.vue|PDF|SQL|테이블|폴더] "할말" (※일
 
 ## 1) 있는 자료만 읽어 확보 (해당될 때만)
 - `.crf` 있으면 → `crf_summary` (+`crf_describe_layout`): 데이터셋·필드·그룹·섹션/서브섹션·표 셀. **쿼리 본문이 필요하면 `crf_get_query`**(JS 동적쿼리는 평문 복원본 포함), 공식은 `crf_get_formula`
-- "어떤 리포트가 테이블/컬럼/매개변수/문구 X 를 쓰나" → `crf_search(dir, text, scope=query|field|formula|param|control|any)` (폴더 재귀, 파일명 필터 `like`)
+- "어떤 리포트가 테이블/컬럼/매개변수/문구 X 를 쓰나" → `crf_search(dir, text, scope=query|xpath|field|formula|param|control|any)` (폴더 재귀, 파일명 필터 `like`)
 - 화면 있으면 → **Read**: 항목·조회조건·그리드·트랜잭션/데이터셋ID·테이블명
 - **참조 양식(HWPX/PDF/DOCX/HTML/이미지)이 있으면 → 요소 전부를 좌표까지 판독**(아래 1-1)
 - 쿼리 텍스트 있으면 → 그대로 파싱: 컬럼·파라미터·동적조건

@@ -126,7 +126,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 | 파일 | 역할 |
 |---|---|
-| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 43개 (.crf 38 + DB 4 + PDF 1) |
+| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 43개 (.crf 38 + DB 4 + PDF 1). 클립소프트 FindQuery(문자열찾기) 유틸의 쿼리·XPath·텍스트 검색을 `crf_search` 가 포함 |
 | **CrfMcpHttp.java** | **MCP 서버 (원격 Streamable HTTP)** — 같은 도구 |
 | **CrfGen3.java** | SQL/MyBatis → 초안 생성기 (필드·쿼리·파라미터·그룹·푸터) |
 | **CrfGen2.java** | 파싱/변환 코어 (SELECT 컬럼 파서, MyBatis→JS, 파라미터 정규화, 타입추정) |
@@ -149,7 +149,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 설명 | `crf_validate(path)` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, 그룹 필드 null, 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음 |
 | 설명 | `crf_get_query(path, [dataset|mode])` | **쿼리 본문** — 데이터셋별 scriptType·연결·필드·사용 매개변수(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JS 동적쿼리는 원문 + **평문 복원본**(if 블록은 `/*IF*/` 주석) |
 | 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
-| 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로)·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
+| 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로; XML/JSON 데이터셋의 **XPath** 포함)·`xpath`·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
 | 설명 | `crf_list_reports(dir, [like|limit])` | 폴더의 .crf 목록 + 총 개수, 이름 필터(부분문자열/`*` 글롭) |
 | 생성 | `crf_generate(template, sql, output)` | SQL/MyBatis → 초안 .crf |
 | 수정 | `crf_set_query(path, sql, output, [dataset|script_type|declare_params|sync_fields])` | 데이터셋 쿼리 교체 — 데이터셋 선택, **scriptType 자동**(평문→NotScript, MyBatis→JS, `var sql`→JavaScript), **미선언 `{parameter.X}` 자동 선언**(String), **SELECT 컬럼을 필드로 추가**(`sync_fields=add` 기본 / `replace`=미참조 필드 제거 / `none`) |
