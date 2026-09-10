@@ -3,6 +3,16 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.8.0] - 2026-09-10
+### Added
+- **표 구조 편집(CRUD) 전면 구현** — CLIP SDK 에는 행/열 삽입·삭제 API 가 없어 `TableRow`/`TableColumn` 리스트와 행·열별 셀 리스트를 직접 재구성하는 `src/CrfTableOps.java` 추가. 모든 도구가 편집 전/후에 격자 불변식(행·열 셀 수, 행/열 참조, 병합 자리↔기준 셀 span, 기준 인덱스)을 검사하고 저장 후 되읽어 다시 검증.
+  - **`crf_table_rows`** `action=insert|copy|delete|move|resize|equalize`: 행 **중간 삽입**(`at` 또는 `row`+`position=before|after`, `count`, `height`; 위 행의 구조·스타일을 물려받고 가로 병합은 복제, 삽입 지점을 가로지르는 세로 병합은 span 이 늘어남) · **복제**(내용·바인딩까지) · **삭제**(`'1,3'`/`'2-4'`; 병합 기준 셀을 지우면 바로 아래 셀로 승격, 병합 자리를 지우면 span 감소) · **이동**(세로 병합 구간은 거부) · **높이 조정**(`heights='60,80,…'` 전체 / `'1:80,3:40'` 인덱스:값 / `row`+`height`) · **모든 행 같은 높이**(`height` 없으면 총 높이 유지). `shift=true`(기본) 면 표 아래 요소를 높이 변화만큼 옮기고 표를 감싸는 글상자(배경 상자)는 늘리며 밴드 높이도 맞춘다(줄일 땐 내용 아래로는 안 줄임).
+  - **`crf_table_cols`** 같은 6개 action 의 열 버전(`widths`, `width`, 가로 병합 연장/승격). 표가 용지 본문 너비를 넘으면 ⚠ 안내. `shift` 기본 false.
+  - **`crf_set_table`**: 표 위치(`left/top`), **전체 너비/높이**(열·행 비례 조정), 외곽선 `border`, **모든 셀 테두리 일괄** `cell_border=true|false|left,top…` + `linewidth`/`linecolor`, `auto_merge`, `keep_together=None|Row|Table`, `visible`, **`unmerge_all=true`**(표 전체 병합 해제), `name`(이름 변경).
+  - **`crf_table_info`**: 표 하나의 격자 — 위치·크기, 열 너비/행 높이 목록(합계), 셀별 내용과 병합 span `(r×c)`/`‹병합←r,c›`, `detail=true` 면 글꼴·정렬·배경·테두리(좌우상하), 격자 일관성 검사 결과. 편집 전 인덱스 확인용.
+  - **셀 테두리 변별**: `crf_set_cell`/`crf_set_cell_style` 에 `border=true|false|left,top…`(나머지 변은 끔), `linewidth`, `linecolor`.
+- 서버 instructions `[★레이아웃 수정/검증]` 에 표 구조 도구 경로(`crf_table_info → crf_table_rows/cols → crf_set_table`) 내장, GUIDE/README/문서형 레시피/`/clipreport` 에 반영. `tools/smoke.py` 187 케이스(병합 연장·승격·복제·이동·크기·균등·표 속성·테두리·오류 31개 추가).
+
 ## [0.7.3] - 2026-09-09
 ### Added
 - **XPath 검색/읽기**: `crf_search` 에 `scope=xpath`(`query`/`any` 에도 포함) — XML/JSON 데이터셋의 루트 XPath(`DataAccessMethodXML/JSON.getRootPath`)·필드별 경로(`FieldData.getXMLPath`)·저장 프로시저명을 검색. `crf_get_query` 는 SQL 이 아닌 데이터셋에 "(SQL 데이터셋 아님)" 대신 루트 XPath 와 필드 경로를 출력. 이로써 클립소프트 유틸 **FindQuery(클립유틸 문자열찾기: 쿼리·XPath·보고서 텍스트 검색)** 의 기능을 모두 포함하고, 정규식·범위(field/formula/param/control)·매치 위치까지 더 제공. 저장소 실측: 데이터셋 4,800개 중 XML 22개(파일 7개)에서 루트 `rexdataset/rexrow` 검색 확인. smoke 156.

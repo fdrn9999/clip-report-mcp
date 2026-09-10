@@ -274,6 +274,51 @@ if os.path.isfile(C):
          {"path": C, "columns": '[{"field":"EMP_NM","title":"성명","width":300},{"field":"DEPT_NM","title":"부서","width":500}]', "header_section": "none", "top": "2230", "name": "표_테스트", "output": OUT + "/c_table.crf"}, contains("OK", "표 '표_테스트'"))
     case("validate after edits", "crf_validate", {"path": OUT + "/c_table.crf"}, contains("ERROR 0", "문제 없음"))
 
+# ---- v0.8.0 표 CRUD (행/열 삽입·삭제·복제·이동·크기·균등, 표 속성, 전체 병합 해제, 셀 테두리) ----
+if os.path.isfile(C):
+    case("table_info grid", "crf_table_info", {"path": C, "table": "표_신고자"}, contains("2행×4열", "열 너비: [0]230 [1]473 [2]281 [3]476", "행 높이: [0]94 [1]94", "격자 정상"))
+    case("table_info detail borders", "crf_table_info", {"path": C, "table": "표_신고자", "detail": "true"}, contains("테두리 전체", "폰트=바탕체"))
+    case("merge 2x2 for structure tests", "crf_merge_cells",
+         {"path": C, "table": "표_신고자", "row": "0", "col": "1", "rowspan": "2", "colspan": "2", "output": OUT + "/t_m.crf"}, contains("OK", "2×2 병합"))
+    case("rows insert inside vertical merge -> span grows 3x2 + shift below", "crf_table_rows",
+         {"path": OUT + "/t_m.crf", "table": "표_신고자", "action": "insert", "at": "1", "height": "70", "output": OUT + "/t_r1.crf"},
+         contains("OK", "행 삽입 [1..1]", "3행×4열", "높이 188→258", "아래 요소 9개 +70 이동", "감싸는 요소 1개 높이 +70(글상자1)", "verified[grid ok]"))
+    case("table_info after insert shows 3x2", "crf_table_info", {"path": OUT + "/t_r1.crf", "table": "표_신고자"}, contains("EMP_NM(3×2)", "행 높이: [0]94 [1]70 [2]94", "병합 자리 5개, 격자 정상"))
+    case("rows delete merge anchor -> promoted 2x2", "crf_table_rows",
+         {"path": OUT + "/t_r1.crf", "table": "표_신고자", "action": "delete", "row": "0", "output": OUT + "/t_r2.crf"}, contains("OK", "행 [0] 삭제", "2행×4열", "높이 258→164", "-94 이동"))
+    case("table_info after delete", "crf_table_info", {"path": OUT + "/t_r2.crf", "table": "표_신고자"}, contains("EMP_NM(2×2)", "‹병합←0,1›", "격자 정상"))
+    case("cols insert inside horizontal merge -> 2x3", "crf_table_cols",
+         {"path": OUT + "/t_r2.crf", "table": "표_신고자", "action": "insert", "at": "2", "width": "250", "output": OUT + "/t_c1.crf"}, contains("OK", "2행×5열", "너비 1460→1710"))
+    case("table_info after col insert", "crf_table_info", {"path": OUT + "/t_c1.crf", "table": "표_신고자"}, contains("EMP_NM(2×3)", "열 너비: [0]230 [1]473 [2]250 [3]281 [4]476"))
+    case("cols delete merge anchor -> promoted 2x2", "crf_table_cols",
+         {"path": OUT + "/t_c1.crf", "table": "표_신고자", "action": "delete", "col": "1", "output": OUT + "/t_c2.crf"}, contains("OK", "열 [1] 삭제", "2행×4열", "너비 1710→1237"))
+    case("validate after structure edits", "crf_validate", {"path": OUT + "/t_c2.crf"}, contains("ERROR 0", "문제 없음"))
+    case("rows copy keeps content+style", "crf_table_rows",
+         {"path": C, "table": "표_신고자", "action": "copy", "row": "1", "output": OUT + "/t_cp.crf"}, contains("OK", "행 1 복제 → [2..2]", "3행×4열"))
+    case("table_info copy row content", "crf_table_info", {"path": OUT + "/t_cp.crf", "table": "표_신고자", "detail": "true"},
+         contains('[2] "직위/직급" «정렬=Middle/Center, 폰트=바탕체, 크기=10, 굵게, 줄바꿈, 배경=#D9D9D9, 테두리 전체» | 공식:JPOS_JGRD'))
+    case("rows move 2->0", "crf_table_rows", {"path": OUT + "/t_cp.crf", "table": "표_신고자", "action": "move", "row": "2", "to": "0", "output": OUT + "/t_mv.crf"}, contains("OK", "행 2 → 0 이동"))
+    case("table_info after move", "crf_table_info", {"path": OUT + "/t_mv.crf", "table": "표_신고자"}, contains('[0] "직위/직급" | 공식:JPOS_JGRD', '[1] "성명" | 데이터:EMP_NM'))
+    case("rows resize index:value", "crf_table_rows", {"path": OUT + "/t_mv.crf", "table": "표_신고자", "action": "resize", "heights": "1:120", "output": OUT + "/t_rs.crf"}, contains("OK", "{1=120}", "높이 282→308"))
+    case("rows equalize keep total", "crf_table_rows", {"path": OUT + "/t_rs.crf", "table": "표_신고자", "action": "equalize", "output": OUT + "/t_eq.crf"}, contains("OK", "총 308 유지, 각 102/마지막 104"))
+    case("cols equalize width=300", "crf_table_cols", {"path": OUT + "/t_eq.crf", "table": "표_신고자", "action": "equalize", "width": "300", "output": OUT + "/t_eqc.crf"}, contains("OK", "너비 균등 300 씩", "너비 1460→1200"))
+    case("cols resize col list + width", "crf_table_cols", {"path": OUT + "/t_eqc.crf", "table": "표_신고자", "action": "resize", "col": "0,2", "width": "200", "output": OUT + "/t_rsc.crf"}, contains("OK", "{0=200, 2=200}", "너비 1200→1000"))
+    case("cols move 3->1", "crf_table_cols", {"path": OUT + "/t_rsc.crf", "table": "표_신고자", "action": "move", "col": "3", "to": "1", "output": OUT + "/t_mvc.crf"}, contains("OK", "열 3 → 1 이동"))
+    case("cols copy before", "crf_table_cols", {"path": OUT + "/t_mvc.crf", "table": "표_신고자", "action": "copy", "col": "0", "position": "before", "output": OUT + "/t_cpc.crf"}, contains("OK", "열 0 복제 → [0..0]", "3행×5열"))
+    case("set_table width scale + borders + rename", "crf_set_table",
+         {"path": OUT + "/t_cpc.crf", "table": "표_신고자", "width": "1460", "left": "40", "cell_border": "true", "linewidth": "W100", "border": "true", "keep_together": "Row", "name": "표_신고자2", "output": OUT + "/t_st.crf"},
+         contains("OK", "width=1460(열 비례 [243, 243, 365, 365, 244])", "외곽선=true", "셀테두리=true(15셀)", "페이지나눔방지=Row", "name=표_신고자2", "위치 40,260"))
+    case("set_cell partial border + color", "crf_set_cell",
+         {"path": OUT + "/t_st.crf", "table": "표_신고자2", "row": "0", "col": "0", "border": "left,bottom", "linecolor": "#FF0000", "output": OUT + "/t_cb.crf"}, contains("OK", "테두리=left,bottom", "선색=#FF0000"))
+    case("table_info shows partial border", "crf_table_info", {"path": OUT + "/t_cb.crf", "table": "표_신고자2", "detail": "true"}, contains("테두리 좌하»"))
+    case("set_table unmerge_all", "crf_set_table", {"path": OUT + "/t_m.crf", "table": "표_신고자", "unmerge_all": "true", "output": OUT + "/t_um.crf"}, contains("OK", "전체 병합 해제(3셀 복구)"))
+    case("table_info after unmerge_all", "crf_table_info", {"path": OUT + "/t_um.crf", "table": "표_신고자"}, contains("병합 없음, 격자 정상"))
+    case("rows move across vertical merge -> ERROR", "crf_table_rows", {"path": OUT + "/t_m.crf", "table": "표_신고자", "action": "move", "row": "0", "to": "1", "output": OUT + "/t_e1.crf"}, err_contains("세로 병합 셀"))
+    case("rows delete all -> ERROR", "crf_table_rows", {"path": C, "table": "표_신고자", "action": "delete", "row": "0-1", "output": OUT + "/t_e2.crf"}, err_contains("모든 행"))
+    case("cols resize short list -> ERROR", "crf_table_cols", {"path": C, "table": "표_신고자", "action": "resize", "widths": "1,2", "output": OUT + "/t_e3.crf"}, err_contains("2개 ≠ 4개"))
+    case("rows insert at out of range -> ERROR", "crf_table_rows", {"path": C, "table": "표_신고자", "action": "insert", "at": "9", "output": OUT + "/t_e5.crf"}, err_contains("범위 밖"))
+    case("rows bad action -> ERROR", "crf_table_rows", {"path": C, "table": "표_신고자", "action": "explode", "output": OUT + "/t_e6.crf"}, err_contains("insert|delete|copy|move|resize|equalize"))
+
 # ---- v0.7.1: 글상자↔표 붙이기/나누기, 글꼴 상속/일괄, lint ----
 if os.path.isfile(D):
     case("validate D: stacked labels WARN", "crf_validate", {"path": D},

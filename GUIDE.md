@@ -189,7 +189,12 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | 쿼리 컬럼↔필드 맞추기 (`SELECT *` 는 DB 실행) | `crf_sync_fields` (`mode=sql|db`) |
 | 데이터셋 추가·삭제 / 매개변수 생성·수정·삭제 | `crf_add_dataset`·`crf_remove_dataset` / `crf_set_param`·`crf_remove_param` |
 | 필드 이름변경·삭제 (참조 검사) / 참조 위치 보기 | `crf_rename_field`·`crf_remove_field` / `crf_field_refs` |
-| 셀을 **체크박스**로(조건 기반 체크, 색칠/V/원) / 셀 **병합·해제** | `crf_set_cell_checkbox` / `crf_merge_cells` |
+| 셀을 **체크박스**로(조건 기반 체크, 색칠/V/원) / 셀 **병합·해제** / 전체 병합 해제 | `crf_set_cell_checkbox` / `crf_merge_cells` / `crf_set_table unmerge_all=true` |
+| 표 **격자 보기**(열 너비·행 높이·병합 span) | `crf_table_info` |
+| 표 **행** 중간 삽입·복제·삭제·이동·높이·**모든 행 같은 높이** | `crf_table_rows action=insert\|copy\|delete\|move\|resize\|equalize` |
+| 표 **열** 중간 삽입·복제·삭제·이동·너비·**모든 열 같은 너비** | `crf_table_cols action=insert\|copy\|delete\|move\|resize\|equalize` |
+| 표 위치·전체 너비/높이(비례)·외곽선·셀 테두리 일괄·이름·페이지나눔방지 | `crf_set_table` |
+| 셀 테두리 변별(좌/우/상/하)·선 굵기·선 색 | `crf_set_cell` / `crf_set_cell_style` (`border=left,top`, `linewidth`, `linecolor`) |
 | 글상자 추가(글꼴·정렬·글자색·테두리) / 글자색·밑줄·줄간격·여백 | `crf_add_label` / `crf_set_cell`·`crf_set_label` (`color|underline|linespace|padding|border`) |
 | 연속 문단/목록을 **표 하나**로 / 글상자 여러 개 **합치기** / **나누기** | `crf_add_table rows=[…]` / `crf_merge_labels` / `crf_split_label` |
 | 글꼴 **일괄**(라벨/데이터 따로, System 만) | `crf_set_font` |

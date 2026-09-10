@@ -35,7 +35,9 @@
 - `crf_add_table` 로 만든 표/SDK 로 새로 만든 `TableCellNormal` 은 **대각선(FDiagona/BDiagona) 기본값이 Solid 라 셀마다 X 가 그려진다** → v0.7.0 부터 도구가 None 으로 초기화. SDK 직접 사용 시 `cell.getLineInfoFDiagona().setLineStyle(None)` 필수.
 - 테두리는 셀마다 `setVisibleLeftLine…` + `getLineInfoLeft().setLineStyle(Solid)/setLineWidth(W050)`. 상자 하나(예 동의 표)를 3칸으로 나누되 안쪽 세로선을 없애려면 가운데 칸은 위/아래만 켠다.
 - 머리글 회색 배경: `bgcolor=#D9D9D9`(양식 `winBrush faceColor` 참고).
-- 병합: `crf_merge_cells(table,row,col,rowspan,colspan)` — 덮이는 자리는 `TableCellDumy`(describe 의 ‹병합›). 1×1 로 다시 부르면 해제.
+- 병합: `crf_merge_cells(table,row,col,rowspan,colspan)` — 덮이는 자리는 `TableCellDumy`(describe 의 ‹병합›). 1×1 로 다시 부르면 해제, 표 전체는 `crf_set_table unmerge_all=true`.
+- 구조 편집: 먼저 `crf_table_info` 로 열 너비·행 높이·병합 격자를 보고, 행은 `crf_table_rows`, 열은 `crf_table_cols`(`action=insert|copy|delete|move|resize|equalize`). 중간 삽입은 `at=인덱스`(또는 `row=N position=before|after`), 삽입 행은 위 행의 구조(가로 병합)·스타일을 물려받고 세로 병합을 가로지르면 병합이 늘어난다. 행 높이 변화는 기본(`shift=true`)으로 아래 요소·감싸는 글상자·밴드 높이를 같이 옮긴다. 양식 표를 용지 폭에 맞출 땐 `crf_set_table width=1460`(열 비례) 또는 `crf_table_cols equalize`.
+- 셀 테두리 변별: `crf_set_cell border=left,bottom linewidth=W100 linecolor=#000000`(나머지 변은 끔), 표 전체는 `crf_set_table cell_border=true|false`.
 - 셀 안 여백 `padding="l,t,r,b"`(0.1mm). 값 칸은 왼쪽 여백 8~20 정도가 자연스럽다.
 
 ## 3. 체크박스 — 글자로 흉내내지 말 것
