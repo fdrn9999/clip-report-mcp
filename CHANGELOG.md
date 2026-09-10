@@ -3,6 +3,18 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.10.0] - 2026-09-10
+v0.9.0 에서 미뤘던 ui-f6 요청 3건 + PLAN §3 생성기 개선을 한 번에. 새 코드는 `src/CrfDerive.java`.
+### Added
+- **`crf_generate` v2 — 목록형 리포트 한 방 파생**: `template` + `sql`(SQL/MyBatis/JS) + `columns=[{field|text,title,width,align,format,total,merge}]` + `title` + `cond`/`cond_right`(공식 또는 텍스트) + `groups=none|auto|A,B` 로 ① 템플릿 정리(그룹 밴드·그룹 객체·그룹이름/그룹인덱스 필드 제거, 누적합산의 그룹 기준 해제, SELECT 에 없는 필드는 셀/글상자 바인딩을 풀고 제거) ② 쿼리 적용(매개변수 선언, 필드 SELECT 순서; `fields_from_db=true` 또는 `SELECT *` 는 DB 메타데이터로 컬럼·타입 확정) ③ 본문 표 + 제목 표 + 합계 표를 columns 로 재구성(본문 표가 없으면 새로 생성) ④ 제목 글상자(머리글에서 가장 큰 정적 글상자)·조건 글상자(공식 바인딩 글상자 왼쪽/오른쪽) ⑤ 그룹 추가(`crf_add_group` 재사용: 머리글 라벨 + 소계 공식, 소계 라벨은 해당 열 위치·너비로 정렬하고 **'소 계' 라벨 자동 추가**) ⑥ 로고: 페이지 바닥글에 서브리포트가 이미 있으면 유지(예전엔 문자열 검색이라 임베디드는 못 봄) ⑦ 머리글 글상자를 본문 열 격자에 맞춤(엑셀 규칙) ⑧ 저장 후 되읽어 `crf_validate excel=true` 결과를 응답에 포함. 실서버 렌더(ahrmhr0240 템플릿 → 부서별 급여 현황, 그룹 DEPT_NM)로 제목·조건·그룹·소계·합계·바닥글 확인. `legacy=true` 면 v1(CrfGen3).
+- **`crf_set_columns` — 열 세트 전체 교체**: 본문 표를 columns 로 재구성하고, 같은 열 구조의 제목 표(페이지/데이터 머리글)·합계 표(데이터 바닥글)·그룹 바닥글 표도 같이. 열 수 증감은 `crf_table_cols` 의 삽입/삭제를 재사용해 **기존 열 스타일(글꼴·테두리·정렬)을 상속**, 너비 미지정 열은 남은 너비 균등, 숫자 필드는 오른쪽 정렬, `total` 열은 `F_TOTAL_<필드>`/`F_SUB_<필드>`(그룹 기준) 공식 + 합 계/소 계 라벨. `merge`(셀합치기)는 기본 끔(템플릿이 전 셀 켜 둔 경우가 많아 파생 리포트에서 엉뚱한 병합이 생김). `snap=true` 면 머리글 글상자를 격자에 맞춤. 저장 후 격자 불변식 + 엑셀 격자 검사. 13열×2표 26호출 → 1호출.
+- **`crf_append_query_condition`**: 기존 쿼리에 `if('{parameter.P}' != ''){ sql += "…"; }` 블록 하나 추가. 기본은 ORDER BY 앞(한 줄에 WHERE…ORDER BY 가 붙어 있으면 줄을 나눔), `position=end|after:<문자열>`(기준 줄이 if 안이면 그 블록이 닫힌 뒤). 평문 SQL(NotScript)은 JS 로 변환, `return sql;` 보장, `:p/#{p}` 정규화, 매개변수 선언, 저장 후 검증 + 삽입 부근 표시. 파이썬으로 raw 를 붙이다 `\r\n` 이스케이프가 깨져 0건 나던 문제의 대안.
+- **MyBatis `<foreach>`·`<trim>`·`<set>`**: `<foreach collection=deptList item=d open="(" separator="," close=")">#{d}</foreach>` → `var __fe1 = ('{parameter.DEPTLIST}'=='')?[]:'{parameter.DEPTLIST}'.split(','); for(...){ if(i>0) sql+=","; sql += "'" + __fe1[i] + "'"; }` (매개변수는 `A,B,C` 처럼 쉼표 문자열로 전달, 경고로 안내; `${item}` 은 따옴표 없이). `<trim prefix="WHERE" prefixOverrides>` → `WHERE 1=1`, 그 외 prefix/suffix 는 붙이되 overrides 는 경고. `crf_get_query` 평문 복원이 `var`/`for` 를 `/*FOREACH*/` 로 표시.
+- 서버 instructions `[★목록형 리포트는 crf_generate 한 방]`, README/GUIDE/`/clipreport` 도구 매핑, `tools/smoke.py` 265 케이스(+29).
+### Fixed
+- `crf_remove_field`/그룹 정리에서 **그룹인덱스 필드 목록을 안 봐서** 지운 그룹이 참조로 남던 문제(`removeFromLists` 에 FieldGroupIndex 추가).
+- `crf_sync_fields mode=db` 의 DB 메타데이터 부분을 `dbMeta()` 로 분리(생성기와 공유).
+
 ## [0.9.0] - 2026-09-10
 workspace/ui 세션(ahrmhr 리포트 5종 작업)의 사용 피드백을 반영한 릴리스. 원인을 코드/실파일로 확인한 것만 고쳤고, 재현되지 않은 지적은 아래 "확인 결과" 에 적었다.
 ### Fixed

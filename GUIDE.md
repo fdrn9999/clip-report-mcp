@@ -187,7 +187,8 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | **엑셀 격자** — 엑셀로 내보내는 밴드의 모든 세로선을 본문 표 열 경계에 맞췄는지(어긋난 변·가까운 경계 제시, 페이지 바닥글 제외) | `crf_validate excel=true` |
 | 표 생성 / 그룹 위치·라벨·소계 / 삭제(컨트롤·그룹·밴드) | `crf_add_table` / `crf_add_group`·`crf_set_group` / `crf_remove_control`·`crf_remove_group`·`crf_remove_section` |
 | 폴더 리포트 찾기 | `crf_list_reports` |
-| SQL/MyBatis로 초안 생성 | `crf_generate` |
+| **목록형 리포트 한 방 파생**(템플릿+SQL+columns+제목/조건/그룹) | `crf_generate` (v2) |
+| 열 세트 전체 교체(본문·제목·합계·소계 표) / 쿼리에 조건 if 블록 추가 | `crf_set_columns` / `crf_append_query_condition` |
 | 쿼리 교체(매개변수 선언·필드 동기화) / 그룹 추가 / 본문 필드 배치 | `crf_set_query` / `crf_add_group` / `crf_place_detail_fields` |
 | 쿼리 컬럼↔필드 맞추기 (`SELECT *` 는 DB 실행) / **필드 순서**(위치 매핑) 재정렬 | `crf_sync_fields` (`mode=sql|db`) / `crf_reorder_fields` |
 | 데이터셋 추가·삭제 / 매개변수 생성·수정·삭제 | `crf_add_dataset`·`crf_remove_dataset` / `crf_set_param`·`crf_remove_param` |

@@ -151,7 +151,9 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
 | 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로; XML/JSON 데이터셋의 **XPath** 포함)·`xpath`·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
 | 설명 | `crf_list_reports(dir, [like|limit])` | 폴더의 .crf 목록 + 총 개수, 이름 필터(부분문자열/`*` 글롭) |
-| 생성 | `crf_generate(template, sql, output)` | SQL/MyBatis → 초안 .crf |
+| 생성 | `crf_generate(template, sql, output, [columns|title|cond|cond_right|groups|clean_template|fields_from_db|params|snap|logo])` | **목록형 리포트 한 방 파생(v2)** — 템플릿 그룹·묵은 필드/바인딩 정리 → 쿼리(매개변수 선언·필드 SELECT 순서·`SELECT *` 는 DB 메타데이터) → 본문/제목/합계 표를 `columns` 로 재구성 → 제목·조건 글상자 → 그룹(`auto`=GROUP BY 첫 컬럼, 소계 라벨 열 정렬) → 로고 유지 → 엑셀 격자 맞춤 → `crf_validate excel=true`. `legacy=true` 면 v1 |
+| 수정 | `crf_set_columns(path, columns, output, [table|header_table|footer_table|width|total_label|snap])` | **열 세트 전체 교체** — 본문 표 + 제목 표 + 합계 표(+그룹 바닥글 소계 표)를 `columns=[{field|text,title,width,align,format,total,merge}]` 로 재구성. 스타일은 기존 열에서 상속, 숫자 열 오른쪽 정렬, `total` 열은 `F_TOTAL_*` 공식 |
+| 수정 | `crf_append_query_condition(path, sql, output, [dataset|param|condition|position])` | JS 동적쿼리에 **조건 if 블록 하나 추가**(ORDER BY 앞 기본, `end`, `after:<문자열>`; 기준 줄이 if 안이면 블록 닫힌 뒤). 평문 SQL 은 JS 로 변환, `return sql;` 보장, 매개변수 선언 |
 | 수정 | `crf_set_query(path, sql, output, [dataset|script_type|declare_params|sync_fields|reorder])` | 데이터셋 쿼리 교체 — 데이터셋 선택, **scriptType 자동**(평문→NotScript, MyBatis→JS, `var sql`→JavaScript), **미선언 `{parameter.X}` 자동 선언**(String), **SELECT 컬럼을 필드로 추가**(`sync_fields=add` 기본 / `replace`=미참조 필드 제거 / `none`) |
 | 수정 | `crf_reorder_fields(path, output, [dataset|order])` | **필드 순서 재정렬** — 필드는 이름이 아니라 **목록 위치**로 SELECT 컬럼에 대응하므로 순서가 어긋나면 엉뚱한 값이 찍힘. `order=query`(기본, SELECT 순서) / `order=A,B,C` |
 | 수정 | `crf_sync_fields(path, output, [dataset|mode|params|set_types|remove_unused|reorder])` | 필드 목록을 쿼리 컬럼에 맞춤. `mode=sql` 파싱 / **`mode=db`: 쿼리를 `SELECT * FROM (…) WHERE 1=0` 로 실행해 ResultSetMetaData 로 컬럼·타입 확정**(`SELECT *`·함수테이블 해결, 매개변수는 `params` JSON 또는 `''`/NULL) |
@@ -260,7 +262,7 @@ DB 도구(`db_query`/`db_tables`/`db_columns`/`db_sample`)용 접속정보는 **
 - *"AHRM1234 테이블 쓰는 리포트 찾아줘"* / *"DEPTCD 매개변수 받는 리포트?"* → `crf_search(dir, "AHRM1234", scope="query")` / `scope="param"`
 - *"이 공식 뭐 하는 거야?"* → `crf_get_formula`
 - *"이 리포트 레이아웃 보고 개선점 제안해줘"* → 설명 도구로 읽고 **편집 제안**
-- *"이 SQL로 학과별 그룹 잡힌 초안 만들어줘, 출력은 out.crf"* → `crf_generate`
+- *"이 SQL로 학과별 그룹 잡힌 초안 만들어줘, 출력은 out.crf"* → `crf_generate`(template=비슷한 목록형 리포트, `groups=DEPT_NM`, `columns` 로 제목·너비·합계 지정)
 - *"방금 거 본문에 필드 깔고 직급으로 그룹 하나 더 추가해"* → `crf_place_detail_fields` + `crf_add_group`
 - *"WHERE에 학기 조건 넣어서 다시 저장해"* → `crf_set_query`
 

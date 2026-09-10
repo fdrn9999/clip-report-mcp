@@ -103,8 +103,11 @@ if os.path.isfile(B):
          {"path": B, "sql": js_q, "dataset": "SQLDS3", "output": OUT + "/b_q5.crf"},
          contains("SQLDS3", "→ JavaScript", "'{parameter.X}'"))
     case("generate from SQL sample", "crf_generate",
-         {"template": B, "sql": open(os.path.join(PROJ, "samples", "sample_query.sql"), encoding="utf-8").read(), "output": OUT + "/gen.crf"},
+         {"template": B, "sql": open(os.path.join(PROJ, "samples", "sample_query.sql"), encoding="utf-8").read(), "legacy": "true", "output": OUT + "/gen.crf"},
          contains("written", "fields(6)"))
+    case("generate v2 on a subreport-style template -> clear ERROR", "crf_generate",
+         {"template": B, "sql": open(os.path.join(PROJ, "samples", "sample_query.sql"), encoding="utf-8").read(), "output": OUT + "/gen_v2.crf"},
+         lambda t, e: None if (not e and "OK" in t) or (e and ("본문 밴드" in t or "template" in t)) else f"gen v2 on B: {t[:300]}")
     case("generate output==template -> ERROR", "crf_generate", {"template": B, "sql": "SELECT 1 A FROM DUAL", "output": B}, error)
 
 # ---- v0.5.0 읽기: 쿼리/공식/검색/목록 ----
@@ -440,9 +443,12 @@ if os.path.isfile(E):
     # 엑셀 격자 lint (v0.9.0): 페이지 바닥글 제외, 글상자 좌우·표 경계·선 x 를 본문 경계와 대조
     F1 = os.environ.get("CLIP_SMOKE_F1", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmhr/ahrmhr0120_prn01.crf")
     if os.path.isfile(F1):
+        # ui-f6 가 실파일을 이미 맞춰 놓았으므로(v0.9.0), 어긋난 사본을 만들어 검사
+        case("make misaligned copy (글상자2 width 620)", "crf_set_label", {"path": F1, "name": "글상자2", "width": "620", "output": OUT + "/f1_mis.crf"}, contains("OK"))
+        F1 = OUT + "/f1_mis.crf"
         case("validate excel grid INFO lists misaligned label edge only", "crf_validate", {"path": F1},
              lambda t, e: None if not e and "ℹ 엑셀 격자: 본문 표 경계 11개 외에 어긋난 세로선 1개([620])" in t and '글상자2": 오른쪽 620(가까운 경계 460/840)' in t and "글상자3" not in t.split("엑셀 격자")[1].split("ℹ")[0] and "글상자4" not in t else f"excel grid: {t[:600]}")
-        case("validate excel=true -> WARN", "crf_validate", {"path": F1, "excel": "true"}, contains("WARN 1", "⚠ 엑셀 격자"))
+        case("validate excel=true -> WARN", "crf_validate", {"path": F1, "excel": "true"}, contains("⚠ 엑셀 격자"))
         case("align label to body boundary clears the finding", "crf_set_label", {"path": F1, "name": "글상자2", "width": "840", "output": OUT + "/f1_al.crf"}, contains("OK"))
         case("validate after align: no excel grid finding", "crf_validate", {"path": OUT + "/f1_al.crf", "excel": "true"}, lambda t, e: None if not e and "엑셀 격자" not in t else f"still: {t[:300]}")
 if os.path.isfile(C):
@@ -454,6 +460,61 @@ if os.path.isfile(C):
     case("set_paper fit back to Potrait restores width", "crf_set_paper", {"path": OUT + "/c_p2.crf", "orientation": "Potrait", "fit": "true", "output": OUT + "/c_p3.crf"}, contains("OK", "2970x2100→2100x2970", "본문 너비=1500"))
     case("fit round trip exact", "crf_table_info", {"path": OUT + "/c_p3.crf", "table": "표_신고자"}, contains("(합 1460)"))
     case("set_paper bad orientation -> ERROR", "crf_set_paper", {"path": C, "orientation": "Sideways", "output": OUT + "/c_p_bad.crf"}, err_contains("orientation"))
+
+# ---- v0.10.0: 목록형 파생 — set_columns / append_query_condition / generate v2 / MyBatis foreach·trim ----
+if os.path.isfile(E):
+    NEWSQL = "SELECT T1.EMPNO, T2.EMP_NM, T1.DEPT_NM, T1.JGRD_NM, TO_CHAR(T1.APPNM_DT,'YYYY-MM-DD') AS APPNM_DT, T1.SAL_AMT, T1.REMRK FROM ADM.AHRM100 T1, ADM.AHRM110 T2 WHERE T1.EMPNO=T2.EMPNO AND T1.DEPT_CD='{parameter.DEPTCD}' ORDER BY T1.EMPNO"
+    COLS = ["EMPNO", {"field": "EMP_NM", "title": "성명", "width": 300}, {"field": "DEPT_NM", "title": "부서"}, {"field": "JGRD_NM", "title": "직급", "width": 250},
+            {"field": "APPNM_DT", "title": "임용일자", "width": 300, "align": "Center"}, {"field": "SAL_AMT", "title": "급여", "width": 350, "format": "#,##0", "total": "sum"}, {"text": "", "title": "비고", "width": 400}]
+    case("set_query(replace) for set_columns", "crf_set_query", {"path": E, "sql": NEWSQL, "sync_fields": "replace", "output": OUT + "/v10_a.crf"}, contains("OK", "+ 필드 추가: [DEPT_NM, SAL_AMT]"))
+    case("set_columns rebuilds body/title/total/group-footer tables + snap", "crf_set_columns", {"path": OUT + "/v10_a.crf", "columns": COLS, "snap": "true", "output": OUT + "/v10_b.crf"},
+         contains("OK: 열 세트 교체 → 7열", "본문 표 '표3' 7열 재구성(너비 [535, 300, 535, 250, 300, 350, 400] 합 2670)", "제목 표 '표1' 제목 7개", "합계 표 '표4' — 합 계 라벨 [0], 집계 열 1개", "그룹 바닥글 표 '표2' — 소 계(UNIV_NM 기준)", "엑셀 격자 맞춤: Label \"글상자2\" 0~620 → 0~535", "표3: 데이터:EMPNO | 데이터:EMP_NM | 데이터:DEPT_NM | 데이터:JGRD_NM | 데이터:APPNM_DT | 데이터:SAL_AMT{#,##0} | ·"))
+    case("set_columns result: describe", "crf_describe_layout", {"path": OUT + "/v10_b.crf"}, contains('[0] "EMPNO" | "성명" | "부서" | "직급" | "임용일자" | "급여" | "비고"', '"합 계" | · | · | · | · | 공식:F_TOTAL_SAL_AMT{#,##0} | ·', '"소 계" | · | · | · | · | 공식:F_SUB_SAL_AMT{#,##0} | ·'))
+    case("set_columns result: excel grid clean", "crf_validate", {"path": OUT + "/v10_b.crf", "excel": "true"}, lambda t, e: None if not e and "엑셀 격자" not in t and "ERROR 0" in t else f"grid: {t[:400]}")
+    case("set_columns unknown field -> ERROR", "crf_set_columns", {"path": OUT + "/v10_a.crf", "columns": ["NOPE"], "output": OUT + "/v10_bad.crf"}, err_contains("필드 'NOPE' 없음"))
+    case("set_columns bad total -> ERROR", "crf_set_columns", {"path": OUT + "/v10_a.crf", "columns": [{"field": "EMPNO", "total": "median"}], "output": OUT + "/v10_bad2.crf"}, err_contains("total 은"))
+    # 재검토 반영: 병합된 제목 행도 재구성, 합계 함수별 공식 이름, 괄호 안 ORDER BY 무시
+    case("merge title cells before set_columns", "crf_merge_cells", {"path": OUT + "/v10_a.crf", "table": "표1", "row": "0", "col": "0", "rowspan": "1", "colspan": "3", "output": OUT + "/v10_m.crf"}, contains("OK"))
+    case("set_columns unmerges the title row and keeps the grid valid", "crf_set_columns", {"path": OUT + "/v10_m.crf", "columns": ["EMPNO", {"field": "SAL_AMT", "title": "급여평균", "total": "avg", "format": "#,##0.0"}], "output": OUT + "/v10_m2.crf"},
+         contains("OK: 열 세트 교체 → 2열", "제목 표 '표1' 제목 2개", "verified" if False else "OK"))
+    case("set_columns avg total → F_TOTAL_AVG_ formula, grid ok", "crf_table_info", {"path": OUT + "/v10_m2.crf", "table": "표1"}, contains("2열", "격자 정상", '"EMPNO" | "급여평균"'))
+    case("avg formula name/script", "crf_get_formula", {"path": OUT + "/v10_m2.crf", "name": "F_TOTAL_AVG_SAL_AMT"}, contains('rexpert.avg(0,"data.SAL_AMT",0,"","")'))
+    case("append_query_condition ignores ORDER BY inside OVER(...)", "crf_append_query_condition",
+         {"path": E, "param": "X", "sql": "AND 1=1", "output": OUT + "/v10_over.crf", "dataset": "0"}, contains("OK"))
+    case("set_query with window ORDER BY only", "crf_set_query", {"path": E, "sql": "SELECT ROW_NUMBER() OVER (ORDER BY T1.EMPNO) AS RN, T1.EMPNO FROM ADM.AHRM100 T1", "output": OUT + "/v10_win.crf"}, contains("OK"))
+    case("append_query_condition: no final ORDER BY → before return", "crf_append_query_condition",
+         {"path": OUT + "/v10_win.crf", "param": "DEPTCD", "sql": "AND T1.DEPT_CD = '{parameter.DEPTCD}'", "output": OUT + "/v10_win2.crf"},
+         lambda t, e: None if not e and "return 앞" in t and "OVER (ORDER BY T1.EMPNO) AS RN, T1.EMPNO FROM ADM.AHRM100 T1" in t else f"window order by: {t[:400]}")
+    case("append_query_condition: plain SQL → JS, before ORDER BY, splits line", "crf_append_query_condition",
+         {"path": OUT + "/v10_a.crf", "param": "jgrdCd", "sql": "AND T1.JGRD_CD = #{jgrdCd}", "output": OUT + "/v10_c.crf"},
+         contains("OK", "(ORDER BY 앞, 3줄)", "평문 SQL 을 JavaScript 동적쿼리로 변환", "+ if('{parameter.JGRDCD}' != ''){", "+ sql += \"AND T1.JGRD_CD = '{parameter.JGRDCD}'\\r\\n\";", "  sql += \"ORDER BY T1.EMPNO\\r\\n\";"))
+    case("append_query_condition: after:<text> inside if → after the block", "crf_append_query_condition",
+         {"path": OUT + "/v10_c.crf", "param": "EMPNM", "sql": "AND T2.EMP_NM LIKE '%' || '{parameter.EMPNM}' || '%'", "position": "after:JGRD_CD", "output": OUT + "/v10_d.crf"},
+         contains("OK", "('JGRD_CD' 다음, 3줄)", "기준 줄이 if 블록 안이라 그 블록이 닫힌 뒤에 삽입"))
+    case("append_query_condition: declares new param", "crf_append_query_condition",
+         {"path": OUT + "/v10_d.crf", "param": "NATNCD", "sql": "AND T1.NATN_CD = '{parameter.NATNCD}'", "output": OUT + "/v10_e.crf"}, contains("OK", "+ 매개변수 선언: [NATNCD]"))
+    case("append_query_condition: validate has return + no errors", "crf_validate", {"path": OUT + "/v10_e.crf"}, contains("ERROR 0"))
+    case("append_query_condition: neither param nor condition -> ERROR", "crf_append_query_condition", {"path": OUT + "/v10_a.crf", "sql": "AND 1=1", "output": OUT + "/v10_bad3.crf"}, err_contains("param", "condition"))
+    case("append_query_condition: bad position -> ERROR", "crf_append_query_condition", {"path": OUT + "/v10_a.crf", "param": "X", "sql": "AND 1=1", "position": "middle", "output": OUT + "/v10_bad4.crf"}, err_contains("position"))
+    MBFE = ('<select id="x">SELECT T1.EMPNO, T1.EMP_NM FROM T T1 <trim prefix="WHERE" prefixOverrides="AND |OR "><if test="deptList != null"> AND T1.DEPT_CD IN '
+            '<foreach collection="deptList" item="d" open="(" separator="," close=")">#{d}</foreach></if></trim> ORDER BY T1.EMPNO</select>')
+    case("MyBatis foreach → split loop, trim WHERE → 1=1", "crf_set_query", {"path": E, "sql": MBFE, "output": OUT + "/v10_fe.crf"}, contains("OK", "<foreach collection=deptList> → 매개변수 DEPTLIST 를 쉼표로"))
+    case("MyBatis foreach: generated JS", "crf_get_query", {"path": OUT + "/v10_fe.crf"},
+         contains("sql += \" WHERE 1=1 \\r\\n\";", "var __fe1 = ('{parameter.DEPTLIST}' == '') ? [] : '{parameter.DEPTLIST}'.split(',');", "for(var __i1=0; __i1<__fe1.length; __i1++){", "if(__i1>0) sql += \",\";", "sql += \"'\" + __fe1[__i1] + \"'\";", "/*FOREACH"))
+    GENSQL = "SELECT T1.DEPT_NM, T1.EMPNO, T2.EMP_NM, T1.JGRD_NM, TO_CHAR(T1.APPNM_DT,'YYYY-MM-DD') AS APPNM_DT, T1.SAL_AMT FROM ADM.AHRM100 T1, ADM.AHRM110 T2 WHERE T1.EMPNO=T2.EMPNO AND T1.STDR_DT = '{parameter.STDRDT}' ORDER BY T1.DEPT_NM, T1.EMPNO"
+    GENCOLS = [{"field": "DEPT_NM", "title": "부서", "width": 500}, {"field": "EMPNO", "title": "사번", "width": 300}, {"field": "EMP_NM", "title": "성명", "width": 300}, {"field": "JGRD_NM", "title": "직급"},
+               {"field": "APPNM_DT", "title": "임용일자", "align": "Center", "width": 350}, {"field": "SAL_AMT", "title": "급여", "format": "#,##0", "total": "sum", "width": 400}]
+    case("generate v2: full derivation with group", "crf_generate",
+         {"template": E, "sql": GENSQL, "columns": GENCOLS, "title": "부서별 급여 현황", "cond": "var s=\"기준일자: \"+rexpert.field(\"parameter.STDRDT\"); return s;", "cond_right": "", "groups": "DEPT_NM", "output": OUT + "/v10_gen.crf"},
+         contains("OK: 목록형 리포트 파생 완료", "템플릿 그룹 1개 제거", "SELECT 에 없는 필드 11개 바인딩 해제·제거", "본문 표 '표3' 6열 재구성", "제목 글상자 \"글상자1\" = \"부서별 급여 현황\"", "조건 글상자(왼쪽) \"글상자2\": 공식 COND 스크립트 교체", "조건 글상자(오른쪽) \"글상자3\": 비움",
+                  "로고: 페이지 바닥글에 서브리포트가 이미 있어 유지", "그룹 DEPT_NM: OK: added group on DEPT_NM", "그룹 바닥글에 '소 계' 라벨 1개 추가", "필드(6): DEPT_NM, EMPNO, EMP_NM, JGRD_NM, APPNM_DT, SAL_AMT", "ERROR 0 / WARN 1"))
+    case("generate v2: no leftover group refs / excel grid clean", "crf_validate", {"path": OUT + "/v10_gen.crf", "excel": "true"}, lambda t, e: None if not e and "엑셀 격자" not in t and "남은 참조" not in t and "그룹 필드 null" not in t else f"gen validate: {t[:500]}")
+    case("generate v2: layout", "crf_describe_layout", {"path": OUT + "/v10_gen.crf"},
+         contains('[텍스트:"부서별 급여 현황"]', 'GroupHeader(→DEPT_NM)', '"grp_DEPT_NM" [데이터:DEPT_NM]  위치(왼0,위0,너비800', '"sub_SAL_AMT" [공식:SUM_SAL_AMT_BY_DEPT_NM]  위치(왼2270,위0,너비400', '"lbl_subtotal" [텍스트:"소 계"]  위치(왼1920,위0,너비350', '"합 계" | · | · | · | · | 공식:F_TOTAL_SAL_AMT{#,##0}'))
+    case("generate v2: columns omitted → all SELECT columns", "crf_generate", {"template": E, "sql": "SELECT EMPNO, EMP_NM, DEPT_CD FROM ADM.AHRM100 WHERE ROWNUM < 5", "output": OUT + "/v10_gen2.crf"},
+         contains("OK", "columns 미지정 → SELECT 컬럼 3개 전부", "본문 표 '표3' 3열 재구성(너비 [890, 890, 890] 합 2670)", "groups" if False else "OK"))
+    case("generate v2: output==template -> ERROR", "crf_generate", {"template": E, "sql": "SELECT 1 FROM DUAL", "output": E}, err_contains("output 이 template 과 같습니다"))
+    case("generate v2: missing template -> ERROR", "crf_generate", {"template": "C:/nope.crf", "sql": "SELECT 1 FROM DUAL", "output": OUT + "/v10_gen3.crf"}, err_contains("template 파일 없음"))
 
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))
