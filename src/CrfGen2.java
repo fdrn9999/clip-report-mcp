@@ -18,7 +18,7 @@ public class CrfGen2 {
   // ---------- shared SQL parsing (column / groupby / params) ----------
   static String removeLineComment(String line){ boolean q=false; for(int i=0;i<line.length();i++){char c=line.charAt(i); if(c=='\'')q=!q; if(!q&&c=='-'&&i+1<line.length()&&line.charAt(i+1)=='-')return line.substring(0,i);} return line; }
   static String stripComments(String s){ s=s.replaceAll("(?s)/\\*.*?\\*/",""); StringBuilder o=new StringBuilder(); for(String ln:s.split("\n"))o.append(removeLineComment(ln)).append("\n"); return o.toString(); }
-  static String stripTags(String s){ s=s.replace("<![CDATA[","").replace("]]>",""); return s.replaceAll("(?s)<[^>]+>"," "); }
+  static String stripTags(String s){ s=s.replace("<![CDATA[","").replace("]]>",""); return unescapeXml(MB_TAG.matcher(s).replaceAll(" ")); }
   static boolean matchWord(String up,int i,String kw){ if(!up.startsWith(kw,i))return false; boolean lb=i==0||(!Character.isLetterOrDigit(up.charAt(i-1))&&up.charAt(i-1)!='_'); int e=i+kw.length(); boolean rb=e>=up.length()||(!Character.isLetterOrDigit(up.charAt(e))&&up.charAt(e)!='_'); return lb&&rb; }
   static int indexOfKeyword(String up,String kw,int from){ int d=0; boolean q=false; for(int i=from;i<up.length();i++){char c=up.charAt(i); if(c=='\'')q=!q; if(q)continue; if(c=='(')d++; else if(c==')')d--; else if(d==0&&matchWord(up,i,kw))return i;} return -1; }
   static String selectList(String sql){ String up=sql.toUpperCase(); int sel=indexOfKeyword(up,"SELECT",0); if(sel<0)return null; int st=sel+6,d=0; boolean q=false; for(int i=st;i<sql.length();i++){char c=sql.charAt(i); if(c=='\'')q=!q; if(q)continue; if(c=='(')d++; else if(c==')')d--; else if(d==0&&matchWord(up,i,"FROM"))return sql.substring(st,i);} return sql.substring(st); }
@@ -39,7 +39,7 @@ public class CrfGen2 {
   static List<String> parseColumns(String sql){ String list=selectList(sql); List<String> c=new ArrayList<>(); if(list==null)return c;
     List<String> items=splitTop(list);
     for(String it:items){ String tt=it.trim(); if(tt.equals("*")||tt.endsWith(".*")) return c; }  // SELECT * -> not derivable from SQL (need runtime metadata)
-    int i=0; for(String it:items){i++; String n=colName(it); if(n==null)n="COL_"+i; if(!c.contains(n))c.add(n);} return c; }
+    int i=0; java.util.Set<String> seen=new java.util.HashSet<>(); for(String it:items){i++; String n=colName(it); if(n==null||seen.contains(n.toUpperCase())) n="COL_"+i; seen.add(n.toUpperCase()); c.add(n);} return c; }  // 중복 이름은 COL_n 자리(위치 보존)
   static List<String> parseParams(String s){ List<String> o=new ArrayList<>(); Matcher m=Pattern.compile("[#$]\\{\\s*([A-Za-z_][A-Za-z0-9_]*)").matcher(s); while(m.find()){ if(!o.contains(m.group(1)))o.add(m.group(1)); } return o; }
   static DataType guessType(String n){ String u=n.toUpperCase(); if(u.matches(".*(AMT|AMOUNT|PRICE|SUM|TOT|PAY|SAL).*"))return DataType.Currency; if(u.matches(".*(CNT|COUNT|QTY|NUM|SEQ)$"))return DataType.Number; if(u.matches(".*(YMD|YM|DATE|DT)$"))return DataType.DateTime; return DataType.String; }
 
@@ -84,7 +84,19 @@ public class CrfGen2 {
   }
   // ---------- MyBatis test -> JS condition ----------
   static String convertCond(String t){
-    t=t.trim();
+    t=unescapeXml(t).trim();
+    // 함수형 검사: isValid(x) / isNotEmpty(x) / isNotBlank(x) → 값 있음, isEmpty(x)/isBlank(x)/!isValid(x) → 값 없음 (@pkg.Cls@isEmpty(x) 형태 포함)
+    t=t.replaceAll("!\\s*(?:@[A-Za-z0-9_.$]+@)?(?:isValid|isNotEmpty|isNotBlank|isNotNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' == ''");
+    t=t.replaceAll("!\\s*(?:@[A-Za-z0-9_.$]+@)?(?:isEmpty|isBlank|isNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' != ''");
+    t=t.replaceAll("(?:@[A-Za-z0-9_.$]+@)?(?:isValid|isNotEmpty|isNotBlank|isNotNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' != ''");
+    t=t.replaceAll("(?:@[A-Za-z0-9_.$]+@)?(?:isEmpty|isBlank|isNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' == ''");
+    // "A".equals(p) / p.equals("A") / p == "A" / p == 'A'
+    t=t.replaceAll("[\"']([^\"']*)[\"']\\.equals\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$2}' == '$1'");
+    t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\.equals\\(\\s*[\"']([^\"']*)[\"']\\s*\\)","'{parameter.$1}' == '$2'");
+    t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*\"([^\"]*)\"","'{parameter.$1}' $2 '$3'");
+    t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*'([^']+)'","'{parameter.$1}' $2 '$3'");
+    // 숫자 비교: cnt > 0, cnt >= 10 → '{parameter.CNT}' > 0 (JS 가 문자열을 숫자로 강제 변환; '' 는 0)
+    t=t.replaceAll("(?<![\\w'.{])([A-Za-z_][A-Za-z0-9_]*)\\s*(>=|<=|>|<|==|!=)\\s*(-?\\d+(?:\\.\\d+)?)(?![\\w'])","'{parameter.$1}' $2 $3");
     t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\s*!=\\s*null","'{parameter.$1}' != ''");
     t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\s*==\\s*null","'{parameter.$1}' == ''");
     t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\s*!=\\s*''","'{parameter.$1}' != ''");
@@ -92,6 +104,10 @@ public class CrfGen2 {
     t=t.replaceAll("\\band\\b"," && ").replaceAll("\\bor\\b"," || ").replaceAll("\\s+"," ").trim();
     return t;
   }
+  static String testAttr(String tag){ Matcher t=Pattern.compile("test\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')").matcher(tag); if(!t.find()) return "true"; String v=t.group(1)!=null?t.group(1):t.group(2); return convertCond(v); }
+  static String unescapeXml(String s){ return s==null?null:s.replace("&lt;","<").replace("&gt;",">").replace("&quot;","\"").replace("&apos;","'").replace("&amp;","&"); }
+  /** MyBatis 동적 태그만 태그로 인식 — SQL 본문의 비교연산자(<, <=, <>)는 태그가 아니므로 보존. */
+  static final Pattern MB_TAG=Pattern.compile("(?is)</?(?:if|where|foreach|choose|when|otherwise|trim|set|select|include|bind|sql|insert|update|delete)\\b(?:\"[^\"]*\"|'[^']*'|[^>\"'])*>|<!--.*?-->");  // 속성값 안의 > 는 태그 끝이 아님
   static String escLine(String s){ return s.replace("\\","\\\\").replace("\"","\\\""); }
   // ---------- MyBatis -> JavaScript builder ----------
   static String mybatisToJs(String mb, List<String> warns){
@@ -100,34 +116,38 @@ public class CrfGen2 {
     if(sel.find()) body=sel.group(1);
     body=body.replace("<![CDATA[","").replace("]]>","");
     StringBuilder js=new StringBuilder("var sql = \"\";\r\n");
-    Matcher m=Pattern.compile("<[^>]+>").matcher(body);
-    int pos=0;
+    Matcher m=MB_TAG.matcher(body);
+    int pos=0; java.util.ArrayDeque<int[]> choose=new java.util.ArrayDeque<>();  // choose 중첩: [분기 수]
     while(m.find()){
       String text=body.substring(pos,m.start());
       emitText(js,text);
       String tag=m.group().trim();
       String low=tag.toLowerCase();
-      if(low.startsWith("<where")) js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n");
+      if(low.startsWith("<!--")) {}
+      else if(low.startsWith("<include")) warns.add("<include> NOT expanded (refid 조각을 직접 붙여 넣으세요): "+tag);
+      else if(low.startsWith("<bind")) warns.add("<bind> NOT converted: "+tag);
+      else if(low.startsWith("<where")) js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n");
       else if(low.startsWith("</where")||low.startsWith("</set")||low.startsWith("</trim")||low.startsWith("</select")) {}
-      else if(low.startsWith("<if")){ Matcher t=Pattern.compile("test\\s*=\\s*\"([^\"]*)\"").matcher(tag); String c=t.find()?convertCond(t.group(1)):"true"; js.append("if(").append(c).append("){\r\n"); }
+      else if(low.startsWith("<if")){ String c=testAttr(tag); js.append("if(").append(c).append("){\r\n"); }
       else if(low.startsWith("</if")) js.append("}\r\n");
-      else if(low.startsWith("<choose")) {}
-      else if(low.startsWith("<when")){ Matcher t=Pattern.compile("test\\s*=\\s*\"([^\"]*)\"").matcher(tag); String c=t.find()?convertCond(t.group(1)):"true"; js.append("if(").append(c).append("){\r\n"); warns.add("<when> mapped to if (choose/when else-if semantics approximated)"); }
+      else if(low.startsWith("<choose")) choose.push(new int[]{0});
+      else if(low.startsWith("<when")){ String c=testAttr(tag); int[] st=choose.peek(); boolean first=st==null||st[0]==0; if(st!=null) st[0]++; js.append(first?"if(":"else if(").append(c).append("){\r\n"); }
       else if(low.startsWith("</when")) js.append("}\r\n");
-      else if(low.startsWith("<otherwise")){ js.append("if(true){\r\n"); warns.add("<otherwise> mapped to if(true)"); }
+      else if(low.startsWith("<otherwise")){ int[] st=choose.peek(); boolean first=st==null||st[0]==0; if(st!=null) st[0]++; js.append(first?"if(true){\r\n":"else {\r\n"); }
       else if(low.startsWith("</otherwise")) js.append("}\r\n");
-      else if(low.startsWith("</choose")) {}
+      else if(low.startsWith("</choose")){ if(!choose.isEmpty()) choose.pop(); }
       else if(low.startsWith("<foreach")||low.startsWith("</foreach")) warns.add("<foreach> NOT converted (manual JS loop needed): "+tag);
       else if(low.startsWith("<select")) {}
       else warns.add("unhandled tag: "+tag);
       pos=m.end();
     }
     emitText(js, body.substring(pos));
+    js.append("return sql;\r\n");
     return js.toString();
   }
   static void emitText(StringBuilder js,String text){
     if(text==null) return;
-    String t=subParamsQuoted(text);
+    String t=subParamsQuoted(unescapeXml(text));
     String[] lines=t.replace("\r\n","\n").replace("\r","\n").split("\n",-1);
     for(String ln: lines){ if(ln.trim().isEmpty()) continue; js.append("sql += \"").append(escLine(ln)).append("\\r\\n\";\r\n"); }
   }

@@ -65,7 +65,7 @@ argument-hint: [.crf|화면.xfdl/.vue|PDF|SQL|테이블|폴더] "할말" (※일
 
 ## 3) 수행 + 보고
 - 의도→도구: 설명·제안=`crf_summary`+`crf_get_query`+`crf_describe_layout` · 리포트 찾기 `crf_search`/`crf_list_reports` · 공식 읽기 `crf_get_formula` · 쿼리 `crf_set_query`(매개변수 선언·필드 추가 자동; `SELECT *` 면 `crf_sync_fields mode=db`) · 데이터셋 `crf_add_dataset`/`crf_remove_dataset` · 매개변수 `crf_set_param`/`crf_remove_param` · 필드 `crf_rename_field`/`crf_remove_field`(참조는 `crf_field_refs`) · 그룹 `crf_add_group` · 본문필드 `crf_place_detail_fields` · 셀 값/공식/스타일 `crf_set_cell` · 글상자 `crf_set_label`(추가는 `crf_add_label`) · 밴드 행 `crf_set_subsection` · 표 생성 `crf_add_table`(columns 필드 표 / rows 문단 목록 표) · 표 구조 `crf_table_info`→`crf_table_rows`/`crf_table_cols`(action=insert|copy|delete|move|resize|equalize)·`crf_set_table`(위치/비례 크기/테두리 일괄/unmerge_all) · 글상자 합치기/나누기 `crf_merge_labels`/`crf_split_label` · 글꼴 일괄 `crf_set_font` · 그룹 `crf_add_group`(level/label/subtotal)/`crf_set_group`/`crf_remove_group` · 삭제 `crf_remove_control`/`crf_remove_section` · 계산필드 `crf_add_formula_field` · 필드 `crf_add_data_field` · 용지 `crf_set_paper` · **수정 후 `crf_validate`** · 비교 `crf_diff` · 생성 `crf_generate`
-- 쓰기는 `<원본>_edited.crf` 로 **원본 보존**. 끝에 **[사용한 입력 / 가정·추정 / 건너뛴 단계 / 출력경로]** 를 한 번에 보고.
+- 쓰기는 `<원본>_edited.crf` 로 **원본 보존**. 한 파일에 여러 단계를 이어 고칠 때는 a/b 파일 교대 대신 `in_place=true`(첫 쓰기 때 `<path>.bak` 백업) — 한 단계가 ERROR 면 거기서 멈추고 보고(다음 단계가 한 단계 전 파일을 읽어 변경이 유실되는 사고 방지). 필드는 이름이 아니라 **위치**로 컬럼에 대응하므로 쿼리를 바꾼 뒤 `crf_summary` 의 필드 순서가 SELECT 순서와 같은지 확인(`crf_set_query` 가 자동 재정렬). 끝에 **[사용한 입력 / 가정·추정 / 건너뛴 단계 / 출력경로]** 를 한 번에 보고.
 
 ## 규칙
 - **쿼리 파라미터는 반드시 `'{parameter.COLNM}'`**(대문자·언더바 유지: `empNm`→`EMPNM`, `emp_nm`→`EMP_NM`). 문자열 조건은 `= '{parameter.X}'`. **`:colNm`·`#{}`·`${}`·`?` 금지.**

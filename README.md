@@ -28,7 +28,7 @@ Claude에게 "리포트 조작 도구"를 쥐여주면, 사용자는 **자연어
 /clipreport C:\report\aactch0400_prn02.crf  "금액 칸들 천단위 통화로 바꾸고 그룹 바닥글에 합계 추가해"
 /clipreport C:\report                        "급여 관련 리포트 찾아서 학과별 그룹 잡아줘"
 ```
-- 첫 토큰=파일/폴더, 나머지=요청. 쓰기 작업은 `<원본>_edited.crf` 로 **원본 보존**.
+- 첫 토큰=파일/폴더, 나머지=요청. 쓰기 작업은 `<원본>_edited.crf` 로 **원본 보존**(여러 단계를 이어 고칠 때는 `in_place=true` — 첫 쓰기 때 `<path>.bak` 백업).
 - 설치: 아래 [MCP 설정](#mcp-설정) 으로 clip-report 서버 등록 + 슬래시 명령은 `~/.claude/commands/clipreport.md` (동봉).
 
 ---
@@ -146,14 +146,15 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 |---|---|---|
 | 설명 | `crf_summary(path)` | 데이터셋·필드·쿼리·그룹·섹션 요약 |
 | 설명 | `crf_describe_layout(path, [detail])` | 섹션→서브섹션(유형/높이/숨김/서브리포트 링크)→컨트롤 + 표 셀 그리드(`‹병합›`, `{출력양식}`). `detail=true` 면 셀/컨트롤별 정렬·폰트·크기·굵게·줄바꿈·확장·셀합치기·조건스타일 |
-| 설명 | `crf_validate(path)` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, 그룹 필드 null, 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음 |
+| 설명 | `crf_validate(path, [excel])` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, 그룹 필드 null, 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음. **`excel=true`**: 엑셀 격자(엑셀로 내보내는 밴드의 표 열 경계·글상자 좌우·선 x 가 본문 표 경계 ±1mm 에 있는지, 페이지 바닥글 제외; 어긋난 변마다 엑셀 열이 쪼개짐)를 ⚠ 로 |
 | 설명 | `crf_get_query(path, [dataset|mode])` | **쿼리 본문** — 데이터셋별 scriptType·연결·필드·사용 매개변수(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JS 동적쿼리는 원문 + **평문 복원본**(if 블록은 `/*IF*/` 주석) |
 | 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
 | 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로; XML/JSON 데이터셋의 **XPath** 포함)·`xpath`·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
 | 설명 | `crf_list_reports(dir, [like|limit])` | 폴더의 .crf 목록 + 총 개수, 이름 필터(부분문자열/`*` 글롭) |
 | 생성 | `crf_generate(template, sql, output)` | SQL/MyBatis → 초안 .crf |
-| 수정 | `crf_set_query(path, sql, output, [dataset|script_type|declare_params|sync_fields])` | 데이터셋 쿼리 교체 — 데이터셋 선택, **scriptType 자동**(평문→NotScript, MyBatis→JS, `var sql`→JavaScript), **미선언 `{parameter.X}` 자동 선언**(String), **SELECT 컬럼을 필드로 추가**(`sync_fields=add` 기본 / `replace`=미참조 필드 제거 / `none`) |
-| 수정 | `crf_sync_fields(path, output, [dataset|mode|params|set_types|remove_unused])` | 필드 목록을 쿼리 컬럼에 맞춤. `mode=sql` 파싱 / **`mode=db`: 쿼리를 `SELECT * FROM (…) WHERE 1=0` 로 실행해 ResultSetMetaData 로 컬럼·타입 확정**(`SELECT *`·함수테이블 해결, 매개변수는 `params` JSON 또는 `''`/NULL) |
+| 수정 | `crf_set_query(path, sql, output, [dataset|script_type|declare_params|sync_fields|reorder])` | 데이터셋 쿼리 교체 — 데이터셋 선택, **scriptType 자동**(평문→NotScript, MyBatis→JS, `var sql`→JavaScript), **미선언 `{parameter.X}` 자동 선언**(String), **SELECT 컬럼을 필드로 추가**(`sync_fields=add` 기본 / `replace`=미참조 필드 제거 / `none`) |
+| 수정 | `crf_reorder_fields(path, output, [dataset|order])` | **필드 순서 재정렬** — 필드는 이름이 아니라 **목록 위치**로 SELECT 컬럼에 대응하므로 순서가 어긋나면 엉뚱한 값이 찍힘. `order=query`(기본, SELECT 순서) / `order=A,B,C` |
+| 수정 | `crf_sync_fields(path, output, [dataset|mode|params|set_types|remove_unused|reorder])` | 필드 목록을 쿼리 컬럼에 맞춤. `mode=sql` 파싱 / **`mode=db`: 쿼리를 `SELECT * FROM (…) WHERE 1=0` 로 실행해 ResultSetMetaData 로 컬럼·타입 확정**(`SELECT *`·함수테이블 해결, 매개변수는 `params` JSON 또는 `''`/NULL) |
 | 수정 | `crf_add_dataset(path, name, sql, output)` / `crf_remove_dataset(path, dataset, output, [force])` | 데이터셋 추가(첫 데이터셋 연결 복제, 매개변수 선언·필드 생성) / 삭제(필드 참조 있으면 거부) |
 | 수정 | `crf_set_param(path, name, output, [type|default|prompt])` / `crf_remove_param(...)` | 전역 매개변수 생성·수정 / 삭제(쿼리·바인딩 참조 시 거부) |
 | 수정 | `crf_rename_field(path, name, new_name, output, [dataset])` / `crf_remove_field(path, name, output, [dataset|force])` | 필드 이름변경(객체 바인딩 자동 추종 + 공식 `"ns.OLD"`·쿼리 `{parameter.OLD}` 재작성) / 삭제(참조 목록 제시, `force` 없으면 거부) |
@@ -161,7 +162,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_add_group(path, column, output, [level|label|subtotal|sort])` | 그룹 머리/바닥글 추가 — `level=inner|outer|N` 로 중첩 위치, `label=true` 머리글에 그룹필드 라벨, `subtotal=F1,F2` 바닥글에 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 소계 공식 |
 | 수정 | `crf_set_group(path, group, output, [column|sort])` / `crf_remove_group(path, group, output, [force])` | 그룹 필드/정렬 변경 / 그룹 삭제(머리·바닥글 밴드 대칭 제거, 컨트롤·그룹이름 참조 있으면 거부) |
 | 수정 | `crf_place_detail_fields(path, output)` | 본문에 필드 바인딩 데이터 라벨 배치 |
-| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|align|valign|fontsize|bold|font|wrap|cangrow|merge|bgcolor|color|underline|italic|linespace|padding])` | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
+| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|clear_format|align|valign|fontsize|bold|font|wrap|cangrow|merge|bgcolor|color|underline|italic|linespace|padding])` · **일괄** `cells=[{row,col,table?,…}]`(최상위 인자는 기본값, 저장·검증 1회) | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
 | 수정 | `crf_set_label(path, name, output, [같은 속성 + left|top|width|height|visible|border|linewidth])` | **글상자/컨트롤** 편집 — 값·공식·스타일(글자색/밑줄/줄간격/여백)·위치·크기·표시·**테두리** |
 | 수정 | `crf_set_cell_checkbox(path, table, row, col, field, output, [true_value|false_value|operator|true_value2|check_type|shape|color|size|default|off])` | 셀을 **기본 체크박스**(셀 내용=체크박스)로 — `field operator true_value` 면 체크(기본 `Equal '1'`), `false_value` 면 해제. 조건이 없으면 항상 빈 상자. `check_type=Rectangle(색칠, 기본)|V|Ellipse|RoundRectangle`. ■/□ 글자 대신 이걸 쓸 것 |
 | 수정 | `crf_merge_cells(path, table, row, col, output, [rowspan|colspan])` | 셀 **병합**(기준 셀이 rowspan×colspan 차지, 덮인 자리는 ‹병합›) / 1×1 로 **해제** |
@@ -178,7 +179,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_add_formula_field(path, name, script, output, [force])` | **공식필드** 생성 (JS, 끝에 `return`; 예: `return rexpert.sum(0,"data.AMT",0,"","")`) → 셀에 바인딩. 이름 중복 / `return` 누락 / `:col` `#{}` 바인드 표기는 거부(`force=true`로 강행) |
 | 수정 | `crf_add_data_field(path, name, [type], output)` | 데이터셋에 **필드(컬럼)** 추가 |
 | 수정 | `crf_add_label(path, section, [text|field|formula], [위치], output, [fontsize|bold|underline|color|font|align|valign|wrap|linespace|border|linewidth])` | 밴드에 **글상자** 추가(없는 표준밴드는 자동생성) — 글꼴/정렬/글자색/테두리까지 한 번에 |
-| 수정 | `crf_set_paper(path, [paper|orientation|margin*], output)` | **용지** 종류/방향/여백 |
+| 수정 | `crf_set_paper(path, [paper|orientation|margin*|fit], output)` | **용지** 종류/방향/여백. 방향을 바꾸면 디자이너처럼 가로/세로 크기를 교환하고, `fit=true` 면 모든 밴드의 표(열 비례)·글상자·선을 새 본문 너비에 비례 조정 |
 | 설명 | `crf_diff(a, b)` | 두 리포트 **비교** — 데이터셋/필드/쿼리(줄 단위 ±)/scriptType/매개변수/공식 스크립트/그룹/섹션/컨트롤/표 셀 바인딩 |
 
 ### 업무지식 도구 — DB & 문서 (양식→백엔드→DB→쿼리 파이프라인)

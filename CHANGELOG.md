@@ -3,6 +3,35 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.9.0] - 2026-09-10
+workspace/ui 세션(ahrmhr 리포트 5종 작업)의 사용 피드백을 반영한 릴리스. 원인을 코드/실파일로 확인한 것만 고쳤고, 재현되지 않은 지적은 아래 "확인 결과" 에 적었다.
+### Fixed
+- **필드는 이름이 아니라 위치로 SELECT 컬럼에 매핑** — 실파일 조사: 디자이너가 만든 리포트는 `FieldData.index` 가 전부 0 이고 목록 순서가 곧 컬럼 위치. `crf_set_query sync_fields=add/replace` 가 새 필드를 뒤에 붙여 "사번 칸에 부서명" 이 찍히던 문제 → 기본(`reorder=true`)으로 **SELECT 순서로 재정렬**하고 응답에 `↕` 표시. 별칭 없는 식 컬럼은 건너뛰지 않고 **`COL_n` 자리 필드**를 만들어 뒤 컬럼 위치를 지킨다(AS 별칭 주면 그 이름으로). SELECT 에 없는 필드는 끝으로 밀며 "값이 비게 됨" 경고. `crf_sync_fields` 도 동일(`reorder`).
+- **`crf_remove_field` 가 매개변수와 동명인 데이터필드를 못 지우던 버그** — 저장 후 검증이 이름만 보고 매개변수 EMPNO 를 잡아 "필드가 남아 있음" 으로 실패. 종류(nsOf)까지 맞는 필드만 검증하고, 동명 필드가 남아 있으면 ℹ 로 안내.
+- **`crf_set_cell` 출력양식을 지울 수 없던 문제** — `format=''`/`none`/`general` 또는 `clear_format=true` 로 제거(되읽어 검증). 예전에는 빈 값은 무시, `General` 은 문자 그대로 저장돼 렌더에 `{General}` 이 남았다.
+- **`text=` 로 정적 텍스트를 넣어도 필드 바인딩 포인터가 남아** describe 에 여전히 `데이터:X` 로 보이던 문제 — 텍스트/clear 시 바인딩을 해제하고 응답에 `(바인딩 X 해제)` 표시.
+- **MyBatis → JS 변환**: `isValid(x)`/`!isValid(x)`/`isEmpty`/`isNotEmpty`/`isBlank`/`@Utils@isNotEmpty(x)`/`"Y".equals(x)`/`x == 'A'`/작은따옴표 `test='…'` 를 `'{parameter.X}' != ''` 등으로 변환(전에는 `if(isValid(jbfmCd))` 그대로 나와 실행 불가). 태그 인식을 MyBatis 태그 화이트리스트로 바꿔 **본문의 `<=`, `<`, `<>` 비교연산자를 태그로 먹지 않음**(전에는 "unhandled tag: <= TO_DATE…" 와 함께 조건이 통째로 사라짐). `&lt;`/`&gt;`/`&amp;` 엔티티 복원, `<!-- -->` 주석 무시, `<include>`/`<bind>` 는 경고. 변환 결과 끝에 **`return sql;` 자동 추가**.
+- `crf_set_paper orientation=` 이 방향 플래그만 바꾸고 **용지 가로/세로 크기를 교환하지 않던 문제**(디자이너는 2970x2100 으로 저장) → 교환하고 본문 너비를 응답.
+- `crf_table_cols`/`crf_set_table` 의 "표가 용지 본문 너비를 넘음" 경고가 **한 번도 안 뜨던 버그**(존재하지 않는 `getPageInfo` 를 찾아 항상 0) 수정.
+### Added
+- **`in_place=true`** — 모든 쓰기 도구에서 원본에 직접 쓰기(`output` 생략 가능). 첫 쓰기 때 `<path>.bak` 에 원본을 백업하고 이후엔 유지. a/b 파일을 번갈아 쓰다 한 단계가 실패하면 다음 단계가 한 단계 전 파일을 읽어 변경이 조용히 유실되는 사고의 대안. `tools/mcpcall.py` 는 요청을 하나씩 보내고 **첫 isError 에서 중단(기본)**, `--continue-on-error` 로 예전 동작.
+- **`crf_reorder_fields`**(`order=query`|`A,B,C`) — 필드 목록 순서만 고치는 도구(바인딩은 객체 참조라 그대로).
+- **`crf_set_cell cells=[{row,col,table?,…}]`** — 여러 셀(여러 표)을 한 호출로. 최상위 인자(table/font/align…)는 기본값, 항목 인자가 우선. 저장·되읽기 검증 1회. 13열×2표=26호출 → 1호출.
+- **JS 동적쿼리 `return` 누락 감지** — `crf_set_query` 경고 + `crf_validate` ✖ (저장소 JS 쿼리 1,491개 전부 return 있음을 확인).
+- `crf_remove_param`/`crf_remove_section` **`ignore_missing=true`**(없으면 no-op OK) · 없을 때 오류에 **현재 매개변수/밴드 목록**을 붙임.
+- **`crf_set_paper fit=true`** — 본문 너비가 바뀌면(세로↔가로) 모든 밴드의 표(열 너비 비례 배분)·글상자·선의 X/너비를 비례 조정(1500→2370→1500 왕복 시 표 너비 1460 정확 복원). fit 없이 바꾸면 ℹ 로 안내.
+- **`crf_describe_layout detail=true` 압축** — 표 행마다 가장 흔한 스타일을 `«공통: …»` 로 한 번만 쓰고 다른 셀만 `«…»`; **`one_per_line=true`** 면 셀마다 `[r,c]` 한 줄. 글상자 줄의 `폰트=` 중복 표기 제거, 열 표시 상한 20→60(`…(+N열)`).
+- 자동 선언 매개변수의 타입을 디자이너와 같은 **없음(Null)** 으로(전에는 String 이라 crf_summary 에서 새 것만 `:String` 이 붙어 헷갈림).
+- **엑셀 격자 lint 확장 + `crf_validate excel=true`** — 예전엔 머리글/바닥글 밴드의 3열 이상 표만 봤는데, 이제 엑셀로 내보내는 모든 밴드(페이지 바닥글 제외)의 **표 열 경계·글상자/이미지/서브리포트의 좌·우·선의 x** 를 본문 표 열 경계(±1mm)와 대조하고, 요약(본문 경계 N개 + 어긋난 세로선 M개 → 엑셀 열 최대 N+M)과 요소별 어긋난 변·가까운 경계를 제시. `excel=true` 면 ⚠, 아니면 ℹ. 서버 instructions `[★엑셀 출력 격자]`(사용자 규칙: 엑셀로 내려받는 목록형은 세로선을 본문 경계에 맞춰 셀 분할 최소화, 바닥글은 엑셀에서 빠지므로 제외) 내장. ahrmhr0120_prn01 에서 사용자가 맞춘 글상자3(1900)은 통과, 글상자2 오른쪽 620 만 지적됨을 확인.
+- Codex 리뷰(13건) 재검토 후 반영: SELECT 중복 컬럼명은 `COL_n` 자리로 위치 보존 · `crf_reorder_fields order=query` 는 필드 없는 컬럼이 있으면 저장 전에 거부(→ crf_sync_fields) · `cells=[]` 같은 셀 중복 항목 거부 · `clear_format` 이 `format` 보다 우선(검증도 동일 규칙) · `cells` 스키마 type=[array,string] · MyBatis `<if test="cnt > 0">` 처럼 속성 안의 `>` 처리 + `cnt > 0` 숫자 비교 변환 · `<choose>/<when>/<otherwise>` 를 if / else if / else 로(전에는 독립 if 라 여러 분기 동시 실행) · `hasReturn` 이 `{ return sql; }` 같은 한 줄 형태도 인식(문자열·주석 제거 후 토큰 검사) · `crf_remove_field` 검증을 원래 데이터셋 안에서만 · `scaleTo` 합이 목표를 넘지 않게 · `mcpcall.py` initialize/list 실패를 오류로, 자식 프로세스 정리(finally). 미반영: 조건식 문자열 리터럴 안의 `'`·and/or 이스케이프(드묾).
+- `samples/document/render_report.cjs` 에 뷰포트 폭 인자(5번째)/`CLIP_RENDER_WIDTH` — 가로 리포트 오른쪽 잘림 대응.
+- 서버 instructions 에 `[★필드는 위치 매핑]`·`[★JS 동적쿼리는 return 필수]`·in_place/배치 중단/ignore_missing 규칙 내장. `tools/smoke.py` 236 케이스(+49, ahrmhr0240_prn01 을 E 로, ahrmhr0120_prn01 을 F1 로 추가).
+### 확인 결과(재현 안 됨)
+- `crf_remove_section section=DataFooter` "not found" — 영문 이름은 원래 동작함(ahrmhr0240 에서 확인). 그 파일에 데이터바닥글이 이미 없었을 가능성이 큼(a/b 교대 중 한 단계 전 파일을 읽은 경우). 이제 오류에 현재 밴드 목록을 붙여 바로 알 수 있음.
+- 다른 .crf 헤더 바이트가 바뀌는 현상 — 리포트 서버가 열어 본 파일이라 MCP 밖의 일. 미반영.
+### 미반영(다음 버전 후보)
+- `crf_append_query_condition`(JS 쿼리에 if 블록 추가) · "목록형 리포트 파생" 한 방 도구(템플릿+SQL+열 정의) · 열 세트 전체 교체 — PLAN §3 생성기 개선(v0.10)에서 함께 다룸.
+
 ## [0.8.0] - 2026-09-10
 ### Added
 - **표 구조 편집(CRUD) 전면 구현** — CLIP SDK 에는 행/열 삽입·삭제 API 가 없어 `TableRow`/`TableColumn` 리스트와 행·열별 셀 리스트를 직접 재구성하는 `src/CrfTableOps.java` 추가. 모든 도구가 편집 전/후에 격자 불변식(행·열 셀 수, 행/열 참조, 병합 자리↔기준 셀 span, 기준 인덱스)을 검사하고 저장 후 되읽어 다시 검증.

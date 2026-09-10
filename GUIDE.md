@@ -181,12 +181,15 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | 폴더에서 테이블/매개변수/문구/XPath 로 리포트 **검색**(클립소프트 FindQuery 유틸 대체) | `crf_search` |
 | 밴드별 컨트롤·표 셀 바인딩 보기 (설명/제안의 근거; `detail=true` 스타일까지) | `crf_describe_layout` |
 | 리포트 **검증(lint)** — 끊어진 바인딩/공식/매개변수 | `crf_validate` |
-| 셀 값·공식·정렬·폰트 / 글상자 편집 / 밴드 행 높이·숨김 | `crf_set_cell` / `crf_set_label` / `crf_set_subsection` |
+| 셀 값·공식·정렬·폰트(여러 셀 `cells=[…]` 일괄, 출력양식 제거 `format=''`) / 글상자 편집 / 밴드 행 높이·숨김 | `crf_set_cell` / `crf_set_label` / `crf_set_subsection` |
+| 같은 파일에 여러 단계 이어 쓰기(첫 쓰기 때 `.bak` 백업) / 없을 수도 있는 매개변수·밴드 삭제 | 모든 쓰기 도구 `in_place=true` / `crf_remove_param`·`crf_remove_section` `ignore_missing=true` |
+| 용지 방향 전환 + 요소를 새 본문 너비에 비례 맞춤 | `crf_set_paper orientation=Landscape fit=true` |
+| **엑셀 격자** — 엑셀로 내보내는 밴드의 모든 세로선을 본문 표 열 경계에 맞췄는지(어긋난 변·가까운 경계 제시, 페이지 바닥글 제외) | `crf_validate excel=true` |
 | 표 생성 / 그룹 위치·라벨·소계 / 삭제(컨트롤·그룹·밴드) | `crf_add_table` / `crf_add_group`·`crf_set_group` / `crf_remove_control`·`crf_remove_group`·`crf_remove_section` |
 | 폴더 리포트 찾기 | `crf_list_reports` |
 | SQL/MyBatis로 초안 생성 | `crf_generate` |
 | 쿼리 교체(매개변수 선언·필드 동기화) / 그룹 추가 / 본문 필드 배치 | `crf_set_query` / `crf_add_group` / `crf_place_detail_fields` |
-| 쿼리 컬럼↔필드 맞추기 (`SELECT *` 는 DB 실행) | `crf_sync_fields` (`mode=sql|db`) |
+| 쿼리 컬럼↔필드 맞추기 (`SELECT *` 는 DB 실행) / **필드 순서**(위치 매핑) 재정렬 | `crf_sync_fields` (`mode=sql|db`) / `crf_reorder_fields` |
 | 데이터셋 추가·삭제 / 매개변수 생성·수정·삭제 | `crf_add_dataset`·`crf_remove_dataset` / `crf_set_param`·`crf_remove_param` |
 | 필드 이름변경·삭제 (참조 검사) / 참조 위치 보기 | `crf_rename_field`·`crf_remove_field` / `crf_field_refs` |
 | 셀을 **체크박스**로(조건 기반 체크, 색칠/V/원) / 셀 **병합·해제** / 전체 병합 해제 | `crf_set_cell_checkbox` / `crf_merge_cells` / `crf_set_table unmerge_all=true` |

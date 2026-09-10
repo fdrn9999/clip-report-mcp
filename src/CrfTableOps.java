@@ -157,7 +157,9 @@ class CrfTableOps {
     return m;
   }
   static int[] equalize(int total,int n){ int[] v=new int[n]; int each=total/n, rem=total-each*n; for(int i=0;i<n;i++) v[i]=each+(i==n-1?rem:0); return v; }
-  static int[] scaleTo(int[] cur,int target){ int n=cur.length, tot=0; for(int x: cur) tot+=x; int[] v=new int[n]; int acc=0; for(int i=0;i<n;i++){ v[i]=i==n-1?target-acc:(tot==0?target/n:(int)Math.round((double)cur[i]*target/tot)); if(v[i]<1) v[i]=1; acc+=v[i]; } return v; }
+  /** 열 너비를 비례 배분해 합이 정확히 target 이 되게. 0 이던 열은 0 유지, 나머지는 최소 1(단 target 이 열 수보다 작으면 1 보장 불가 → 마지막 열이 남은 값). */
+  static int[] scaleTo(int[] cur,int target){ int n=cur.length, tot=0; for(int x: cur) tot+=x; int[] v=new int[n]; int acc=0;
+    for(int i=0;i<n;i++){ if(i==n-1){ v[i]=Math.max(0,target-acc); } else { v[i]=tot==0?target/n:(int)Math.round((double)cur[i]*target/tot); if(v[i]<1&&cur[i]>0&&acc<target) v[i]=1; if(acc+v[i]>target) v[i]=Math.max(0,target-acc); } acc+=v[i]; } return v; }
   static List<Integer> parseIndexList(String spec,int n,String what){ List<Integer> out=new ArrayList<>(); if(spec==null) return out; for(String p: spec.split(",")){ p=p.trim(); if(p.isEmpty()) continue; if(p.contains("-")){ String[] ab=p.split("-"); int a=Integer.parseInt(ab[0].trim()), b=Integer.parseInt(ab[1].trim()); for(int i=a;i<=b;i++) out.add(i); } else out.add(Integer.parseInt(p)); }
     for(int i: out) if(i<0||i>=n) throw new RuntimeException(what+" "+i+" 범위 밖 (0.."+(n-1)+")"); return out; }
 
@@ -256,7 +258,7 @@ class CrfTableOps {
     String wrote=CrfMcpServer.save(c.rf,c.output,c.path); String err=verify(c,rows,t.getColumnCount()); if(err!=null) return err;
     return "OK: 표 '"+c.name+"' ("+band(c)+") "+did+" → "+rows+"행×"+t.getColumnCount()+"열, 너비 "+oldW+"→"+t.getWidth()+extra+", verified[grid ok], wrote "+wrote+(t.getX1()+t.getWidth()>pageInnerWidth(c.rf)&&pageInnerWidth(c.rf)>0?"\n⚠ 표 오른쪽 끝("+(t.getX1()+t.getWidth())+") 이 용지 본문 너비("+pageInnerWidth(c.rf)+") 를 넘습니다 — crf_set_table width= 로 줄이거나 crf_table_cols resize":"");
   }
-  static int pageInnerWidth(TheReportFile rf){ try{ Object mp=rf.getGlobe().getMainReport().getReportDesign().getMainPage(); Object pi=go(mp,"getPageInfo"); if(pi==null) return 0; int w=ix(pi,"getPaperWidth"); if(w<=0) return 0; return w-ix(pi,"getMarginLeft")-ix(pi,"getMarginRight"); }catch(Throwable e){ return 0; } }
+  static int pageInnerWidth(TheReportFile rf){ try{ Object mp=rf.getGlobe().getMainReport().getReportDesign().getMainPage(); int w=ix(mp,"getPaperWidth"); if(w<=0) return 0; return w-ix(mp,"getLeftMargin")-ix(mp,"getRightMargin"); }catch(Throwable e){ return 0; } }
 
   /** crf_set_table: 위치/크기(비례)/테두리/이름/표 옵션/전체 병합 해제 */
   static String setTable(JSONObject args) throws Exception {

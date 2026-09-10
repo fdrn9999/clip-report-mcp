@@ -43,8 +43,11 @@ public class CrfMcpServer {
     "[★쿼리 파라미터] {parameter.X} 는 항상 작은따옴표 문자열로 치환되므로 날짜 포맷은 TO_CHAR(TO_DATE('{parameter.DT}','YYYYMMDD'),…) 처럼 TO_DATE 먼저(문자열에 곧장 TO_CHAR 하면 Tibero JDBC-5075 로 쿼리 전체가 0건). 쿼리 수정은 디자이너에서 데이터셋을 통째로 다시 만들지 말고(셀 바인딩이 끊김) crf_set_query 로 문자열만 교체. CLIP 리포트 쿼리에서 파라미터는 반드시 '{parameter.COLNM}' 형식(대문자, 언더바는 유지: empNm→EMPNM, emp_nm→EMP_NM)으로 작성하세요. 문자열 조건은 작은따옴표로 감싸 \"= '{parameter.X}'\". 절대 :colNm, #{colNm}, ${colNm}, ? 같은 일반 SQL/MyBatis 바인드 표기를 쓰지 마세요. {dataset.X}는 다른 데이터셋 값 참조용입니다.\n"+
     "[★입력은 상황마다 다름] 화면(.xfdl/.vue)·문서양식(PDF)·쿼리(SQL/MyBatis)·백엔드·DB연결이 항상 다 주어지지는 않습니다(화면만, 쿼리 없이, 글 설명만일 수도). 프롬프트에 실제로 있는 자료만 사용하고, 적용 안 되는 단계는 건너뛰며, 도구는 '있는 입력+의도'에 맞춰 선택합니다(고정 순서 아님). 도구로 직접 확인 가능한 건 먼저 확보(파일 읽기·db_* 도구·백엔드 추적)하되, [★모르면 질문] 그래도 부족하거나 불명확한 정보(대상 파일·테이블·파라미터·조건 등)는 임의 추정·기본값으로 진행하지 말고 반드시 유저에게 질문해 확보하세요(질문은 한 번에 모아 간결히). 유저가 '추정해서 진행'을 명시한 경우에만 가정을 밝히고 진행합니다.\n"+
     "[★쿼리 읽기/찾기] 리포트의 SQL 본문은 crf_get_query(JS 동적쿼리는 평문 복원본 포함; XML/JSON 데이터셋은 루트 XPath·필드 경로), 공식 스크립트는 crf_get_formula, '어떤 리포트가 테이블 X/매개변수 Y/문구 Z 를 쓰나'는 crf_search(dir, text, scope) 로 확인하세요. crf_summary 는 개요만 줍니다.\n"+
-    "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
-    "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값), 글상자=crf_set_label, 밴드 행=crf_set_subsection(높이/숨김/페이지바꿈), 표 생성=crf_add_table(columns JSON), 표 구조=crf_table_info(열 너비·행 높이·병합 격자 확인) → crf_table_rows/crf_table_cols(action=insert|copy|delete|move|resize|equalize: 행/열 중간 삽입·복제·삭제·이동·너비/높이·균등 분배; 병합 셀은 자동으로 늘리고/승격) · crf_set_table(위치·전체 너비/높이 비례 조정·외곽선·셀 테두리 일괄·unmerge_all) · 셀 테두리=crf_set_cell border=left,top… , 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section/crf_remove_field. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
+    "[★엑셀 출력 격자] 목록형 리포트는 대부분 화면에서 엑셀로도 내려받으므로, 엑셀로 내보내는 밴드(페이지 머리글·데이터 머리글/바닥글·그룹·본문; **페이지 바닥글은 엑셀에서 빠지므로 제외**)의 **모든 세로선 — 표 열 경계, 글상자/이미지의 왼쪽·오른쪽, 선의 x — 을 본문 표의 열 경계(±1mm)에 맞추세요**. 어긋난 세로선 하나마다 엑셀 열이 하나 더 쪼개집니다(예: 머리글 글상자 오른쪽이 620 인데 본문 경계가 460/840 이면 열 분할). 머리글 제목·조건 글상자·집계 표를 만들거나 옮길 때 left/width 를 본문 경계 값으로 주고, 끝에 crf_validate excel=true 로 '엑셀 격자' 경고가 0 인지 확인(요소별 어긋난 변과 가까운 경계를 알려줌 → crf_set_label left/width, crf_table_cols resize 로 맞춤). 사용자가 일부러 안 맞춘 것(바닥글 페이지번호 등)은 그대로 둡니다.\n"+
+    "[★필드는 위치 매핑] 데이터셋 필드는 이름이 아니라 **목록 순서(위치)** 로 SELECT 컬럼에 대응합니다(디자이너 파일은 index 가 전부 0). 필드 순서 ≠ SELECT 순서면 에러 없이 엉뚱한 값(사번 칸에 부서명)이 찍힙니다. crf_set_query/crf_sync_fields 는 기본(reorder=true)으로 SELECT 순서에 맞춰 재정렬하고, 별칭 없는 식 컬럼은 COL_n 자리 필드를 만들어 위치를 지킵니다(AS 별칭 권장). 순서만 고치려면 crf_reorder_fields. SELECT 에 없는 필드는 끝으로 밀려 값이 비므로 sync_fields=replace 로 정리하세요.\n"+
+    "[★JS 동적쿼리는 return 필수] scriptType=JavaScript 쿼리는 마지막에 `return sql;` 이 없으면 에러 없이 0건입니다(저장소 JS 쿼리 1,491개 전부 return 있음). crf_set_query 가 경고하고 crf_validate 가 ✖ 로 잡습니다. MyBatis 변환은 return 을 자동으로 붙이며 isValid/isEmpty/isNotEmpty/\"Y\".equals(x)/&lt; 엔티티/본문 <= 연산자를 처리합니다(<include>/<foreach> 는 수동).\n"+
+    "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가·SELECT 순서로 재정렬). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
+    "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값; 여러 셀은 cells=[{row,col,…}] 한 번에; 출력양식 제거는 format='' 또는 clear_format=true), 글상자=crf_set_label, 밴드 행=crf_set_subsection(높이/숨김/페이지바꿈), 표 생성=crf_add_table(columns JSON), 표 구조=crf_table_info(열 너비·행 높이·병합 격자 확인) → crf_table_rows/crf_table_cols(action=insert|copy|delete|move|resize|equalize: 행/열 중간 삽입·복제·삭제·이동·너비/높이·균등 분배; 병합 셀은 자동으로 늘리고/승격) · crf_set_table(위치·전체 너비/높이 비례 조정·외곽선·셀 테두리 일괄·unmerge_all) · 셀 테두리=crf_set_cell border=left,top… , 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section(영문 DataFooter/한글 데이터바닥글 모두 가능; 없으면 오류에 현재 밴드 목록)/crf_remove_field. 용지 방향 전환은 crf_set_paper orientation=Landscape fit=true(가로/세로 크기 교환 + 모든 밴드 요소를 새 본문 너비에 비례 조정). 넓은 표는 crf_describe_layout detail=true(행 공통 스타일 «공통» 압축)·one_per_line=true 로 읽기. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
     "[★체크박스] 체크 표시는 ■/□·●/○ 글자로 흉내내지 말고 crf_set_cell_checkbox(셀 내용=체크박스 + 참/거짓 조건: field/true_value/false_value)로 만드세요. 조건이 비어 있으면 값이 뭐든 항상 빈 상자입니다. 기본은 색칠(check_type=Rectangle), V 체크/원은 옵션.\n"+
     "[★참조 양식은 요소 전부를 좌표까지 판독] HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으면 눈에 띄는 것만 옮기지 말고 **모든 요소**(제목·부제·문단·표와 셀·선·상자·도형·체크칸·서명란·직인 자리·머리글/바닥글·페이지번호·로고·여백)를 **배치·좌표(x,y,너비,높이 mm)·정렬·글꼴/크기/굵게/색·테두리/배경·데이터 자리 여부**까지 빠짐없이 표로 인벤토리한 뒤 배치를 시작하세요. 형식별: HWPX=samples/document/parse_hwpx.py(문단 vertpos, 표 셀 크기, 도형 절대좌표, 앵커 문단 정렬) · PDF=pdf_text 만으로는 위치가 사라지므로 PyMuPDF 로 텍스트 블록 bbox + 페이지 이미지를 함께 · DOCX=word/document.xml(문단·표·정렬·섹션 여백, EMU→mm ÷36000) · HTML=렌더 스크린샷 + 요소 박스(getBoundingClientRect) · 이미지=Read 로 보고 비율로 좌표를 잡되 실제 크기(용지)는 사용자에게 확인. 인벤토리에 없는 요소가 결과물에 없거나 위치가 다르면 미완성이며, 마지막에 렌더 결과를 원본과 요소별로 나란히 대조(정렬 체크리스트)해 차이를 보고합니다.\n"+
     "[★디자인 결정은 사용자에게 묻기] 리포트를 새로 만들거나 크게 고칠 때는 아래 갈림길을 만나면 임의로 정하지 말고 **작업 전에 결정 목록을 한 번에(3~6개) 제시**하고, 항목마다 권장안(기본값)을 붙여 답을 받은 뒤 진행하세요. 중간에 새 갈림길이 나오면 그 시점에 다시 묻습니다(사용자가 이미 지정했거나 '알아서/추정해서 진행' 이라 한 항목만 생략). 갈림길: ① 요소 구성 — 연속 줄을 1열 표 하나 / 줄바꿈 글상자 하나 / 글상자 여러 개 중 무엇으로(권장: 표 하나) ② 체크박스 — 셀 체크박스 vs 독립 컨트롤, 체크 모양 색칠(Rectangle)/V/원, 상자 모양·크기, 여러 항목이면 항목별 칸 ③ 레이아웃(양식 없이 새로 만들 때) — 목록형(표+머리글) vs 문서형(양식), 용지·방향·여백, 제목/부제/출력일시/페이지번호/로고 위치, 열 순서·너비·정렬·출력양식, 그룹·소계·총계 여부, 서명란·비고란 ④ 글꼴 — 이 리포트/모듈 관례(돋움체·바탕체·나눔고딕)와 크기, 라벨·데이터 통일 ⑤ 쿼리 — 매개변수 이름·정렬·조건, 코드→명칭 변환 ⑥ 저장 — output 파일명·위치, 기존 파일 덮어쓸지. 질문은 '항목: 선택지 (권장 X — 이유 한 줄)' 형식으로 짧게, 답을 받으면 결정 요약을 한 줄로 되짚고 진행합니다.\n"+
@@ -52,7 +55,7 @@ public class CrfMcpServer {
     "[★글꼴 관례] 새 글상자/셀의 글꼴은 리포트의 기존 글꼴(라벨/데이터 각각 집계)을 자동 상속하고, 리포트에 없으면 같은 폴더 이웃 리포트 관례를 따릅니다(SDK 기본 'System' 글꼴 금지 — crf_validate 가 경고). 이 저장소 관례: 목록형=돋움체, 문서형(통지서·서약서)=바탕체, 일부 모듈=나눔고딕; 라벨(글자)과 데이터(숫자) 글꼴은 같은 리포트 안에서 통일. 일괄 정리는 crf_set_font(font/data_font/size, only_system=true 면 System 만 교체).\n"+
     "[★화면→인쇄물 옮길 때] 화면의 빨간 강조·버튼 문구('제출하기' 등)·안내 배너는 인쇄물에 넣지 않습니다. 체크 모양(색칠 Rectangle / V)은 문서마다 사용자 지시를 따르고 지시가 없으면 물어보세요. 엑셀 저장 격자: 머리글 표의 열 경계는 본문 표 경계의 부분집합(오차 10 이내)이어야 열이 쪼개지지 않습니다(crf_validate 가 어긋난 경계를 알림). 그룹 머리글이 매 페이지 반복되면 crf_set_subsection repeat=None.\n"+
     "[★문서형(양식) 리포트] 통지서·서약서·신고서처럼 레코드 1건짜리 양식은 본문 밴드 하나에 글상자/표를 좌표로 배치합니다. 좌표 단위 0.1mm(A4=2100×2970), 색은 #RRGGBB, 줄바꿈 텍스트는 linespace(pt, 10pt 글꼴이면 5.5≈HWP 160%), 셀 병합=crf_merge_cells, 글상자 테두리=border, 글자색/밑줄=color/underline. 양식(HWPX/PDF)의 정렬(가운데/좌/우, 표 앵커 문단 정렬 포함)을 요소별로 대조하세요. 자세한 절차는 docs/document-report-recipe.md.\n"+
-    "쓰기 도구는 항상 output 경로를 따로 받아 원본을 보존합니다(output=원본이면 거부). 도구 실패는 'ERROR: …' 메시지(isError)로 옵니다 — 그대로 유저에게 설명하고 임의로 재시도하지 마세요. crf_describe_layout 의 표 셀 중 ‹병합› 은 병합되어 숨은 자리라 편집 불가(기준 셀에 설정), {…} 는 출력양식입니다.\n"+
+    "쓰기 도구는 output 경로를 따로 받아 원본을 보존합니다(output=원본이면 거부). 한 파일에 여러 단계를 이어서 고칠 때는 a/b 파일을 번갈아 쓰지 말고 **in_place=true**(output 생략 가능; 첫 쓰기 때 <path>.bak 에 원본 백업, 이후 유지)로 같은 파일에 계속 쓰세요 — a/b 교대는 한 단계가 ERROR 로 실패하면 다음 단계가 한 단계 전 파일을 읽어 변경이 조용히 유실됩니다. 배치에서는 한 호출이 ERROR(isError) 면 뒤 호출을 보내지 말고 멈추세요(tools/mcpcall.py 는 기본 stop-on-error). 없을 수도 있는 매개변수/밴드 삭제는 ignore_missing=true. 도구 실패는 'ERROR: …' 메시지(isError)로 옵니다 — 그대로 유저에게 설명하고 임의로 재시도하지 마세요. crf_describe_layout 의 표 셀 중 ‹병합› 은 병합되어 숨은 자리라 편집 불가(기준 셀에 설정), {…} 는 출력양식입니다.\n"+
     "[★열린 파일 주의] .crf가 CLIP report 앱에서 열려 있는 동안 쓰기 도구로 수정하면 파일 잠금/상태 충돌(앱에서 저장 시 편집이 덮어써짐, 또는 편집이 앱에 반영 안 됨)이 납니다. 이미 만든 _edited.crf에 추가 수정이 필요할 때 그 파일이 열려 있을 수 있으면, 먼저 유저에게 '저장 후 잠깐 닫기'를 요청하고 → 수정 → '다시 열기'를 안내하세요(저장→닫기→수정→재오픈).";
 
   // ---- reflection helpers for rich, defensive property reads ----
@@ -125,7 +128,10 @@ public class CrfMcpServer {
   @SuppressWarnings("unchecked")
   static JSONObject strSchema(String[] req, String... kv){ JSONObject s=new JSONObject(); s.put("type","object"); JSONObject props=new JSONObject();
     for(int i=0;i<kv.length;i+=2){ JSONObject p=new JSONObject(); p.put("type","string"); p.put("description",kv[i+1]); props.put(kv[i],p); }
-    s.put("properties",props); JSONArray r=new JSONArray(); for(String x:req) r.add(x); s.put("required",r); return s; }
+    if(props.containsKey("cells")){ JSONObject c=(JSONObject)props.get("cells"); c.remove("type"); JSONArray ty=new JSONArray(); ty.add("array"); ty.add("string"); c.put("type",ty); }
+    boolean writes=props.containsKey("output");
+    if(writes){ JSONObject o=(JSONObject)props.get("output"); o.put("description",o.get("description")+" — required unless in_place=true"); JSONObject ip=new JSONObject(); ip.put("type","string"); ip.put("description","true: overwrite the source file itself (output may be omitted). The first in-place write backs the original up to <path>.bak (never overwritten). Use for long edit chains instead of alternating a/b files."); props.put("in_place",ip); }
+    s.put("properties",props); JSONArray r=new JSONArray(); for(String x:req) if(!(writes&&x.equals("output"))) r.add(x); s.put("required",r); return s; }
   @SuppressWarnings("unchecked")
   static JSONObject toolsList(){ JSONArray arr=new JSONArray();
     arr.add(tool("crf_summary","Read a CLIP report (.crf) and return its datasets, fields, query, groups, and section bands.",
@@ -133,17 +139,19 @@ public class CrfMcpServer {
     arr.add(tool("crf_generate","Generate a draft .crf from SQL or MyBatis: builds dataset fields, query (MyBatis->JavaScript), parameters, GROUP BY group bands, and the common page-footer logo. Writes a new file.",
         strSchema(new String[]{"template","sql","output"}, "template","path to a template .crf", "sql","the SQL or MyBatis query text", "output","path to write the generated .crf")));
     arr.add(tool("crf_set_query","Replace a dataset's query and save to a new file. scriptType is set automatically (plain SQL -> NotScript; MyBatis XML -> converted to JavaScript; JS `var sql=...` -> JavaScript). :col/#{}/${} become '{parameter.X}'. By default declares missing global parameters and ADDS data fields for new SELECT columns (parse-based; for SELECT * use crf_sync_fields mode=db).",
-        strSchema(new String[]{"path","sql","output"}, "path","source .crf", "sql","new SQL / MyBatis <select> / JavaScript dynamic query (with {parameter.X} tokens)", "dataset","dataset name or 0-based index (default: first)", "script_type","auto|sql|javascript (default auto)", "declare_params","true|false: declare undeclared {parameter.X} as String global parameters (default true)", "sync_fields","none|add|replace: add missing SELECT columns as fields / also remove unreferenced fields not in SELECT (default add)", "output","destination .crf")));
+        strSchema(new String[]{"path","sql","output"}, "path","source .crf", "sql","new SQL / MyBatis <select> / JavaScript dynamic query (with {parameter.X} tokens)", "dataset","dataset name or 0-based index (default: first)", "script_type","auto|sql|javascript (default auto)", "declare_params","true|false: declare undeclared {parameter.X} as String global parameters (default true)", "sync_fields","none|add|replace: add missing SELECT columns as fields / also remove unreferenced fields not in SELECT (default add)", "reorder","true|false: reorder the field list to the SELECT column order — fields map to columns BY POSITION (default true)", "output","destination .crf")));
+    arr.add(tool("crf_reorder_fields","Reorder a dataset's data fields. Fields map to SELECT columns BY POSITION (not by name), so the field list order must equal the SELECT column order. order=query (default) sorts by the dataset's current SELECT list; order='A,B,C' puts those first in that order (others keep relative order after them). Bindings are untouched (they reference field objects).",
+        strSchema(new String[]{"path","output"}, "path","source .crf", "dataset","dataset name or 0-based index (default: first)", "order","query | comma-separated field names (default query)", "output","destination .crf")));
     arr.add(tool("crf_sync_fields","Make a dataset's field list match its query columns. mode=sql parses the SELECT list; mode=db RUNS the query against the connected DB (wrapped in SELECT * FROM (...) WHERE 1=0, parameters bound from `params` or '' / NULL) and takes exact column names+types from ResultSetMetaData — use this for SELECT * or function/table columns. Adds missing fields; removes unreferenced extra fields only when remove_unused=true.",
-        strSchema(new String[]{"path","output"}, "path","source .crf", "dataset","dataset name or 0-based index (default: first)", "mode","sql|db (default sql)", "params","JSON object of parameter values for mode=db, e.g. {\"DEPTCD\":\"20399\"} (optional)", "set_types","true to set field DataType from DB/heuristics (default false = Null/auto)", "remove_unused","true to remove fields not in the query when nothing references them (default false)", "output","destination .crf")));
+        strSchema(new String[]{"path","output"}, "path","source .crf", "dataset","dataset name or 0-based index (default: first)", "mode","sql|db (default sql)", "params","JSON object of parameter values for mode=db, e.g. {\"DEPTCD\":\"20399\"} (optional)", "set_types","true to set field DataType from DB/heuristics (default false = Null/auto)", "remove_unused","true to remove fields not in the query when nothing references them (default false)", "reorder","true|false: reorder fields to the query column order — fields map to columns BY POSITION (default true)", "output","destination .crf")));
     arr.add(tool("crf_add_dataset","Add a new SQL dataset (connection copied from the first dataset) with the given query; declares parameters and creates fields like crf_set_query. Saves to a new file.",
         strSchema(new String[]{"path","name","sql","output"}, "path","source .crf", "name","new dataset name", "sql","query (SQL / MyBatis / JS)", "script_type","auto|sql|javascript (default auto)", "output","destination .crf")));
     arr.add(tool("crf_remove_dataset","Remove a dataset. Refuses if any of its fields is referenced (bindings, formulas...) unless force=true. Saves to a new file.",
         strSchema(new String[]{"path","dataset","output"}, "path","source .crf", "dataset","dataset name or 0-based index", "force","true to remove even if referenced (references become dangling)", "output","destination .crf")));
     arr.add(tool("crf_set_param","Create or update a global parameter (매개변수) used as {parameter.NAME} in queries: data type, default value, prompt. Saves to a new file.",
-        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","parameter name (e.g. DEPTCD)", "type","String|Number|Currency|DateTime|Boolean (default String; existing kept if omitted)", "default","default value (optional)", "prompt","prompt/label text (optional)", "output","destination .crf")));
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","parameter name (e.g. DEPTCD)", "type","String|Number|Currency|DateTime|Boolean (default: none/Null like the designer; existing kept if omitted)", "default","default value (optional)", "prompt","prompt/label text (optional)", "output","destination .crf")));
     arr.add(tool("crf_remove_param","Remove a global parameter. Refuses if referenced (queries, bindings, formulas) unless force=true. Saves to a new file.",
-        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","parameter name", "force","true to remove anyway", "output","destination .crf")));
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","parameter name", "force","true to remove anyway", "ignore_missing","true: OK (no-op save) when the parameter does not exist — for batches", "output","destination .crf")));
     arr.add(tool("crf_rename_field","Rename a field (data/formula/parameter/running-total). Object bindings follow automatically; formula scripts (\"ns.OLD\") and query tokens {parameter.OLD} are rewritten. Saves to a new file.",
         strSchema(new String[]{"path","name","new_name","output"}, "path","source .crf", "name","current field name", "new_name","new name", "dataset","dataset name/index when the same field name exists in several datasets (optional)", "output","destination .crf")));
     arr.add(tool("crf_remove_field","Remove a data/formula/running-total field. Lists every reference (cells, labels, groups, formulas, links) and refuses unless force=true. Saves to a new file.",
@@ -159,11 +167,11 @@ public class CrfMcpServer {
     arr.add(tool("crf_search","Search .crf files under a directory for text: in queries (plain-SQL view of JS queries), XPath/JSON root paths and field paths of XML/JSON datasets (and stored-procedure names), field names, formula scripts, parameters, or control/cell texts and bindings. Superset of Clipsoft's FindQuery(클립유틸 문자열찾기) utility. E.g. find reports using table AHRM1234, parameter DEPTCD, an XPath node, or a label text.",
         strSchema(new String[]{"dir","text"}, "dir","directory to scan (recursive)", "text","text to find (case-insensitive substring; or a regex when regex=true)", "regex","true for regex (default false)", "scope","query|xpath|field|formula|param|control|any (default any; query also covers xpath)", "like","file-name filter: substring or glob (optional)", "limit","max matching files to report (default 50)", "max_files","max files to scan (default 5000)")));
     arr.add(tool("crf_describe_layout","Describe a report's section bands: subsections (type/height/hidden, subreport links), controls with bindings, and table cell grids (‹병합›=merged-away, {fmt}=output format). detail=true adds per-cell/control style (align, font size/bold, can-grow, merge flag, conditional styles).",
-        strSchema(new String[]{"path"}, "path",".crf file", "detail","true for style details per cell/control (default false)")));
-    arr.add(tool("crf_validate","Lint a report: System(default) fonts and label/data font mismatch, vertically stacked same-style labels that should be one table/label, header-vs-body table column boundaries (Excel grid), dangling bindings (cells/labels/groups bound to fields that no longer exist), broken formula references (#unknown#, missing fields, no return), undeclared/unused parameters, query columns vs fields, scriptType mismatches, duplicate names, hidden subsections, missing linked subreport files. Read-only.",
-        strSchema(new String[]{"path"}, "path",".crf file")));
+        strSchema(new String[]{"path"}, "path",".crf file", "detail","true for style details per cell/control; per table row the most common style is printed once as «공통: …» and only differing cells carry their own «…» (default false)", "one_per_line","true: print each table cell on its own line [r,c] — easier to read for wide tables (default false)")));
+    arr.add(tool("crf_validate","Lint a report: System(default) fonts and label/data font mismatch, vertically stacked same-style labels that should be one table/label, Excel grid (every vertical line in Excel-exported bands — table column boundaries, label/image left+right, line x — must sit on a body-table column boundary ±1mm or Excel splits columns; page footer excluded), dangling bindings (cells/labels/groups bound to fields that no longer exist), broken formula references (#unknown#, missing fields, no return), undeclared/unused parameters, query columns vs fields, scriptType mismatches, duplicate names, hidden subsections, missing linked subreport files. Read-only.",
+        strSchema(new String[]{"path"}, "path",".crf file", "excel","true: the report is exported to Excel — Excel-grid findings become WARN instead of INFO (optional)")));
     arr.add(tool("crf_set_label","Edit a 글상자(label) or other named control: bind field / static text / new formula, output format, alignment, font size/bold, wrap, can-grow, background, position/size, visibility. Saves to a new file.",
-        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format e.g. #,##0 (optional)", "align","Left|Center|Right|Both(양쪽)|Equal(배분) (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "bgcolor","#RRGGBB (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "visible","true/false (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt (optional)", "padding","inner margins 'l,t,r,b' in 0.1mm (optional)", "border","true/false: draw a rectangle border around the label (optional)", "linewidth","border width W025|W050|W075|W100|W150|W200|W300 (optional)", "output","destination .crf")));
+        strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format e.g. #,##0; '' or 'none' REMOVES it (optional)", "clear_format","true to remove the output format (optional)", "align","Left|Center|Right|Both(양쪽)|Equal(배분) (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "bgcolor","#RRGGBB (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "visible","true/false (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt (optional)", "padding","inner margins 'l,t,r,b' in 0.1mm (optional)", "border","true/false: draw a rectangle border around the label (optional)", "linewidth","border width W025|W050|W075|W100|W150|W200|W300 (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_subsection","Edit a subsection (band row) of a section: height, visible, name, page break. Saves to a new file.",
         strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English)", "index","subsection index within the section (default 0; see crf_describe_layout sub[j])", "height","new height (optional)", "visible","true/false (optional)", "name","new subsection name (optional)", "new_page","None|Before|After|BeforeAfter page break (optional)", "repeat","group header repeat: None|OnPage|OnColumn|OnPageAndColumn (optional; OnPage = header repeats on every page)", "output","destination .crf")));
     arr.add(tool("crf_remove_control","Remove a control (label/table/line/image/subreport…) by name from its band. Saves to a new file.",
@@ -171,7 +179,7 @@ public class CrfMcpServer {
     arr.add(tool("crf_remove_group","Remove a group: its group header + footer bands (with their controls) and the Group definition. Refuses if the group's 그룹이름 field is bound somewhere unless force=true. Saves to a new file.",
         strSchema(new String[]{"path","group","output"}, "path","source .crf", "group","grouping column name or 0-based group index (outermost = 0)", "force","true to remove even if the group-name field is referenced", "output","destination .crf")));
     arr.add(tool("crf_remove_section","Remove a non-group section band (e.g. 페이지머리글). Refuses if it still has controls unless force=true. Group bands: use crf_remove_group. Saves to a new file.",
-        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band name (Korean or English)", "force","true to remove with its controls", "output","destination .crf")));
+        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band name: ReportHeader|PageHeader|DataHeader|DataFooter|PageFooter|ReportFooter or Korean 보고서머리글/페이지머리글/데이터머리글/데이터바닥글/페이지바닥글/보고서바닥글", "force","true to remove with its controls", "ignore_missing","true: OK (no-op save) when the band does not exist", "output","destination .crf")));
     arr.add(tool("crf_add_table","Create a real table (ControlTable). Mode A columns=: a 1-row data table bound to fields in the 본문(Detail) band (or given section) plus an optional 1-row title table in a header band with the same column widths; columns = JSON array of {field, title, width, format, align}. Mode B rows=: a 1-column multi-row TEXT table for consecutive paragraphs / numbered lists / ※ notes (one row per line, no header, borders off by default) — use this instead of stacking several 글상자. rows = JSON array of strings or {text|field, align, bold, height, wrap, cangrow}. New cells inherit the report's font. Saves to a new file.",
         strSchema(new String[]{"path","output"}, "path","source .crf", "columns","(mode A) JSON array, e.g. [{\"field\":\"DEPT_NM\",\"title\":\"학과\",\"width\":500},{\"field\":\"AMT\",\"title\":\"금액\",\"width\":300,\"format\":\"#,##0\",\"align\":\"Right\"}]", "rows","(mode B) JSON array of lines, e.g. [\"1. 첫째 항목\",\"2. 둘째 항목\",{\"text\":\"※ 주석\",\"height\":112}]", "width","(mode B) table width (default 1480)", "border","(mode B) true to draw cell borders (default false)", "wrap","(mode B) word wrap for all rows (default true)", "align","(mode B) default horizontal alignment Left|Center|Right|Both (default Left)", "section","band for the data row (default 본문)", "header_section","(mode A) band for the title row: 데이터머리글(default)|그룹머리글|페이지머리글|none", "left","X (default 0)", "top","Y of the data table (default 0)", "header_top","(mode A) Y of the title table (default 0)", "row_height","row height (default 60; mode B default 56)", "name","table name (default 표_new)", "output","destination .crf")));
     arr.add(tool("crf_merge_labels","Merge 2+ vertically stacked 글상자(labels) in the same band into ONE element: into=table (default) builds a 1-column table with one row per label (each row keeps its text/field binding, font, alignment, wrap, line spacing; row heights preserve the original vertical footprint so nothing else shifts) — into=label joins static texts with line breaks into a single word-wrapped label. Originals are removed. Use when a numbered list / paragraph block / ※ notes were built as separate labels. Saves to a new file.",
@@ -186,8 +194,8 @@ public class CrfMcpServer {
         strSchema(new String[]{"path","column","output"}, "path","source .crf", "column","field name to group by", "level","inner|outer|N (default inner)", "label","true to add a header label bound to the grouping field (optional)", "subtotal","comma-separated numeric fields to subtotal in the footer (optional)", "sort","Ascending|Descending (default Ascending)", "output","destination .crf")));
     arr.add(tool("crf_place_detail_fields","Place a field-bound data label in the DETAIL band for every field of the first dataset (a simple list row), and save to a new file.",
         strSchema(new String[]{"path","output"}, "path","source .crf", "output","destination .crf")));
-    arr.add(tool("crf_set_cell","Edit one table cell: bind a field / static text / a new formula, output format, alignment, font size/bold, wrap, can-grow, merge-duplicates, background, font. Use the table name and row/col from crf_describe_layout; cells shown as ‹병합› are merged-away and cannot be edited (edit the anchor cell). Saves to a new file.",
-        strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name (from describe_layout)", "row","row index (0-based)", "col","column index (0-based)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format string e.g. #,##0 (optional)", "align","Left|Center|Right|Both(양쪽)|Equal(배분) (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "merge","true/false merge duplicate values (optional)", "bgcolor","#RRGGBB (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt for wrapped text, e.g. 5.5 for 10pt≈HWP 160% (optional)", "padding","cell/label inner margins 'left,top,right,bottom' in 0.1mm (optional)", "border","cell lines: true|false|'left,top' subset (optional)", "linewidth","W025|W050|W075|W100|W150|W200|W300 (optional)", "linecolor","#RRGGBB (optional)", "output","destination .crf")));
+    arr.add(tool("crf_set_cell","Edit one table cell (or MANY at once with cells=[{row,col,...}]): bind a field / static text / a new formula, output format, alignment, font size/bold, wrap, can-grow, merge-duplicates, background, font. Use the table name and row/col from crf_describe_layout; cells shown as ‹병합› are merged-away and cannot be edited (edit the anchor cell). Saves to a new file.",
+        strSchema(new String[]{"path","output"}, "path","source .crf", "table","ControlTable name (from describe_layout); with cells= it is the default table", "row","row index (0-based)", "col","column index (0-based)", "cells","JSON array for BATCH: [{row,col,table?,field|text|formula|format|align|...}] — top-level args are defaults for every entry; one save + one verify (optional)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format string e.g. #,##0; '' or 'none' REMOVES the format (optional)", "clear_format","true to remove the output format (optional)", "align","Left|Center|Right|Both(양쪽)|Equal(배분) (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "merge","true/false merge duplicate values (optional)", "bgcolor","#RRGGBB (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt for wrapped text, e.g. 5.5 for 10pt≈HWP 160% (optional)", "padding","cell/label inner margins 'left,top,right,bottom' in 0.1mm (optional)", "border","cell lines: true|false|'left,top' subset (optional)", "linewidth","W025|W050|W075|W100|W150|W200|W300 (optional)", "linecolor","#RRGGBB (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_cell_checkbox","Turn a table cell into a native CLIP 체크박스 cell (셀 내용=체크박스) with a check condition: checked when `field` `operator` `true_value` (default Equal '1'), unchecked when == `false_value` (default '0'). NOTE: with no condition the box is always empty (a bound ■/□ text is ignored). check_type=Rectangle(색칠, default)|V|Ellipse|RoundRectangle. Use this instead of ■/□ characters. Saves to a new file.",
         strSchema(new String[]{"path","table","row","col","output"}, "path","source .crf", "table","ControlTable name", "row","row index (0-based)", "col","col index (0-based)", "field","condition field name (data field) — required unless off=true", "true_value","value that means checked (default 1)", "false_value","value that means unchecked (default 0; empty string to skip)", "operator","Equal|NotEqual|LessThen|GreateThen|LessEqual|GreateEqual|Between (default Equal; Between uses true_value..true_value2)", "true_value2","upper bound for Between (optional)", "check_type","check mark: Rectangle(filled, default)|V|Ellipse|RoundRectangle", "shape","box shape: Rectangle(default)|Ellipse|RoundRectangle|None", "color","check color #RRGGBB (default black)", "size","check size (0=auto)", "default","true/false: state when neither condition matches (default false)", "off","true to revert the cell to a normal text cell", "output","destination .crf")));
     arr.add(tool("crf_merge_cells","Merge table cells: the anchor cell (row,col) spans `rowspan`×`colspan` (covered cells become merged-away ‹병합› cells); rowspan=1 & colspan=1 splits a merged cell back. Saves to a new file.",
@@ -209,7 +217,7 @@ public class CrfMcpServer {
     arr.add(tool("crf_add_label","Add a 글상자(label) to a section band, bound to a field / static text / formula, with optional font/align/color/border style. Saves to a new file.",
         strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English ReportHeader/PageHeader/Detail/...)", "text","static text (optional)", "field","field name to bind (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "underline","true/false (optional)", "color","font color #RRGGBB (optional)", "font","font name (optional)", "align","Left|Center|Right|Both(양쪽)|Equal(배분) (optional)", "valign","Top|Center|Bottom (optional)", "wrap","true/false (optional)", "linespace","extra line spacing pt (optional)", "border","true/false rectangle border (optional)", "linewidth","W025|W050|W075|W100|W150|W200|W300 (optional)", "output","destination .crf")));
     arr.add(tool("crf_set_paper","Set paper type/orientation/margins. Saves to a new file.",
-        strSchema(new String[]{"path","output"}, "path","source .crf", "paper","A4|A3|B4|B5|Letter ... (optional)", "orientation","Potrait|Landscape (optional)", "marginL","left margin (optional)", "marginT","top (optional)", "marginR","right (optional)", "marginB","bottom (optional)", "output","destination .crf")));
+        strSchema(new String[]{"path","output"}, "path","source .crf", "paper","A4|A3|B4|B5|Letter ... (optional)", "orientation","Potrait|Landscape (optional)", "marginL","left margin (optional)", "marginT","top (optional)", "marginR","right (optional)", "marginB","bottom (optional)", "fit","true: after the change, scale every band's controls (tables by column widths, labels/lines by X+width) to the new body width — e.g. Potrait→Landscape 1500→2670 (optional)", "output","destination .crf")));
     arr.add(tool("crf_diff","Compare two reports: datasets/fields/groups/sections and what was added or removed.",
         strSchema(new String[]{"a","b"}, "a","first .crf", "b","second .crf")));
     // ---- DB tools (도메인 테이블 조회로 업무지식 확보; 접속정보는 env CLIP_DB_URL/USER/PWD) ----
@@ -244,13 +252,18 @@ public class CrfMcpServer {
   }
   /** Write a .crf for a tool: output required, must differ from the input (원본 보존), parent dir auto-created. */
   static String save(TheReportFile rf,String output,String input) throws IOException {
-    if(output==null||output.trim().isEmpty()) throw new RuntimeException("output 인자가 비어 있습니다 (원본 보존을 위해 별도 경로 필요, 예: <원본>_edited.crf)");
-    File o=new File(output.trim());
-    try{ if(input!=null && !input.trim().isEmpty() && o.getCanonicalPath().equalsIgnoreCase(new File(input.trim()).getCanonicalPath())) throw new RuntimeException("output 이 원본과 같습니다 — 원본 보존 규칙: 다른 경로(예 <원본>_edited.crf)를 지정하세요"); }catch(IOException e){}
+    JSONObject a=CUR_ARGS.get(); boolean inPlace=a!=null && "true".equalsIgnoreCase(s(a,"in_place"));
+    if(inPlace && (output==null||output.trim().isEmpty())) output=input;
+    if(output==null||output.trim().isEmpty()) throw new RuntimeException("output 인자가 비어 있습니다 (원본 보존을 위해 별도 경로 필요, 예: <원본>_edited.crf — 또는 in_place=true 로 원본에 덮어쓰기(.bak 자동 백업))");
+    File o=new File(output.trim()); boolean same=false;
+    try{ same=input!=null && !input.trim().isEmpty() && o.getCanonicalPath().equalsIgnoreCase(new File(input.trim()).getCanonicalPath()); }catch(IOException e){}
+    String bakNote="";
+    if(same){ if(!inPlace) throw new RuntimeException("output 이 원본과 같습니다 — 원본 보존 규칙: 다른 경로(예 <원본>_edited.crf)를 지정하거나 in_place=true(.bak 자동 백업)를 주세요");
+      File bak=new File(o.getPath()+".bak"); if(!bak.exists()){ java.nio.file.Files.copy(o.toPath(),bak.toPath()); bakNote=" (원본 백업 → "+bak.getName()+")"; } else bakNote=" (백업 "+bak.getName()+" 유지)"; }
     if(o.getParentFile()!=null && !o.getParentFile().isDirectory()) o.getParentFile().mkdirs();
     boolean existed=o.exists();
     Rexpert4.write(rf,o.getPath());
-    return o.getPath()+(existed?" (기존 파일 덮어씀)":"");
+    return o.getPath()+(same?" (in_place)"+bakNote:(existed?" (기존 파일 덮어씀)":""));
   }
 
   @SuppressWarnings("unchecked")
@@ -260,7 +273,10 @@ public class CrfMcpServer {
     catch(Throwable t){ if(t instanceof IllegalArgumentException && String.valueOf(t.getMessage()).startsWith("unknown tool")) throw (IllegalArgumentException)t;
       System.err.println("TOOL ERR "+name+": "+t); return textContent("ERROR: "+friendly(t)); }
   }
+  static final ThreadLocal<JSONObject> CUR_ARGS=new ThreadLocal<>();
   static JSONObject dispatch(String name,JSONObject args) throws Exception {
+    CUR_ARGS.set(args);
+    if("true".equalsIgnoreCase(s(args,"in_place")) && (s(args,"output")==null||s(args,"output").trim().isEmpty()) && s(args,"path")!=null) args.put("output",s(args,"path"));
     switch(name){
       case "crf_summary":  return textContent(summary((String)args.get("path")));
       case "crf_generate": return textContent(runGen((String)args.get("template"),(String)args.get("sql"),(String)args.get("output")));
@@ -269,7 +285,7 @@ public class CrfMcpServer {
       case "crf_get_query":return textContent(getQuery(args));
       case "crf_get_formula":return textContent(getFormula(args));
       case "crf_search":return textContent(searchReports(args));
-      case "crf_describe_layout":return textContent(describeLayout((String)args.get("path"),"true".equalsIgnoreCase(s(args,"detail"))));
+      case "crf_describe_layout":return textContent(describeLayout((String)args.get("path"),"true".equalsIgnoreCase(s(args,"detail")),"true".equalsIgnoreCase(s(args,"one_per_line"))));
       case "crf_add_group":return textContent(addGroup(args));
       case "crf_set_group":return textContent(setGroup(args));
       case "crf_validate":return textContent(validate(args));
@@ -294,6 +310,7 @@ public class CrfMcpServer {
       case "crf_set_cell_style":return textContent(setCellStyle(args));
       case "crf_add_data_field":return textContent(addDataField(args));
       case "crf_sync_fields":return textContent(syncFields(args));
+      case "crf_reorder_fields":return textContent(reorderFieldsTool(args));
       case "crf_add_dataset":return textContent(addDataset(args));
       case "crf_remove_dataset":return textContent(removeDataset(args));
       case "crf_set_param":return textContent(setParam(args));
@@ -402,6 +419,16 @@ public class CrfMcpServer {
     for(RexObjectList<?> l: lists){ if(l==null)continue; for(int i=0;i<l.size();i++){ Object o=l.get(i); if(name.equalsIgnoreCase(nameOf(o))) return (Field)o; } }
     return null;
   }
+  /** 같은 이름이 여러 종류(데이터/매개변수/공식…)에 있을 수 있으므로 종류(nsOf)까지 맞는 필드만 찾는다. */
+  static Field findFieldOfKind(TheReportFile rf,String name,String ns){
+    GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager(); var rom=rf.getGlobe().getMainReport().getReportObjectManager();
+    java.util.List<RexObjectList<?>> lists=new java.util.ArrayList<>(); RexObjectList<DataSet> dss=gom.getDataSetList();
+    for(int i=0;i<dss.size();i++) lists.add((RexObjectList<?>) dss.get(i).getFieldDataList());
+    lists.add((RexObjectList<?>) rom.getFieldDataList()); lists.add((RexObjectList<?>) rom.getFieldFormulaList()); lists.add((RexObjectList<?>) rom.getFieldRunningTotalList()); lists.add((RexObjectList<?>) rom.getFieldGroupNameList());
+    lists.add((RexObjectList<?>) gom.getFieldGlobalParameterList()); lists.add((RexObjectList<?>) gom.getFieldGlobalSpecialList());
+    for(RexObjectList<?> l: lists){ if(l==null)continue; for(int i=0;i<l.size();i++){ Object o=l.get(i); if(o instanceof Field && name.equalsIgnoreCase(nameOf(o)) && nsOf((Field)o).equals(ns)) return (Field)o; } }
+    return null;
+  }
   static Control findTable(TheReportFile rf,String name){
     RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
     java.util.List<Control> all=new java.util.ArrayList<>();
@@ -420,9 +447,11 @@ public class CrfMcpServer {
       String fname=s(args,"formula_name"); if(fname==null||fname.trim().isEmpty()) fname=autoFormulaName; fname=fname.trim(); if(findField(rf,fname)!=null){ int i=2; while(findField(rf,fname+"_"+i)!=null) i++; fname=fname+"_"+i; }
       FieldFormula ff=new FieldFormula(); ff.setName(fname); ff.setScript(formula); ff.setScriptType(ScriptType.JavaScript); ((RexObjectList<FieldFormula>) rf.getGlobe().getMainReport().getReportObjectManager().getFieldFormulaList()).add(ff);
       call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); call(target,"setApplyValueField",Field.class,ff); did.append(" formula="+fname+"{"+oneLine(formula,60)+"}"); }
-    else if(text!=null){ call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(target,"setApplyValueText",String.class,text); did.append(" text=\""+text+"\""); }
-    else if("true".equalsIgnoreCase(s(args,"clear"))){ call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(target,"setApplyValueText",String.class,""); did.append(" cleared"); }
-    if(format!=null && !format.isEmpty()){ call(target,"setOutputFormat",String.class,format); did.append(" format="+format); }
+    else if(text!=null){ call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(target,"setApplyValueText",String.class,text); Object prevF=go(target,"getApplyValueField"); if(prevF!=null){ try{ call(target,"setApplyValueField",Field.class,null); did.append(" (바인딩 "+nameOf(prevF)+" 해제)"); }catch(Throwable t){} } did.append(" text=\""+text+"\""); }
+    else if("true".equalsIgnoreCase(s(args,"clear"))){ call(target,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); call(target,"setApplyValueText",String.class,""); if(go(target,"getApplyValueField")!=null){ try{ call(target,"setApplyValueField",Field.class,null); }catch(Throwable t){} } did.append(" cleared"); }
+    boolean clearFmt="true".equalsIgnoreCase(s(args,"clear_format")) || (format!=null && (format.isEmpty()||format.equalsIgnoreCase("none")||format.equalsIgnoreCase("general")));
+    if(clearFmt){ String was=q(g(target,"getOutputFormat")); call(target,"setOutputFormat",String.class,""); did.append(was.isEmpty()?" format=(이미 없음)":" format 제거(was "+was+")"); }
+    else if(format!=null && !format.isEmpty()){ call(target,"setOutputFormat",String.class,format); did.append(" format="+format); }
     String align=s(args,"align"), valign=s(args,"valign"), fontsize=s(args,"fontsize"), bold=s(args,"bold"), font=s(args,"font"), wrap=s(args,"wrap");
     if(align!=null||valign!=null||fontsize!=null||bold!=null||(font!=null&&!font.isEmpty())||wrap!=null){ Object ti=go(target,"getTextInfo"); if(ti==null) throw new RuntimeException("이 컨트롤은 텍스트 속성(TextInfo)이 없습니다");
       if(align!=null&&!align.isEmpty()){ String a=align.trim().toLowerCase(); com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod h= a.startsWith("l")?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Left : a.startsWith("r")?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Right : (a.startsWith("c")||a.startsWith("m"))?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Middle : (a.startsWith("b")||a.startsWith("j"))?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Both : (a.startsWith("e")||a.startsWith("d"))?com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.Equal : null; if(h==null) throw new RuntimeException("align 은 Left|Center|Right|Both(양쪽)|Equal(배분)"); call(ti,"setHorizontalAlignment",com.clipsoft.clipreport.common.enums.HorizontalAlignmentMethod.class,h); did.append(" align="+h); }
@@ -444,8 +473,36 @@ public class CrfMcpServer {
     if(bg!=null&&!bg.isEmpty()){ call(target,"setBackStyle",BackStyleType.class,BackStyleType.Normal); call(target,"setBackColor",int.class,parseColor(bg)); did.append(" 배경="+bg); }
     return did.toString();
   }
+  /** cells=[{row,col,table?,...props}] 일괄: 최상위 인자(table/font/align 등)는 기본값, 항목 인자가 우선. 한 번 저장·되읽기. */
+  @SuppressWarnings("unchecked")
+  static String setCellBatch(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"); Object co=args.get("cells"); JSONArray cells;
+    try{ cells=co instanceof JSONArray?(JSONArray)co:(JSONArray)P.parse(String.valueOf(co)); }catch(Exception e){ return "ERROR: cells 는 JSON 배열이어야 합니다: "+e.getMessage(); }
+    if(cells==null||cells.isEmpty()) return "ERROR: cells 가 비어 있습니다";
+    TheReportFile rf=open(path); java.util.List<Object[]> plan=new java.util.ArrayList<>(); StringBuilder out=new StringBuilder();
+    for(int i=0;i<cells.size();i++){ Object eo=cells.get(i); if(!(eo instanceof JSONObject)) return "ERROR: cells["+i+"] 는 객체여야 합니다";
+      JSONObject e=(JSONObject)eo, a=new JSONObject(); for(Object k: args.keySet()) if(!k.equals("cells")&&!k.equals("path")&&!k.equals("output")) a.put(k,args.get(k)); for(Object k: e.keySet()) a.put(k,e.get(k));
+      String table=s(a,"table"); if(table==null||table.isEmpty()) return "ERROR: cells["+i+"] table 이 없습니다(항목 또는 최상위에 지정)";
+      if(s(a,"row")==null||s(a,"col")==null) return "ERROR: cells["+i+"] row/col 이 없습니다";
+      int row=Integer.parseInt(q(s(a,"row")).trim()), col=Integer.parseInt(q(s(a,"col")).trim());
+      Control tbl=findTable(rf,table); if(tbl==null) return "ERROR: cells["+i+"] table '"+table+"' not found";
+      Object cell=cellOf(tbl,row,col); String did=applyProps(rf,cell,a,"F_"+table+"_"+row+"_"+col)+CrfTableOps.cellBorderArgs(cell,a);
+      if(did.isEmpty()) return "ERROR: cells["+i+"] "+table+"["+row+","+col+"] nothing to set";
+      String key=table+"["+row+","+col+"]"; for(Object[] pl: plan) if(key.equals(pl[5])) return "ERROR: cells["+i+"] "+key+" 가 같은 배치에 두 번 있습니다 — 한 셀은 한 항목으로";
+      plan.add(new Object[]{table,row,col,s(a,"field"),expectedFormat(a),key}); out.append("\n  "+key+did); }
+    String wrote=save(rf,output,path); TheReportFile v=open(output); java.util.List<String> bad=new java.util.ArrayList<>();
+    for(Object[] pl: plan){ Control vt=findTable(v,(String)pl[0]); Object vc=vt==null?null:cellOf(vt,(Integer)pl[1],(Integer)pl[2]); Object vf=go(vc,"getApplyValueField"); String vfmt=g(vc,"getOutputFormat"), field=(String)pl[3], format=(String)pl[4];
+      if(field!=null&&!field.isEmpty()&&(vf==null||!field.equalsIgnoreCase(nameOf(vf)))) bad.add(pl[0]+"["+pl[1]+","+pl[2]+"] field");
+      if(format!=null&&!format.equals(q(vfmt))) bad.add(pl[0]+"["+pl[1]+","+pl[2]+"] format(기대 '"+format+"' 실제 '"+q(vfmt)+"')"); }
+    if(!bad.isEmpty()) return "ERROR: 저장 후 되읽기 검증 실패 — "+bad;
+    return "OK: "+plan.size()+"개 셀 설정, verified, wrote "+wrote+out;
+  }
+  /** 인자로부터 저장 후 기대되는 출력양식: clear_format/빈값/none/general 이면 "", format 이 있으면 그 값, 둘 다 없으면 null(검사 안 함). applyProps 의 우선순위와 동일. */
+  static String expectedFormat(JSONObject a){ String f=s(a,"format"); boolean clear="true".equalsIgnoreCase(s(a,"clear_format")) || (f!=null && (f.isEmpty()||f.equalsIgnoreCase("none")||f.equalsIgnoreCase("general"))); if(clear) return ""; return f; }
   static String setCell(JSONObject args) throws Exception {
+    if(args.get("cells")!=null) return setCellBatch(args);
     String path=s(args,"path"), table=s(args,"table"), output=s(args,"output");
+    if(s(args,"row")==null||s(args,"col")==null) return "ERROR: row/col 이 없습니다 (여러 셀은 cells=[{row,col,...}] 로)";
     int row=Integer.parseInt(q(s(args,"row")).trim()), col=Integer.parseInt(q(s(args,"col")).trim());
     TheReportFile rf=open(path);
     Control tbl=findTable(rf,table); if(tbl==null) return "ERROR: table '"+table+"' not found (use crf_describe_layout for names)";
@@ -458,7 +515,7 @@ public class CrfMcpServer {
     String ver=" verified["+(vf!=null?"field="+nameOf(vf):"text=\""+vtxt+"\"")+(vfmt!=null&&!vfmt.isEmpty()?" format="+vfmt:"")+"]";
     String field=s(args,"field"), format=s(args,"format");
     if(field!=null && !field.isEmpty() && (vf==null || !field.equalsIgnoreCase(nameOf(vf)))) return "ERROR: 저장 후 되읽기 검증 실패 — 셀 바인딩이 반영되지 않음"+ver;
-    if(format!=null && !format.isEmpty() && !format.equals(vfmt)) return "ERROR: 저장 후 되읽기 검증 실패 — 출력양식이 반영되지 않음"+ver;
+    String expF=expectedFormat(args); if(expF!=null && !expF.equals(q(vfmt))) return "ERROR: 저장 후 되읽기 검증 실패 — 출력양식 기대 '"+expF+"' 실제 '"+q(vfmt)+"'"+ver;
     return "OK: "+table+"["+row+","+col+"] set"+did+ver+", wrote "+wrote;
   }
   /** All controls with their location: {section, subsection, controlList, control}. */
@@ -603,7 +660,8 @@ public class CrfMcpServer {
   static String removeSection(JSONObject args) throws Exception {
     String path=s(args,"path"), key=s(args,"section"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
     if(engSection(key).toLowerCase().contains("group")) return "ERROR: 그룹 밴드는 crf_remove_group 으로 삭제하세요";
-    TheReportFile rf=open(path); Section sec=findSection(rf,key); if(sec==null) return "ERROR: section '"+key+"' not found";
+    TheReportFile rf=open(path); Section sec=findSection(rf,key);
+    if(sec==null){ if("true".equalsIgnoreCase(s(args,"ignore_missing"))){ String wrote=save(rf,output,path); return "OK: 밴드 '"+key+"' 없음 — 변경 없이 저장(ignore_missing), wrote "+wrote; } return "ERROR: section '"+key+"' not found — 이 리포트의 밴드: "+sectionsOf(rf)+" (영문 ReportHeader/PageHeader/DataHeader/DataFooter/PageFooter/ReportFooter 또는 한글 보고서머리글/…/데이터바닥글 모두 가능)"; }
     if(sec instanceof SectionDetail) return "ERROR: 본문(Detail) 밴드는 삭제할 수 없습니다";
     int n=0; for(Object[] e: allControls(rf)) if(e[0]==sec) n++;
     if(n>0&&!force) return "ERROR: 이 밴드에 컨트롤 "+n+"개가 있습니다 — force=true 로 함께 삭제";
@@ -615,13 +673,30 @@ public class CrfMcpServer {
     TheReportFile rf=open(path); MainPage mp=rf.getGlobe().getMainReport().getReportDesign().getMainPage();
     StringBuilder did=new StringBuilder();
     String pp=(String)args.get("paper"); if(pp!=null && !pp.isEmpty()){ try{ mp.setPaperType(com.clipsoft.clipreport.common.enums.PaperType.valueOf(pp)); did.append(" 용지="+pp); }catch(Exception e){ return "ERROR: unknown paper '"+pp+"'"; } }
-    String or=(String)args.get("orientation"); if(or!=null && !or.isEmpty()){ try{ mp.setPaperOrientationType(com.clipsoft.clipreport.common.enums.PaperOrientation.valueOf(or)); mp.setPaperOrientationUse(true); did.append(" 방향="+or); }catch(Exception e){ return "ERROR: unknown orientation '"+or+"' (Potrait|Landscape)"; } }
+    int bodyBefore=mp.getPaperWidth()-mp.getLeftMargin()-mp.getRightMargin();
+    String or=(String)args.get("orientation"); if(or!=null && !or.isEmpty()){ try{ mp.setPaperOrientationType(com.clipsoft.clipreport.common.enums.PaperOrientation.valueOf(or)); mp.setPaperOrientationUse(true); did.append(" 방향="+or);
+        boolean land=or.equalsIgnoreCase("Landscape"); int w=mp.getPaperWidth(), h=mp.getPaperHeight();
+        if(w>0&&h>0&&((land&&w<h)||(!land&&w>h))){ mp.setPaperWidth(h); mp.setPaperHeight(w); did.append(" 크기 "+w+"x"+h+"→"+h+"x"+w+"(디자이너와 같이 가로/세로 교환)"); }
+      }catch(IllegalArgumentException e){ return "ERROR: unknown orientation '"+or+"' (Potrait|Landscape)"; } }
     if(args.get("marginL")!=null){ mp.setLeftMargin(pInt(args.get("marginL"),mp.getLeftMargin())); did.append(" L"+mp.getLeftMargin()); }
     if(args.get("marginT")!=null){ mp.setTopMargin(pInt(args.get("marginT"),mp.getTopMargin())); did.append(" T"+mp.getTopMargin()); }
     if(args.get("marginR")!=null){ mp.setRightMargin(pInt(args.get("marginR"),mp.getRightMargin())); did.append(" R"+mp.getRightMargin()); }
     if(args.get("marginB")!=null){ mp.setBottomMargin(pInt(args.get("marginB"),mp.getBottomMargin())); did.append(" B"+mp.getBottomMargin()); }
-    if(did.length()==0) return "ERROR: nothing to set";
-    save(rf,output,path); return "OK: paper"+did+", wrote "+output;
+    if(did.length()==0) return "ERROR: nothing to set (paper/orientation/marginL/T/R/B/fit)";
+    int bodyAfter=mp.getPaperWidth()-mp.getLeftMargin()-mp.getRightMargin();
+    String fitNote=""; boolean fit="true".equalsIgnoreCase(s(args,"fit"))||"true".equalsIgnoreCase(s(args,"fit_tables"));
+    if(fit && bodyBefore>0 && bodyAfter>0 && bodyBefore!=bodyAfter) fitNote=fitControlsToWidth(rf,bodyBefore,bodyAfter);
+    else if(fit) fitNote="\nℹ fit: 본문 너비가 그대로("+bodyAfter+") 라 조정할 것이 없음";
+    else if(bodyBefore!=bodyAfter){ int maxRight=0; for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; maxRight=Math.max(maxRight,c.getX1()+ix(c,"getWidth")); } fitNote="\nℹ 본문 너비 "+bodyBefore+"→"+bodyAfter+(maxRight>bodyAfter?" — 요소 오른쪽 끝("+maxRight+") 이 본문을 넘습니다":"")+" — fit=true 를 주면 모든 밴드의 표(열 비례)·글상자·선의 X/너비를 새 본문 너비에 맞춰 비례 조정"; }
+    String wrote=save(rf,output,path); return "OK: paper"+did+", 본문 너비="+bodyAfter+", wrote "+wrote+fitNote;
+  }
+  /** 모든 밴드의 컨트롤 X/너비를 oldW→newW 비율로 조정. 표는 열 너비를 비례 배분(합=목표) 후 reindex, 글상자/선/이미지는 X1·Width 를 반올림. 폭 0 인 요소는 X 만 이동. */
+  static String fitControlsToWidth(TheReportFile rf,int oldW,int newW){
+    double r=(double)newW/oldW; int tables=0, others=0;
+    for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; int x=c.getX1(), w=ix(c,"getWidth"); int nx=(int)Math.round(x*r);
+      if(c instanceof ControlTable){ ControlTable t=(ControlTable)c; int n=t.getColumnCount(); if(n>0){ int[] cur=new int[n]; for(int k=0;k<n;k++) cur[k]=t.getTableColumn(k).getWidth(); int[] v=CrfTableOps.scaleTo(cur,(int)Math.round(w*r)); for(int k=0;k<n;k++) t.getTableColumn(k).setWidth(v[k]); CrfTableOps.reindex(t); } t.setX1(nx); tables++; }
+      else { c.setX1(nx); if(w>0) call(c,"setWidth",int.class,(int)Math.round(w*r)); others++; } }
+    return "\n↔ fit: 본문 너비 "+oldW+"→"+newW+" (×"+String.format("%.3f",r)+") — 표 "+tables+"개(열 비례)·기타 요소 "+others+"개 X/너비 조정";
   }
 
   @SuppressWarnings("unchecked")
@@ -754,7 +829,7 @@ public class CrfMcpServer {
   static boolean looksLikeJsQuery(String q){ return q!=null && java.util.regex.Pattern.compile("(?s)\\bvar\\s+\\w+\\s*=\\s*\"|\\w+\\s*\\+=\\s*\"|\\n\\s*\\+\\s*\"").matcher(q).find(); }
   static boolean looksLikeMyBatis(String q){ return q!=null && java.util.regex.Pattern.compile("(?is)<(if|where|foreach|choose|trim|set|select)\\b").matcher(q).find(); }
   /** Result of applying a query to a dataset (shared by crf_set_query / crf_add_dataset). */
-  static class QueryApply { String conv; ScriptType before, after; java.util.List<String> warns=new java.util.ArrayList<>(), declared=new java.util.ArrayList<>(), added=new java.util.ArrayList<>(), removed=new java.util.ArrayList<>(), keptRef=new java.util.ArrayList<>(), skipped=new java.util.ArrayList<>(); java.util.Set<String> undeclared=new java.util.TreeSet<>(); boolean noColumns; }
+  static class QueryApply { String conv; ScriptType before, after; java.util.List<String> warns=new java.util.ArrayList<>(), declared=new java.util.ArrayList<>(), added=new java.util.ArrayList<>(), removed=new java.util.ArrayList<>(), keptRef=new java.util.ArrayList<>(), skipped=new java.util.ArrayList<>(), placeholders=new java.util.ArrayList<>(), orphan=new java.util.ArrayList<>(); java.util.Set<String> undeclared=new java.util.TreeSet<>(); boolean noColumns, reordered, noReturn; }
   static DataType dataTypeOrNull(String t){ try{ return DataType.valueOf(t); }catch(Exception e){ return DataType.String; } }
   static DataType nullType(){ try{ return DataType.valueOf("Null"); }catch(Exception e){ return DataType.String; } }
   @SuppressWarnings("unchecked")
@@ -767,7 +842,9 @@ public class CrfMcpServer {
   static boolean validIdent(String n){ return n!=null && n.matches("[A-Za-z_가-힣][A-Za-z0-9_가-힣$#]*"); }
   /** Convert + set the query on a dataset; optionally declare missing parameters and sync fields from the SELECT list. */
   @SuppressWarnings("unchecked")
-  static QueryApply applyQuery(TheReportFile rf,DataSet ds,String sql,String mode,boolean declare,String sync){
+  static QueryApply applyQuery(TheReportFile rf,DataSet ds,String sql,String mode,boolean declare,String sync){ return applyQuery(rf,ds,sql,mode,declare,sync,true); }
+  @SuppressWarnings("unchecked")
+  static QueryApply applyQuery(TheReportFile rf,DataSet ds,String sql,String mode,boolean declare,String sync,boolean reorder){
     QueryApply r=new QueryApply();
     DataAccessMethodSQL q=ds.getDataSetItemNormal()==null?null:ds.getDataSetItemNormal().getDataAccessMethodSQL();
     if(q==null) throw new RuntimeException("데이터셋 "+ds.getName()+" 은 SQL 데이터셋이 아닙니다");
@@ -778,22 +855,42 @@ public class CrfMcpServer {
     else throw new RuntimeException("script_type 은 auto|sql|javascript 중 하나");
     conv=CrfGen2.normParamTokens(conv); q.setQueryString(conv); q.setScriptType(after); r.conv=conv; r.after=after;
     java.util.Set<String> declaredNames=declaredParams(rf);
-    for(String u: usedParams(conv)) if(!declaredNames.contains(u.toUpperCase())){ if(declare){ addGlobalParam(rf,u,DataType.String,"",u); declaredNames.add(u.toUpperCase()); r.declared.add(u); } else r.undeclared.add(u); }
+    for(String u: usedParams(conv)) if(!declaredNames.contains(u.toUpperCase())){ if(declare){ addGlobalParam(rf,u,nullType(),"",u); declaredNames.add(u.toUpperCase()); r.declared.add(u); } else r.undeclared.add(u); }
     String sy=sync==null||sync.trim().isEmpty()?"add":sync.trim().toLowerCase();
     if(!sy.equals("none")){ String plain=after==ScriptType.JavaScript?jsToPlainSql(conv):conv; java.util.List<String> cols=CrfGen2.parseColumns(CrfGen2.stripComments(plain));
       if(cols.isEmpty()) r.noColumns=true;
       else { java.util.Set<String> want=new java.util.HashSet<>();
-        for(String c: cols){ if(c.matches("COL_\\d+")||!validIdent(c)){ r.skipped.add(c); continue; } want.add(c.toUpperCase()); if(findDataField(ds,c)==null){ addDataFieldTo(ds,c,nullType()); r.added.add(c); } }
-        if(sy.equals("replace")){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList(); for(int i=fl.size()-1;i>=0;i--){ FieldData f=fl.get(i); if(want.contains(f.getName().toUpperCase())) continue; java.util.List<String> refs=refsOf(rf,f); if(refs.isEmpty()){ fl.remove(i); r.removed.add(f.getName()); } else r.keptRef.add(f.getName()+"("+refs.size()+"곳 참조)"); } } } }
+        for(String c: cols){ if(!validIdent(c)){ r.skipped.add(c); continue; } want.add(c.toUpperCase()); if(findDataField(ds,c)==null){ addDataFieldTo(ds,c,nullType()); if(c.matches("COL_\\d+")) r.placeholders.add(c); else r.added.add(c); } }
+        if(sy.equals("replace")){ RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList(); for(int i=fl.size()-1;i>=0;i--){ FieldData f=fl.get(i); if(want.contains(f.getName().toUpperCase())) continue; java.util.List<String> refs=refsOf(rf,f); if(refs.isEmpty()){ fl.remove(i); r.removed.add(f.getName()); } else r.keptRef.add(f.getName()+"("+refs.size()+"곳 참조)"); } }
+        if(reorder) r.reordered=reorderFields(ds,cols,r.orphan); } }
+    if(after==ScriptType.JavaScript && !hasReturn(conv)) r.noReturn=true;
     return r;
   }
+  /** 데이터셋 필드는 이름이 아니라 **목록 위치**로 SELECT 컬럼에 매핑된다(디자이너 파일은 FieldData.index 가 전부 0). SELECT 순서대로 필드 목록을 재배열하고, SELECT 에 없는 필드는 뒤로 보낸다(orphan 에 기록). 순서가 바뀌었으면 true. */
+  @SuppressWarnings("unchecked")
+  static boolean reorderFields(DataSet ds,java.util.List<String> cols,java.util.List<String> orphan){
+    RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList(); java.util.List<FieldData> cur=new java.util.ArrayList<>(); for(int i=0;i<fl.size();i++) cur.add(fl.get(i));
+    java.util.List<FieldData> ordered=new java.util.ArrayList<>(); java.util.Set<FieldData> used=Collections.newSetFromMap(new IdentityHashMap<>());
+    for(String c: cols){ for(FieldData f: cur) if(!used.contains(f) && c.equalsIgnoreCase(f.getName())){ ordered.add(f); used.add(f); break; } }
+    for(FieldData f: cur) if(!used.contains(f)){ ordered.add(f); if(orphan!=null) orphan.add(f.getName()); }
+    boolean changed=false; for(int i=0;i<cur.size();i++) if(cur.get(i)!=ordered.get(i)){ changed=true; break; }
+    if(changed){ fl.removeAll(); for(FieldData f: ordered) fl.add(f); }
+    for(int i=0;i<fl.size();i++) fl.get(i).setIndex(i);
+    return changed;
+  }
+  /** JS 동적 쿼리에 return 문이 있는지(주석 제외). 없으면 엔진이 빈 문자열을 실행해 에러 없이 0건. */
+  static boolean hasReturn(String js){ if(js==null) return false; String t=js.replaceAll("(?s)/\\*.*?\\*/"," ").replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'"," \"\" ").replaceAll("(?m)//[^\\r\\n]*",""); return java.util.regex.Pattern.compile("(?<![\\w$.])return(?![\\w$])").matcher(t).find(); }
   static String applySummary(QueryApply r){ StringBuilder b=new StringBuilder();
-    if(!r.declared.isEmpty()) b.append("\n+ 매개변수 선언: ").append(r.declared).append(" (String, 기본값 ''; 타입/기본값은 crf_set_param 으로)");
+    if(!r.declared.isEmpty()) b.append("\n+ 매개변수 선언: ").append(r.declared).append(" (디자이너 기본과 같은 타입 없음(Null)·기본값 ''; 타입/기본값은 crf_set_param 으로)");
     if(!r.undeclared.isEmpty()) b.append("\n⚠ 쿼리가 쓰는데 선언되지 않은 매개변수: ").append(r.undeclared).append(" (declare_params=true 또는 crf_set_param)");
     if(!r.added.isEmpty()) b.append("\n+ 필드 추가: ").append(r.added);
     if(!r.removed.isEmpty()) b.append("\n- 필드 제거(미참조): ").append(r.removed);
     if(!r.keptRef.isEmpty()) b.append("\n⚠ SELECT 에 없지만 참조 중이라 유지: ").append(r.keptRef);
-    if(!r.skipped.isEmpty()) b.append("\n⚠ 별칭 없는 식 컬럼은 필드로 못 만듦(AS 별칭 필요): ").append(r.skipped);
+    if(!r.placeholders.isEmpty()) b.append("\n⚠ 별칭 없는 식 컬럼은 자리 필드 ").append(r.placeholders).append(" 로 생성(위치 매핑 유지용) — SELECT 에 AS 별칭을 주고 다시 set_query 하면 그 이름으로 바뀝니다");
+    if(!r.skipped.isEmpty()) b.append("\n⚠ 필드로 만들 수 없는 컬럼명(건너뜀 — 뒤 컬럼 위치가 밀립니다, AS 별칭 필요): ").append(r.skipped);
+    if(r.reordered) b.append("\n↕ 필드 순서를 SELECT 순서로 재정렬(필드는 이름이 아니라 위치로 컬럼에 매핑됨; reorder=false 로 끌 수 있음)");
+    if(!r.orphan.isEmpty()) b.append("\n⚠ SELECT 에 없는 필드 ").append(r.orphan).append(" 는 목록 끝으로 — 대응 컬럼이 없어 값이 비게 됩니다(sync_fields=replace 로 제거하거나 SELECT 에 추가)");
+    if(r.noReturn) b.append("\n⚠ JavaScript 쿼리에 return 문이 없습니다 — 마지막 줄에 `return sql;` 이 없으면 에러 없이 0건이 됩니다");
     if(r.noColumns) b.append("\n⚠ SELECT 목록을 파싱하지 못함(SELECT * / 함수테이블) — crf_sync_fields mode=db 로 DB 에서 컬럼을 확정하세요");
     if(!r.warns.isEmpty()) b.append("\n⚠ MyBatis 변환 경고: ").append(r.warns);
     return b.toString(); }
@@ -803,7 +900,7 @@ public class CrfMcpServer {
     if(sql==null||sql.trim().isEmpty()) return "ERROR: sql 인자가 비어 있습니다";
     TheReportFile rf=open(path); DataSet ds=datasetOf(rf,s(args,"dataset"));
     boolean declare=!"false".equalsIgnoreCase(s(args,"declare_params"));
-    QueryApply r=applyQuery(rf,ds,sql,s(args,"script_type"),declare,s(args,"sync_fields"));
+    QueryApply r=applyQuery(rf,ds,sql,s(args,"script_type"),declare,s(args,"sync_fields"),!"false".equalsIgnoreCase(s(args,"reorder")));
     String wrote=save(rf,output,path);
     StringBuilder b=new StringBuilder("OK: set query on "+ds.getName()+" ("+r.conv.length()+" chars, scriptType "+r.before+" → "+r.after+")"+(r.conv.equals(sql)?"":" — 파라미터를 {parameter.X} 형식으로 정규화함")+", wrote "+wrote);
     b.append(applySummary(r)); b.append("\n필드("+ds.getFieldDataList().size()+"): "+fieldList(ds));
@@ -900,6 +997,7 @@ public class CrfMcpServer {
       if(raw.trim().isEmpty()) warn.add("데이터셋 "+dss.get(i).getName()+": 쿼리 비어 있음");
       for(String u: usedParams(raw)){ usedAll.add(u.toUpperCase()); if(!declared.contains(u.toUpperCase())) err.add("데이터셋 "+dss.get(i).getName()+": 미선언 매개변수 {parameter."+u+"}"); }
       boolean js=qm.getScriptType()==ScriptType.JavaScript; if(js && !looksLikeJsQuery(raw) && !raw.trim().isEmpty()) warn.add("데이터셋 "+dss.get(i).getName()+": scriptType=JavaScript 인데 평문 SQL 로 보임"); if(!js && looksLikeJsQuery(raw)) warn.add("데이터셋 "+dss.get(i).getName()+": scriptType=NotScript 인데 JavaScript 로 보임");
+      if(js && !raw.trim().isEmpty() && !hasReturn(raw)) err.add("데이터셋 "+dss.get(i).getName()+": JavaScript 쿼리에 return 문이 없음 — 마지막 줄에 `return sql;` 이 없으면 에러 없이 0건 (crf_set_query 로 교체)");
       String plain=js?jsToPlainSql(raw):raw; java.util.List<String> cols=CrfGen2.parseColumns(CrfGen2.stripComments(plain)); if(!cols.isEmpty()){ java.util.Set<String> cu=new java.util.HashSet<>(); for(String c: cols) cu.add(c.toUpperCase()); java.util.Set<String> fu=new java.util.HashSet<>(); RexObjectList<?> fds=dss.get(i).getFieldDataList(); java.util.List<String> notInQuery=new java.util.ArrayList<>(); for(int j=0;j<fds.size();j++){ String fn=nameOf(fds.get(j)); fu.add(fn.toUpperCase()); if(!cu.contains(fn.toUpperCase())) notInQuery.add(fn); }
         java.util.List<String> notInFields=new java.util.ArrayList<>(); for(String c: cols) if(!c.matches("COL_\\d+")&&!fu.contains(c.toUpperCase())) notInFields.add(c);
         if(!notInQuery.isEmpty()) info.add("데이터셋 "+dss.get(i).getName()+": 쿼리 SELECT 에 없는 필드 "+notInQuery); if(!notInFields.isEmpty()) warn.add("데이터셋 "+dss.get(i).getName()+": 필드로 없는 SELECT 컬럼 "+notInFields+" (crf_sync_fields)"); } }
@@ -923,7 +1021,7 @@ public class CrfMcpServer {
     // 8) 같은 스타일로 세로 연속인 글상자 → 요소 하나로 (정적 텍스트만이면 WARN, 필드 바인딩 섞이면 INFO)
     for(String x: stackedLabelRuns(rf)){ if(x.startsWith("!")) warn.add(x.substring(1)); else info.add(x); }
     // 9) 엑셀 격자: 머리글 밴드 표의 열 경계가 본문 표 경계의 부분집합인지
-    for(String x: excelGridIssues(rf)) info.add(x);
+    for(String x: excelGridIssues(rf)){ if("true".equalsIgnoreCase(s(args,"excel"))) warn.add(x); else info.add(x); }
     StringBuilder b=new StringBuilder(new File(path).getName()+" — ERROR "+err.size()+" / WARN "+warn.size()+" / INFO "+info.size()+"  (바인딩 "+nRefs+"곳, 공식 "+fl.size()+", 그룹 "+gl.size()+", 데이터셋 "+dss.size()+")\n");
     for(String x: err) b.append("  ✖ ").append(x).append("\n"); for(String x: warn) b.append("  ⚠ ").append(x).append("\n"); for(String x: info) b.append("  ℹ ").append(x).append("\n");
     if(err.isEmpty()&&warn.isEmpty()) b.append("  ✔ 문제 없음\n");
@@ -979,10 +1077,13 @@ public class CrfMcpServer {
     if(nsOf(f).equals("groupname")||nsOf(f).equals("system")) return "ERROR: "+fieldKindKo(f)+" 필드는 삭제 대상이 아닙니다";
     java.util.List<String> refs=refsOf(rf,f);
     if(!refs.isEmpty()&&!force) return "ERROR: '"+f.getName()+"' 은 "+refs.size()+"곳에서 참조됩니다 — 먼저 바인딩을 바꾸거나 force=true:"+refsText(refs,40);
+    int ownerDs=-1; { RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList(); for(int i=0;i<dss.size()&&ownerDs<0;i++){ RexObjectList<?> fl=dss.get(i).getFieldDataList(); for(int j=0;j<fl.size();j++) if(fl.get(j)==f){ ownerDs=i; break; } } }
     if(!removeFromLists(rf,f)) return "ERROR: 필드 목록에서 찾지 못함";
     String wrote=save(rf,output,path);
-    TheReportFile v=open(output); if(findField(v,f.getName())!=null) return "ERROR: 저장 후 되읽기 검증 실패 — 필드가 남아 있음";
-    return "OK: "+fieldKindKo(f)+" 필드 '"+f.getName()+"' 삭제, wrote "+wrote+(refs.isEmpty()?"":"\n⚠ force 삭제 — 다음 참조가 끊어졌습니다(디자이너에서 정리 필요):"+refsText(refs,40));
+    TheReportFile v=open(output); Field left; if(f instanceof FieldData && ownerDs>=0){ RexObjectList<DataSet> vd=v.getGlobe().getGlobalObjectManager().getDataSetList(); left=ownerDs<vd.size()?findDataField(vd.get(ownerDs),f.getName()):null; } else left=findFieldOfKind(v,f.getName(),nsOf(f));
+    if(left!=null) return "ERROR: 저장 후 되읽기 검증 실패 — "+fieldKindKo(f)+" 필드 '"+f.getName()+"' 이 남아 있음";
+    Field same=findField(v,f.getName()); String note=same!=null?"\nℹ 같은 이름의 "+fieldKindKo(same)+" 필드는 그대로 있습니다":"";
+    return "OK: "+fieldKindKo(f)+" 필드 '"+f.getName()+"' 삭제, wrote "+wrote+note+(refs.isEmpty()?"":"\n⚠ force 삭제 — 다음 참조가 끊어졌습니다(디자이너에서 정리 필요):"+refsText(refs,40));
   }
   static String setParam(JSONObject args) throws Exception {
     String path=s(args,"path"), name=s(args,"name"), output=s(args,"output"), type=s(args,"type"), def=s(args,"default"), prompt=s(args,"prompt");
@@ -994,17 +1095,18 @@ public class CrfMcpServer {
       if(dt!=null) call(ex,"setDataType",DataType.class,dt); if(def!=null) call(ex,"setDefaultValue",String.class,def); if(prompt!=null) call(ex,"setPrompt",String.class,prompt);
       did="updated '"+nameOf(ex)+"'"; }
     else { Field other=findField(rf,name); if(other!=null) return "ERROR: 이름 중복 — '"+name+"' 은 이미 "+fieldKindKo(other)+" 필드로 존재";
-      addGlobalParam(rf,name,dt==null?DataType.String:dt,def,prompt); did="created '"+name+"'"; }
+      addGlobalParam(rf,name,dt==null?nullType():dt,def,prompt); did="created '"+name+"'"; }
     String wrote=save(rf,output,path);
     Object v=null; RexObjectList<?> vp=open(output).getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); for(int i=0;i<vp.size();i++) if(name.equalsIgnoreCase(nameOf(vp.get(i)))) v=vp.get(i);
     if(v==null) return "ERROR: 저장 후 되읽기 검증 실패";
     return "OK: 매개변수 "+did+" type="+g(v,"getDataType")+" default=\""+q(g(v,"getDefaultValue"))+"\" prompt=\""+q(g(v,"getPrompt"))+"\", wrote "+wrote;
   }
+  static String paramNames(TheReportFile rf){ RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); StringBuilder b=new StringBuilder(); for(int i=0;i<gp.size();i++) b.append(i>0?", ":"").append(nameOf(gp.get(i))); return b.toString(); }
   static String removeParam(JSONObject args) throws Exception {
     String path=s(args,"path"), name=s(args,"name"), output=s(args,"output"); boolean force="true".equalsIgnoreCase(s(args,"force"));
     if(name==null||name.trim().isEmpty()) return "ERROR: name 인자가 비어 있습니다"; name=name.trim();
     TheReportFile rf=open(path); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); Field f=null; for(int i=0;i<gp.size();i++) if(name.equalsIgnoreCase(nameOf(gp.get(i)))) f=(Field)gp.get(i);
-    if(f==null) return "ERROR: 매개변수 '"+name+"' 없음";
+    if(f==null){ if("true".equalsIgnoreCase(s(args,"ignore_missing"))){ String wrote=save(rf,output,path); return "OK: 매개변수 '"+name+"' 없음 — 변경 없이 저장(ignore_missing), wrote "+wrote; } return "ERROR: 매개변수 '"+name+"' 없음 (있는 매개변수: "+paramNames(rf)+"; 배치에서 없어도 넘어가려면 ignore_missing=true)"; }
     java.util.List<String> refs=refsOf(rf,f);
     if(!refs.isEmpty()&&!force) return "ERROR: 매개변수 '"+f.getName()+"' 은 "+refs.size()+"곳에서 참조됩니다 — force=true 로 강행 가능:"+refsText(refs,40);
     removeFromLists(rf,f); String wrote=save(rf,output,path);
@@ -1051,6 +1153,25 @@ public class CrfMcpServer {
     if(t.contains("NUM")||t.contains("DEC")||t.contains("INT")||t.contains("FLOAT")||t.contains("DOUBLE")||t.contains("REAL")) return CrfGen2.guessType(col)==DataType.Currency?DataType.Currency:DataType.Number;
     return DataType.String; }
   @SuppressWarnings("unchecked")
+  static String reorderFieldsTool(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"), order=q(s(args,"order")).trim();
+    TheReportFile rf=open(path); DataSet ds=datasetOf(rf,s(args,"dataset")); String before=fieldList(ds);
+    java.util.List<String> cols=new java.util.ArrayList<>(); String how;
+    if(order.isEmpty()||order.equalsIgnoreCase("query")){ DataAccessMethodSQL qm=ds.getDataSetItemNormal()==null?null:ds.getDataSetItemNormal().getDataAccessMethodSQL(); if(qm==null) return "ERROR: 데이터셋 "+ds.getName()+" 은 SQL 데이터셋이 아닙니다 — order 에 필드명 목록을 주세요";
+      String raw=q(qm.getQueryString()); String plain=qm.getScriptType()==ScriptType.JavaScript?jsToPlainSql(raw):raw; cols=CrfGen2.parseColumns(CrfGen2.stripComments(plain));
+      if(cols.isEmpty()) return "ERROR: SELECT 목록을 파싱하지 못함(SELECT * 등) — order 에 필드명 목록을 직접 주세요"; how="쿼리 SELECT 순서"; }
+    else { for(String n: order.split(",")){ n=n.trim(); if(n.isEmpty()) continue; if(findDataField(ds,n)==null) return "ERROR: 필드 없음: "+n+" (있는 필드: "+before+")"; cols.add(n); } how="지정 순서"; }
+    if(how.startsWith("쿼리")){ java.util.List<String> missing0=new java.util.ArrayList<>(); for(String c: cols) if(findDataField(ds,c)==null) missing0.add(c); if(!missing0.isEmpty()) return "ERROR: 쿼리 컬럼 "+missing0+" 에 해당하는 필드가 없어 순서만 바꾸면 뒤 컬럼 위치가 밀립니다 — crf_sync_fields(필드 추가+재정렬) 를 쓰세요"; }
+    java.util.List<String> orphan=new java.util.ArrayList<>(); boolean changed=reorderFields(ds,cols,orphan);
+    String wrote=save(rf,output,path); DataSet v=datasetOf(open(output),String.valueOf(indexOfDataset(rf,ds))); String after=fieldList(v);
+    StringBuilder b=new StringBuilder((changed?"OK: 필드 순서 재정렬(":"OK: 이미 원하는 순서(")+how+"), wrote "+wrote);
+    b.append("\n전: ").append(before).append("\n후: ").append(after);
+    java.util.List<String> missing=new java.util.ArrayList<>(); for(String c: cols) if(findDataField(v,c)==null) missing.add(c);
+    if(!missing.isEmpty()) b.append("\n⚠ 쿼리 컬럼인데 필드가 없음(위치가 밀림): ").append(missing).append(" — crf_sync_fields 로 추가");
+    if(!orphan.isEmpty() && how.startsWith("쿼리")) b.append("\n⚠ SELECT 에 없는 필드는 끝으로(대응 컬럼이 없어 값이 빔): ").append(orphan);
+    return b.toString();
+  }
+  static int indexOfDataset(TheReportFile rf,DataSet ds){ RexObjectList<DataSet> dss=rf.getGlobe().getGlobalObjectManager().getDataSetList(); for(int i=0;i<dss.size();i++) if(dss.get(i)==ds) return i; return 0; }
   static String syncFields(JSONObject args) throws Exception {
     String path=s(args,"path"), output=s(args,"output"), mode=q(s(args,"mode")).trim().toLowerCase(); if(mode.isEmpty()) mode="sql";
     boolean setTypes="true".equalsIgnoreCase(s(args,"set_types")), removeUnused="true".equalsIgnoreCase(s(args,"remove_unused"));
@@ -1058,7 +1179,7 @@ public class CrfMcpServer {
     DataAccessMethodSQL qm=ds.getDataSetItemNormal()==null?null:ds.getDataSetItemNormal().getDataAccessMethodSQL(); if(qm==null) return "ERROR: 데이터셋 "+ds.getName()+" 은 SQL 데이터셋이 아닙니다";
     String raw=q(qm.getQueryString()); String plain=qm.getScriptType()==ScriptType.JavaScript?jsToPlainSql(raw):raw;
     java.util.List<String> cols=new java.util.ArrayList<>(); java.util.Map<String,DataType> types=new java.util.LinkedHashMap<>(); java.util.List<String> skipped=new java.util.ArrayList<>(); String source;
-    if(mode.equals("sql")){ for(String c: CrfGen2.parseColumns(CrfGen2.stripComments(plain))){ if(c.matches("COL_\\d+")||!validIdent(c)) skipped.add(c); else { cols.add(c); types.put(c,CrfGen2.guessType(c)); } }
+    if(mode.equals("sql")){ for(String c: CrfGen2.parseColumns(CrfGen2.stripComments(plain))){ if(!validIdent(c)) skipped.add(c); else { cols.add(c); types.put(c,c.matches("COL_\\d+")?nullType():CrfGen2.guessType(c)); } }
       if(cols.isEmpty()&&skipped.isEmpty()) return "ERROR: SELECT 목록을 파싱하지 못함(SELECT * / 함수테이블 등) — mode=db 를 사용하세요"; source="SQL 파싱"; }
     else if(mode.equals("db")){ java.util.Map<String,String> params=new java.util.HashMap<>(); String pj=s(args,"params"); if(pj!=null&&!pj.trim().isEmpty()){ try{ JSONObject po=(JSONObject)P.parse(pj); for(Object k: po.keySet()) params.put(String.valueOf(k),String.valueOf(po.get(k))); }catch(Exception e){ return "ERROR: params 는 JSON 객체여야 합니다: "+e; } }
       String body=bindForExec(CrfGen2.stripComments(plain),params).trim().replaceAll(";\\s*$","");
@@ -1072,12 +1193,14 @@ public class CrfMcpServer {
     for(String c: cols){ want.add(c.toUpperCase()); FieldData f=findDataField(ds,c); if(f==null){ addDataFieldTo(ds,c,setTypes?types.get(c):nullType()); added.add(c+(setTypes?":"+types.get(c):"")); } else if(setTypes && f.getDataType()!=types.get(c)){ f.setDataType(types.get(c)); typed.add(c+":"+types.get(c)); } }
     RexObjectList<FieldData> fl=(RexObjectList<FieldData>) ds.getFieldDataList();
     for(int i=fl.size()-1;i>=0;i--){ FieldData f=fl.get(i); if(want.contains(f.getName().toUpperCase())) continue; if(!removeUnused){ kept.add(f.getName()); continue; } java.util.List<String> refs=refsOf(rf,f); if(refs.isEmpty()){ fl.remove(i); removed.add(f.getName()); } else kept.add(f.getName()+"("+refs.size()+"곳 참조)"); }
+    boolean reordered=!"false".equalsIgnoreCase(s(args,"reorder")) && reorderFields(ds,cols,null);
     String wrote=save(rf,output,path);
     StringBuilder b=new StringBuilder("OK: "+ds.getName()+" 필드 동기화 ("+source+") — 쿼리 컬럼 "+cols.size()+"개, wrote "+wrote);
+    if(reordered) b.append("\n↕ 필드 순서를 쿼리 컬럼 순서로 재정렬(필드는 위치로 컬럼에 매핑됨)");
     b.append("\n쿼리 컬럼: "); for(String c: cols) b.append(c).append(":").append(types.get(c)).append(" ");
     if(!added.isEmpty()) b.append("\n+ 추가: ").append(added); if(!typed.isEmpty()) b.append("\n~ 타입 변경: ").append(typed);
     if(!removed.isEmpty()) b.append("\n- 제거(미참조): ").append(removed);
-    if(!kept.isEmpty()) b.append("\n⚠ 쿼리에 없는 필드 유지: ").append(kept).append(removeUnused?" (참조 중)":" (remove_unused=true 면 미참조 필드 제거)");
+    if(!kept.isEmpty()) b.append("\n⚠ 쿼리에 없는 필드 유지(목록 끝, 대응 컬럼이 없어 값이 빔): ").append(kept).append(removeUnused?" (참조 중)":" (remove_unused=true 면 미참조 필드 제거)");
     if(!skipped.isEmpty()) b.append("\n⚠ 필드명으로 못 쓰는 컬럼(별칭 필요): ").append(skipped);
     b.append("\n필드("+ds.getFieldDataList().size()+"): "+fieldList(ds));
     return b.toString();
@@ -1261,7 +1384,8 @@ public class CrfMcpServer {
   static SubSectionDefault firstSub(Section sec){ RexObjectList<SubSection> ss=sec.getSubSectionList(); if(ss==null||ss.size()==0)return null; SubSection s=ss.get(0); return (s instanceof SubSectionDefault)?(SubSectionDefault)s:null; }
 
   @SuppressWarnings("unchecked")
-  static String describeLayout(String path,boolean detail) throws Exception {
+  static String describeLayout(String path,boolean detail) throws Exception { return describeLayout(path,detail,false); }
+  static String describeLayout(String path,boolean detail,boolean onePerLine) throws Exception {
     TheReportFile rf=open(path);
     RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
     StringBuilder b=new StringBuilder();
@@ -1281,23 +1405,30 @@ public class CrfMcpServer {
         StringBuilder ex=new StringBuilder();
         String fmt=g(c,"getOutputFormat"); if(fmt!=null && !fmt.isEmpty()) ex.append(" 출력양식="+fmt);
         if("true".equals(g(c,"getCanGrow"))) ex.append(" 확장가능");
-        String font=g(go(c,"getTextInfo"),"getFontName"); if(font!=null && !font.isEmpty()) ex.append(" 폰트="+font);
+        String font=g(go(c,"getTextInfo"),"getFontName"); if(!detail && font!=null && !font.isEmpty()) ex.append(" 폰트="+font);
         if(c instanceof ControlSubreport){ ControlSubreport sr=(ControlSubreport)c; ex.append(subreportInfo(sr.getLinkedSubreportPath(), sr.getSubreport(), sr.getFieldLinkListForSubReportParameter())); }
         if(!c.getVisible()) ex.append(" [숨김]");
         if(detail) ex.append(styleInfo(c));
         b.append("      - "+c.getClass().getSimpleName()+" \""+c.getName()+"\""+bind+"  "+pos+ex+"\n");
         if("ControlTable".equals(c.getClass().getSimpleName())){   // 표: 셀별 바인딩 그리드
           Object rc=go(c,"getRowCount"), cc=go(c,"getColumnCount");
-          if(rc instanceof Integer && cc instanceof Integer){ int rows=(Integer)rc, colsN=(Integer)cc;
-            for(int rr=0;rr<rows && rr<40;rr++){ StringBuilder row=new StringBuilder("          ["+rr+"] ");
-              for(int cn=0;cn<colsN && cn<20;cn++){ Object cell=null; try{ cell=c.getClass().getMethod("getTableCell",int.class,int.class).invoke(c,rr,cn); }catch(Exception e){}
+          if(rc instanceof Integer && cc instanceof Integer){ int rows=(Integer)rc, colsN=(Integer)cc; int maxC=Math.min(colsN,60);
+            for(int rr=0;rr<rows && rr<60;rr++){
+              String[] vals=new String[maxC], sts=new String[maxC];
+              for(int cn=0;cn<maxC;cn++){ Object cell=null; try{ cell=c.getClass().getMethod("getTableCell",int.class,int.class).invoke(c,rr,cn); }catch(Exception e){}
                 Object cf=go(cell,"getApplyValueField"); String ct=g(cell,"getApplyValueText");
                 String cb = !isNormalCell(cell)? "‹병합›" : cf!=null? fieldKindKo(cf)+":"+nameOf(cf) : (ct!=null && !ct.isEmpty()? "\""+ct+"\"" : "·");
                 if(isNormalCell(cell) && "Checkbox".equals(String.valueOf(go(cell,"getCellContent")))) cb=checkboxText(cell);
                 String cfmt=g(cell,"getOutputFormat"); if(isNormalCell(cell) && cfmt!=null && !cfmt.isEmpty()) cb+="{"+cfmt+"}";
-                if(detail && isNormalCell(cell)){ String st=styleInfo(cell).trim(); if(!st.isEmpty()) cb+=" «"+st.replace(" ", ", ")+"»"; }
-                row.append(cb).append(cn<colsN-1 && cn<19?" | ":""); }
-              b.append(row).append("\n"); } }
+                vals[cn]=cb; sts[cn]=detail&&isNormalCell(cell)?styleInfo(cell).trim().replace(" ", ", "):null; }
+              // detail: 행에서 가장 흔한 스타일을 «공통» 으로 한 번만 쓰고, 다른 셀만 «…» 을 붙인다
+              String common=null; if(detail){ java.util.Map<String,Integer> cnt=new java.util.HashMap<>(); for(String st: sts) if(st!=null&&!st.isEmpty()) cnt.merge(st,1,Integer::sum); int best=0; for(java.util.Map.Entry<String,Integer> e: cnt.entrySet()) if(e.getValue()>best){ best=e.getValue(); common=e.getKey(); } if(best<2) common=null; }
+              if(onePerLine){ b.append("          ["+rr+"]"+(common!=null?" «공통: "+common+"»":"")+"\n");
+                for(int cn=0;cn<maxC;cn++){ String st=sts[cn]; b.append("            ["+rr+","+cn+"] "+vals[cn]+(st!=null&&!st.isEmpty()&&!st.equals(common)?" «"+st+"»":"")+"\n"); } }
+              else { StringBuilder row=new StringBuilder("          ["+rr+"]"+(common!=null?" «공통: "+common+"»":"")+" ");
+                for(int cn=0;cn<maxC;cn++){ String st=sts[cn]; row.append(vals[cn]); if(st!=null&&!st.isEmpty()&&!st.equals(common)) row.append(" «").append(st).append("»"); row.append(cn<maxC-1?" | ":""); }
+                b.append(row).append(colsN>maxC?" …(+"+(colsN-maxC)+"열)":"").append("\n"); } }
+            if(rows>60) b.append("          …(+"+(rows-60)+"행)\n"); }
         }
       } } }
     return b.toString();
@@ -1742,14 +1873,25 @@ public class CrfMcpServer {
     if(!java.util.Objects.equals(g(a,"getLineStyle"),g(b,"getLineStyle"))||!java.util.Objects.equals(g(a,"getBackStyle"),g(b,"getBackStyle"))) return false;
     return true;
   }
-  /** lint: 엑셀 저장 격자 — 머리글/바닥글 밴드 표의 열 경계가 본문 표 경계(±10)에 없으면 열이 쪼개진다 */
+  /** lint: 엑셀 저장 격자 — 엑셀로 내보내는 밴드(페이지 바닥글 제외)의 모든 세로선(표 열 경계, 글상자/이미지/서브리포트의 좌·우, 선의 x)이 본문 표 열 경계(±10 = 1mm)에 있어야 엑셀에서 열이 추가로 쪼개지지 않는다.
+   *  본문에 표가 없으면(문서형) 검사하지 않는다. 결과 첫 줄은 요약(본문 경계 N개 + 어긋난 세로선 M개 → 엑셀 열 최대 N+M), 이후 요소별로 어긋난 변과 가까운 경계를 제시. */
   static java.util.List<String> excelGridIssues(TheReportFile rf){
     java.util.List<String> out=new java.util.ArrayList<>(); java.util.TreeSet<Integer> body=new java.util.TreeSet<>(); java.util.List<Object[]> others=new java.util.ArrayList<>();
-    for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; if(!"ControlTable".equals(c.getClass().getSimpleName())||!c.getVisible()) continue;
-      java.util.List<Integer> bounds=tableBounds(c); if(ix(c,"getColumnCount")<3) continue; if(e[0] instanceof SectionDetail) body.addAll(bounds); else others.add(new Object[]{((Section)e[0]).getClass().getSimpleName().replace("Section",""),c.getName(),bounds}); }
-    if(body.size()<4) return out;
-    for(Object[] o: others){ java.util.List<Integer> bad=new java.util.ArrayList<>(); for(Integer x: (java.util.List<Integer>)o[2]){ Integer lo=body.floor(x+10); if(lo==null||Math.abs(lo-x)>10) bad.add(x); }
-      if(!bad.isEmpty()) out.add("엑셀 격자: "+o[0]+" 표 \""+o[1]+"\" 의 열 경계 "+bad+" 가 본문 표 경계(±10)에 없음 — 엑셀 저장 시 본문 셀이 쪼개질 수 있음 (열 너비를 본문 경계에 맞추세요)"); }
+    for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; if(!c.getVisible()) continue; String band=((Section)e[0]).getClass().getSimpleName().replace("Section",""); boolean isTable="ControlTable".equals(c.getClass().getSimpleName());
+      if(e[0] instanceof SectionDetail && isTable){ body.addAll(tableBounds(c)); continue; }
+      if(band.equals("PageFooter")) continue;   // 엑셀 내보내기에서 빠지는 밴드(페이지번호·로그 등) — 맞출 필요 없음
+      others.add(new Object[]{band,c,isTable}); }
+    if(body.size()<2) return out;
+    java.util.TreeSet<Integer> extra=new java.util.TreeSet<>(); java.util.List<String> lines=new java.util.ArrayList<>();
+    for(Object[] o: others){ Control c=(Control)o[1]; java.util.List<Object[]> edges=new java.util.ArrayList<>();  // {이름, x}
+      if((Boolean)o[2]){ java.util.List<Integer> b=tableBounds(c); for(int i=0;i<b.size();i++) edges.add(new Object[]{i==0?"왼쪽":i==b.size()-1?"오른쪽":"열"+(i-1)+"|"+i+" 경계",b.get(i)}); }
+      else { int x=ix(c,"getX1"), w=ix(c,"getWidth"); if(w<=0){ edges.add(new Object[]{"x",x}); } else { edges.add(new Object[]{"왼쪽",x}); edges.add(new Object[]{"오른쪽",x+w}); } }
+      java.util.List<String> bad=new java.util.ArrayList<>();
+      for(Object[] ed: edges){ int x=(Integer)ed[1]; Integer lo=body.floor(x), hi=body.ceiling(x); boolean ok=(lo!=null&&x-lo<=10)||(hi!=null&&hi-x<=10); if(ok) continue; extra.add(x);
+        bad.add(ed[0]+" "+x+"(가까운 경계 "+(lo==null?"-":lo)+"/"+(hi==null?"-":hi)+")"); }
+      if(!bad.isEmpty()) lines.add("   - "+o[0]+" "+c.getClass().getSimpleName().replace("Control","")+" \""+c.getName()+"\": "+String.join(", ",bad)); }
+    if(lines.isEmpty()) return out;
+    out.add("엑셀 격자: 본문 표 경계 "+body.size()+"개 외에 어긋난 세로선 "+extra.size()+"개("+extra+") — 엑셀 저장 시 열이 최대 "+(body.size()-1+extra.size())+"개로 쪼개짐(페이지 바닥글 제외). 표 열 경계·글상자 좌우를 본문 경계 "+body+" 에 맞추세요(crf_set_label left/width, crf_table_cols resize):\n"+String.join("\n",lines));
     return out;
   }
   static java.util.List<Integer> tableBounds(Control t){ java.util.List<Integer> b=new java.util.ArrayList<>(); int x=ix(t,"getX1"); b.add(x); int cols=ix(t,"getColumnCount"); for(int c=0;c<cols;c++){ Object col=null; try{ col=t.getClass().getMethod("getTableColumn",int.class).invoke(t,c); }catch(Exception e){} x+=ix(col,"getWidth"); b.add(x); } return b; }

@@ -367,6 +367,94 @@ if os.path.isfile(X):
     case("search scope=query also covers xpath", "crf_search", {"dir": os.path.dirname(X), "text": "/", "scope": "query", "like": "naplm0420_prn"}, contains("[xpath XMLDS"))
     case("search bad scope -> ERROR", "crf_search", {"dir": os.path.dirname(X), "text": "x", "scope": "nope"}, error)
 
+# ---- v0.9.0: ui-f6 피드백 — 필드 위치 매핑/재정렬, format 비우기, 셀 일괄, in_place, MyBatis 변환, 삭제 도구, describe 압축, 용지 fit ----
+E = os.environ.get("CLIP_SMOKE_E", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmhr/ahrmhr0240_prn01.crf")  # 목록형(가로), 표3 15열, 매개변수 EMPNO 와 데이터필드 EMPNO 동명
+if os.path.isfile(E):
+    JSQ = 'var sql="";\r\nsql += "SELECT T1.DEPT_NM, T1.EMPNO, T1.EMP_NM, TO_CHAR(SYSDATE,\'YYYY\') , T1.BIRDT FROM ADM.AHRM100 T1 WHERE T1.EMPNO=\'{parameter.EMPNO}\'";\r\n'
+    case("set_query reorders fields to SELECT order + COL_n placeholder + no-return warn", "crf_set_query", {"path": E, "sql": JSQ, "output": OUT + "/e_q1.crf"},
+         contains("OK", "↕ 필드 순서를 SELECT 순서로 재정렬", "자리 필드 [COL_4]", "return 문이 없습니다", "필드(18): DEPT_NM, EMPNO, EMP_NM, COL_4, BIRDT, INSTT_DIV_NM"))
+    case("set_query reorder=false keeps order", "crf_set_query", {"path": E, "sql": JSQ, "reorder": "false", "output": OUT + "/e_q2.crf"},
+         lambda t, e: None if not e and "↕" not in t and "필드(18): INSTT_DIV_NM, UNIV_NM, EMPNO" in t else f"reorder=false: {t[:300]}")
+    case("validate flags JS query without return", "crf_validate", {"path": OUT + "/e_q1.crf"}, contains("✖ 데이터셋 SQLDS1: JavaScript 쿼리에 return 문이 없음"))
+    case("reorder_fields explicit order", "crf_reorder_fields", {"path": OUT + "/e_q1.crf", "order": "EMPNO,EMP_NM", "output": OUT + "/e_r1.crf"},
+         contains("OK: 필드 순서 재정렬(지정 순서)", "후: EMPNO, EMP_NM, DEPT_NM, COL_4"))
+    case("reorder_fields order=query", "crf_reorder_fields", {"path": OUT + "/e_r1.crf", "output": OUT + "/e_r2.crf"},
+         contains("OK: 필드 순서 재정렬(쿼리 SELECT 순서)", "후: DEPT_NM, EMPNO, EMP_NM, COL_4, BIRDT", "SELECT 에 없는 필드는 끝으로"))
+    case("reorder_fields unknown field -> ERROR", "crf_reorder_fields", {"path": E, "order": "NOPE", "output": OUT + "/e_r_bad.crf"}, err_contains("필드 없음: NOPE"))
+    case("sync_fields reorders too", "crf_sync_fields", {"path": OUT + "/e_r1.crf", "output": OUT + "/e_s1.crf"}, contains("OK", "↕ 필드 순서를 쿼리 컬럼 순서로 재정렬", "COL_4:Null"))
+    case("set_cell format='' removes format", "crf_set_cell", {"path": E, "table": "표3", "row": "0", "col": "4", "format": "", "output": OUT + "/e_c1.crf"}, contains("OK", "format 제거(was yy.mm.dd)", "verified[field=BIRDT]"))
+    case("set_cell clear_format idempotent", "crf_set_cell", {"path": OUT + "/e_c1.crf", "table": "표3", "row": "0", "col": "4", "clear_format": "true", "output": OUT + "/e_c2.crf"}, contains("OK", "format=(이미 없음)"))
+    case("describe shows no format after clear", "crf_describe_layout", {"path": OUT + "/e_c1.crf"}, lambda t, e: None if not e and "BIRDT{yy.mm.dd}" not in t and "데이터:BIRDT" in t else f"format still there: {t[:300]}")
+    case("set_cell cells=[] batch with defaults + text unbinds field", "crf_set_cell",
+         {"path": E, "table": "표3", "align": "Right", "cells": [{"row": 0, "col": 2, "field": "EMP_NM"}, {"row": 0, "col": 3, "field": "EMPNO", "format": "#,##0"}, {"row": 0, "col": 5, "text": "고정", "align": "Center"}, {"table": "표2", "row": 0, "col": 1, "text": "소계X"}], "output": OUT + "/e_c3.crf"},
+         contains("OK: 4개 셀 설정, verified", "표3[0,2] field=EMP_NM(데이터) align=Right", "format=#,##0", "(바인딩 SEX_NM 해제) text=\"고정\" align=Middle", "표2[0,1]"))
+    case("describe after batch", "crf_describe_layout", {"path": OUT + "/e_c3.crf"}, contains('데이터:EMP_NM | 데이터:EMPNO{#,##0} | 데이터:BIRDT{yy.mm.dd} | "고정" |', '"소계X"'))
+    case("set_cell cells out of range -> ERROR before save", "crf_set_cell", {"path": E, "table": "표3", "cells": [{"row": 0, "col": 99, "text": "x"}], "output": OUT + "/e_c_bad.crf"}, err_contains("범위 밖"))
+    case("set_cell no row/col -> ERROR", "crf_set_cell", {"path": E, "table": "표3", "text": "x", "output": OUT + "/e_c_bad2.crf"}, err_contains("row/col", "cells="))
+    case("remove_field with same-named parameter", "crf_remove_field", {"path": E, "name": "EMPNO", "dataset": "SQLDS1", "force": "true", "output": OUT + "/e_rf.crf"},
+         contains("OK: 데이터 필드 'EMPNO' 삭제", "같은 이름의 매개변수 필드는 그대로"))
+    case("remove_param missing -> ERROR lists params", "crf_remove_param", {"path": E, "name": "DSCPLCD", "output": OUT + "/e_rp_bad.crf"}, err_contains("'DSCPLCD' 없음", "있는 매개변수: G_REPORTLOG", "ignore_missing"))
+    case("remove_param ignore_missing -> OK no-op", "crf_remove_param", {"path": E, "name": "DSCPLCD", "ignore_missing": "true", "output": OUT + "/e_rp.crf"}, contains("OK", "변경 없이 저장"))
+    case("remove_section English name works", "crf_remove_section", {"path": E, "section": "DataFooter", "force": "true", "output": OUT + "/e_rs1.crf"}, contains("OK: DataFooter 밴드 삭제"))
+    case("remove_section missing -> ERROR lists bands", "crf_remove_section", {"path": OUT + "/e_rs1.crf", "section": "DataFooter", "output": OUT + "/e_rs_bad.crf"}, err_contains("not found", "이 리포트의 밴드: PageHeader,GroupHeader,Detail,GroupFooter,PageFooter"))
+    case("remove_section ignore_missing (Korean)", "crf_remove_section", {"path": OUT + "/e_rs1.crf", "section": "데이터바닥글", "ignore_missing": "true", "output": OUT + "/e_rs2.crf"}, contains("OK", "변경 없이 저장"))
+    # in_place 체인: 복사본에 3단계 연속 쓰기, 첫 쓰기만 .bak
+    import shutil
+    IP = OUT + "/e_ip.crf"; shutil.copyfile(E, IP)
+    if os.path.exists(IP + ".bak"): os.remove(IP + ".bak")
+    case("in_place first write creates .bak", "crf_set_cell", {"path": IP, "table": "표3", "row": "0", "col": "2", "text": "IP1", "in_place": "true"}, contains("OK", "(in_place) (원본 백업 → e_ip.crf.bak)"))
+    case("in_place second write keeps .bak", "crf_set_cell", {"path": IP, "table": "표3", "row": "0", "col": "3", "text": "IP2", "in_place": "true", "output": IP}, contains("OK", "(백업 e_ip.crf.bak 유지)"))
+    case("in_place table op", "crf_table_cols", {"path": IP, "table": "표3", "action": "delete", "cols": "14", "in_place": "true"}, contains("OK", "1행×14열", "(in_place)"))
+    case("in_place chain result persisted", "crf_describe_layout", {"path": IP}, contains('"IP1" | "IP2"'))
+    case("output==path without in_place -> ERROR", "crf_set_cell", {"path": IP, "table": "표3", "row": "0", "col": "4", "text": "X", "output": IP}, err_contains("output 이 원본과 같습니다", "in_place=true"))
+    case(".bak equals original", "crf_diff", {"a": E, "b": IP + ".bak"}, lambda t, e: None if not e and ("차이 없음" in t or "identical" in t.lower() or "0건" in t or "변경 없음" in t) else f"bak differs?: {t[:300]}")
+    MB = ('<select id="x"><!-- c -->SELECT T1.EMPNO, T1.EMP_NM FROM ADM.AHRM100 T1 WHERE 1=1 AND T1.APPNM_DT <= TO_DATE(#{stdrDt}, \'YYYYMMDD\') AND T1.CNT &lt; 10'
+          '<if test="isValid(jbfmCd)"> AND T1.JBFM_CD = #{jbfmCd}</if><if test="!isValid(deptCd)"> AND T1.DEPT_CD IS NOT NULL</if>'
+          '<if test="@org.apache.commons.lang3.StringUtils@isNotEmpty(empNm)"> AND T1.EMP_NM LIKE #{empNm}</if><if test=\'"Y".equals(useYn)\'> AND T1.USE_YN = \'Y\'</if> ORDER BY T1.EMPNO</select>')
+    case("set_query MyBatis isValid/equals/entities/<= + return", "crf_set_query", {"path": E, "sql": MB, "output": OUT + "/e_mb.crf"},
+         contains("OK", "scriptType JavaScript → JavaScript", "+ 매개변수 선언: [USEYN]"))
+    case("get_query converted JS", "crf_get_query", {"path": OUT + "/e_mb.crf"},
+         contains("AND T1.APPNM_DT <= TO_DATE('{parameter.STDRDT}', 'YYYYMMDD') AND T1.CNT < 10", "if('{parameter.JBFMCD}' != ''){", "if('{parameter.DEPTCD}' == ''){", "if('{parameter.EMPNM}' != ''){", "if('{parameter.USEYN}' == 'Y'){", "return sql;"))
+    case("summary: declared param has no type suffix (Null like designer)", "crf_summary", {"path": OUT + "/e_mb.crf"}, lambda t, e: None if not e and "USEYN" in t and "USEYN:String" not in t else f"param type: {t[:400]}")
+    case("describe detail compacts row-common style", "crf_describe_layout", {"path": E, "detail": "true"},
+         contains("[0] «공통: 정렬=Middle/Center, 폰트=돋움체, 크기=8, 굵게, 줄바꿈» \"구분\" | \"대학\"", "데이터:INSTT_DIV_NM «정렬=Left/Center", " | 데이터:EMPNO | 데이터:EMP_NM | "))
+    case("describe detail label font not duplicated", "crf_describe_layout", {"path": E, "detail": "true"}, lambda t, e: None if not e and "폰트=돋움체 정렬=Middle/Center 폰트=돋움체" not in t else "font printed twice")
+    case("describe one_per_line", "crf_describe_layout", {"path": E, "detail": "true", "one_per_line": "true"}, contains("[0,0] 데이터:INSTT_DIV_NM «정렬=Left/Center", "\n            [0,2] 데이터:EMPNO\n"))
+    # Codex 리뷰 반영(v0.9.0): 중복 컬럼명 자리 보존, reorder 가드, 배치 중복 거부, format 우선순위, choose/when else-if, 속성 안의 >, return 판정
+    case("set_query duplicate column names keep positions (COL_n)", "crf_set_query",
+         {"path": E, "sql": 'var sql="";\r\nsql += "SELECT A.ID, B.ID, B.NAME AS EMP_NM FROM T A, T B";\r\nif(1){ return sql; }', "output": OUT + "/e_dup.crf"},
+         lambda t, e: None if not e and "자리 필드 [COL_2]" in t and "필드(18): ID, COL_2, EMP_NM" in t and "return 문이 없습니다" not in t else f"dup cols: {t[:400]}")
+    case("set_query sync_fields=none leaves a column without field", "crf_set_query",
+         {"path": E, "sql": "SELECT T1.EMPNO, T1.NEWCOL, T1.EMP_NM FROM T T1", "sync_fields": "none", "output": OUT + "/e_q3.crf"}, contains("OK"))
+    case("reorder_fields order=query refuses when a column has no field", "crf_reorder_fields",
+         {"path": OUT + "/e_q3.crf", "output": OUT + "/e_r_guard.crf"}, err_contains("[NEWCOL]", "crf_sync_fields"))
+    case("set_cell cells duplicate target -> ERROR", "crf_set_cell", {"path": E, "table": "표3", "cells": [{"row": 0, "col": 2, "text": "a"}, {"row": 0, "col": 2, "text": "b"}], "output": OUT + "/e_c_dup.crf"}, err_contains("두 번"))
+    case("set_cell clear_format wins over format (single + batch)", "crf_set_cell",
+         {"path": E, "table": "표3", "format": "#,##0", "cells": [{"row": 0, "col": 4, "clear_format": "true"}, {"row": 0, "col": 2}], "output": OUT + "/e_c_prec.crf"},
+         contains("OK: 2개 셀 설정, verified", "표3[0,4] format 제거(was yy.mm.dd)", "표3[0,2] format=#,##0"))
+    MB2 = ('<select id="x">SELECT T1.EMPNO, T1.EMP_NM FROM T T1 WHERE 1=1 <if test="cnt > 0"> AND T1.CNT > #{cnt}</if>'
+           '<choose><when test="isValid(a)"> AND A=#{a}</when><when test="isValid(b)"> AND B=#{b}</when><otherwise> AND C=1</otherwise></choose> ORDER BY 1</select>')
+    case("set_query MyBatis choose->if/else if/else, '>' inside test attr", "crf_set_query", {"path": E, "sql": MB2, "output": OUT + "/e_mb2.crf"}, contains("OK", "+ 매개변수 선언: [A, B, CNT]"))
+    case("get_query: else-if chain and numeric compare", "crf_get_query", {"path": OUT + "/e_mb2.crf"},
+         contains("if('{parameter.CNT}' > 0){", "if('{parameter.A}' != ''){", "else if('{parameter.B}' != ''){", "else {", "AND T1.CNT > '{parameter.CNT}'"))
+    # 엑셀 격자 lint (v0.9.0): 페이지 바닥글 제외, 글상자 좌우·표 경계·선 x 를 본문 경계와 대조
+    F1 = os.environ.get("CLIP_SMOKE_F1", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmhr/ahrmhr0120_prn01.crf")
+    if os.path.isfile(F1):
+        case("validate excel grid INFO lists misaligned label edge only", "crf_validate", {"path": F1},
+             lambda t, e: None if not e and "ℹ 엑셀 격자: 본문 표 경계 11개 외에 어긋난 세로선 1개([620])" in t and '글상자2": 오른쪽 620(가까운 경계 460/840)' in t and "글상자3" not in t.split("엑셀 격자")[1].split("ℹ")[0] and "글상자4" not in t else f"excel grid: {t[:600]}")
+        case("validate excel=true -> WARN", "crf_validate", {"path": F1, "excel": "true"}, contains("WARN 1", "⚠ 엑셀 격자"))
+        case("align label to body boundary clears the finding", "crf_set_label", {"path": F1, "name": "글상자2", "width": "840", "output": OUT + "/f1_al.crf"}, contains("OK"))
+        case("validate after align: no excel grid finding", "crf_validate", {"path": OUT + "/f1_al.crf", "excel": "true"}, lambda t, e: None if not e and "엑셀 격자" not in t else f"still: {t[:300]}")
+if os.path.isfile(C):
+    case("set_paper Landscape swaps size, reports body width", "crf_set_paper", {"path": C, "orientation": "Landscape", "output": OUT + "/c_p1.crf"},
+         contains("OK", "크기 2100x2970→2970x2100", "본문 너비=2370", "fit=true 를 주면"))
+    case("set_paper fit=true scales tables/controls", "crf_set_paper", {"path": C, "orientation": "Landscape", "fit": "true", "output": OUT + "/c_p2.crf"},
+         contains("OK", "↔ fit: 본문 너비 1500→2370", "표 3개(열 비례)"))
+    case("fit result: table width scaled", "crf_table_info", {"path": OUT + "/c_p2.crf", "table": "표_신고자"}, contains("(합 2307)"))
+    case("set_paper fit back to Potrait restores width", "crf_set_paper", {"path": OUT + "/c_p2.crf", "orientation": "Potrait", "fit": "true", "output": OUT + "/c_p3.crf"}, contains("OK", "2970x2100→2100x2970", "본문 너비=1500"))
+    case("fit round trip exact", "crf_table_info", {"path": OUT + "/c_p3.crf", "table": "표_신고자"}, contains("(합 1460)"))
+    case("set_paper bad orientation -> ERROR", "crf_set_paper", {"path": C, "orientation": "Sideways", "output": OUT + "/c_p_bad.crf"}, err_contains("orientation"))
+
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))
 case("db_query DDL refused", "db_query", {"sql": " /*c*/ drop table x"}, error)
