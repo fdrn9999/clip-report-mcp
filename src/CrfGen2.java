@@ -149,7 +149,7 @@ public class CrfGen2 {
         warns.add("<foreach collection="+coll+"> → 매개변수 "+pn+" 를 쉼표로 이어 붙인 문자열(예 A,B,C)로 넘겨야 합니다(JS split 루프로 변환; 각 원소는 '…' 로 감쌈)"); }
       else if(low.startsWith("</foreach")){ if(!fe.isEmpty()){ String[] st=fe.pop(); js.append("}\r\n"); if(!st[3].isEmpty()) js.append("sql += \"").append(escLine(st[3])).append("\";\r\n"); } }
       else if(low.startsWith("<trim")){ String prefix=attr(tag,"prefix"), suffix=attr(tag,"suffix"), po=attr(tag,"prefixOverrides"), so=attr(tag,"suffixOverrides");
-        if(prefix!=null&&prefix.trim().equalsIgnoreCase("WHERE")) js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n");
+        if(prefix!=null&&prefix.trim().equalsIgnoreCase("WHERE")){ js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n"); if(po!=null&&po.toUpperCase().contains("OR")) warns.add("<trim prefix=WHERE prefixOverrides=\""+po+"\"> 를 WHERE 1=1 로 바꿈 — 첫 조각이 OR 로 시작하면 의미가 달라지니 확인"); }
         else if(prefix!=null&&!prefix.isEmpty()){ js.append("sql += \" ").append(escLine(prefix)).append(" \";\r\n"); if(po!=null&&!po.isEmpty()) warns.add("<trim prefixOverrides=\""+po+"\"> 는 적용 못 함(첫 조각의 "+po+" 를 직접 제거하세요)"); }
         if(so!=null&&!so.isEmpty()) warns.add("<trim suffixOverrides=\""+so+"\"> 는 적용 못 함(마지막 조각의 "+so+" 를 직접 제거하세요)");
         trimClose.push(suffix==null?"":suffix); }
@@ -167,13 +167,16 @@ public class CrfGen2 {
   /** foreach 본문: #{item}/#{item.x} → '"+__feN[__iN]+"' (따옴표 감쌈), ${item} → "+__feN[__iN]+" ; 나머지 텍스트는 일반 변환 */
   static void emitForeachBody(StringBuilder js,String text,String[] st){
     if(text==null) return; String item=Pattern.quote(st[0]), v=st[1]+"["+st[2]+"]";
-    String t=text.replaceAll("#\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}","\uE001").replaceAll("\\$\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}","\uE002");
+    // '#{item}' 처럼 이미 SQL 따옴표로 감싸져 있으면 따옴표를 더 붙이지 않는다
+    String t=text.replaceAll("'\\s*#\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}\\s*'","\uE001").replaceAll("#\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}","\uE001").replaceAll("\\$\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}","\uE002");
     t=subParamsQuoted(unescapeXml(t));
-    for(String ln: t.replace("\r\n","\n").replace("\r","\n").split("\n",-1)){ if(ln.trim().isEmpty()) continue; String e=escLine(ln).replace("\uE001","'\" + "+v+" + \"'").replace("\uE002","\" + "+v+" + \""); js.append("sql += \"").append(e).append("\";\r\n"); }
+    for(String ln: t.replace("\r\n","\n").replace("\r","\n").split("\n",-1)){ if(ln.trim().isEmpty()) continue; String e=escLine(ln).replace("\uE001","'\" + "+v+" + \"'").replace("\uE002","\" + "+v+" + \""); js.append("sql += \"").append(e).append("\\r\\n\";\r\n"); }
   }
-  static void emitText(StringBuilder js,String text){
+  static void emitText(StringBuilder js,String text){ emitText(js,text,true); }
+  /** xml=false 면 평문 SQL(엔티티 복원 안 함 — '&lt;' 같은 리터럴 보존) */
+  static void emitText(StringBuilder js,String text,boolean xml){
     if(text==null) return;
-    String t=subParamsQuoted(unescapeXml(text));
+    String t=subParamsQuoted(xml?unescapeXml(text):text);
     String[] lines=t.replace("\r\n","\n").replace("\r","\n").split("\n",-1);
     for(String ln: lines){ if(ln.trim().isEmpty()) continue; js.append("sql += \"").append(escLine(ln)).append("\\r\\n\";\r\n"); }
   }

@@ -1186,9 +1186,10 @@ public class CrfMcpServer {
     String body=bindForExec(CrfGen2.stripComments(plain),params).trim().replaceAll(";\\s*$","");
     String exec="SELECT * FROM (\n"+body+"\n) WHERE 1=0";
     try(Connection c=db(); Statement st=c.createStatement()){ try{ st.setQueryTimeout(DB_TIMEOUT_SEC); st.setMaxRows(1); }catch(Throwable t){}
-      try(ResultSet rs=st.executeQuery(exec)){ ResultSetMetaData md=rs.getMetaData(); for(int i=1;i<=md.getColumnCount();i++){ String c2=md.getColumnLabel(i); if(!validIdent(c2)) { if(skipped!=null) skipped.add(c2); continue; }
-          if(types.containsKey(c2)){ String alt="COL_"+i; if(skipped!=null) skipped.add(c2+"(중복 → "+alt+")"); c2=alt; }   // 같은 이름 컬럼은 위치 보존용 자리 이름
-          types.put(c2,jdbcToDataType(md.getColumnTypeName(i),md.getScale(i),c2)); } }
+      try(ResultSet rs=st.executeQuery(exec)){ ResultSetMetaData md=rs.getMetaData(); java.util.Set<String> seen=new java.util.HashSet<>();
+        for(int i=1;i<=md.getColumnCount();i++){ String raw=md.getColumnLabel(i), c2=raw;
+          if(!validIdent(c2)||seen.contains(c2.toUpperCase())){ String alt="COL_"+i; int k=2; while(seen.contains(alt.toUpperCase())) alt="COL_"+i+"_"+(k++); if(skipped!=null) skipped.add(raw+(validIdent(raw)?"(중복":"(사용불가")+" → "+alt+")"); c2=alt; }   // 위치 보존: 못 쓰는/중복 이름도 자리 필드로
+          seen.add(c2.toUpperCase()); types.put(c2,jdbcToDataType(md.getColumnTypeName(i),md.getScale(i),c2)); } }
     }catch(SQLException e){ throw new RuntimeException("DB 실행 실패 — "+e.getMessage().trim()+"\n(params 로 매개변수 값을 주거나 쿼리를 확인하세요; 실행한 SQL 앞부분)\n"+(exec.length()>500?exec.substring(0,500)+"…":exec)); }
     return types;
   }

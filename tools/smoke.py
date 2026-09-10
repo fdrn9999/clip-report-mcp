@@ -479,6 +479,19 @@ if os.path.isfile(E):
          contains("OK: 열 세트 교체 → 2열", "제목 표 '표1' 제목 2개", "verified" if False else "OK"))
     case("set_columns avg total → F_TOTAL_AVG_ formula, grid ok", "crf_table_info", {"path": OUT + "/v10_m2.crf", "table": "표1"}, contains("2열", "격자 정상", '"EMPNO" | "급여평균"'))
     case("avg formula name/script", "crf_get_formula", {"path": OUT + "/v10_m2.crf", "name": "F_TOTAL_AVG_SAL_AMT"}, contains('rexpert.avg(0,"data.SAL_AMT",0,"","")'))
+    # Codex 재점검 반영: 한 줄 JS(`…; return sql;`), 앞 줄에서 열린 괄호, if/else 체인 뒤 삽입, 평문 SQL 의 &lt; 보존, foreach '#{item}' 따옴표
+    case("append_query_condition: compact one-line JS gets split before return", "crf_set_query", {"path": E, "sql": "var sql=\"SELECT T1.EMPNO FROM ADM.AHRM100 T1 WHERE 1=1\"; return sql;", "output": OUT + "/v10_cmp.crf"}, contains("OK"))
+    case("append_query_condition: inserted before the effective return", "crf_append_query_condition", {"path": OUT + "/v10_cmp.crf", "param": "DEPTCD", "sql": "AND T1.DEPT_CD = '{parameter.DEPTCD}'", "output": OUT + "/v10_cmp2.crf"},
+         lambda t, e: None if not e and t.index("+ if('{parameter.DEPTCD}'") < t.index("  return sql;") else f"compact: {t[:400]}")
+    case("append_query_condition: OVER ( opened on a previous line is not the final ORDER BY", "crf_set_query", {"path": E, "sql": "var sql=\"\";\r\nsql += \"SELECT ROW_NUMBER() OVER (\\r\\n\";\r\nsql += \"ORDER BY T1.EMPNO) AS RN, T1.EMPNO FROM ADM.AHRM100 T1\\r\\n\";\r\nreturn sql;", "output": OUT + "/v10_ov.crf"}, contains("OK"))
+    case("append_query_condition: multi-line OVER → before return", "crf_append_query_condition", {"path": OUT + "/v10_ov.crf", "param": "DEPTCD", "sql": "AND 1=1", "output": OUT + "/v10_ov2.crf"}, contains("return 앞"))
+    case("append_query_condition: after: inside if/else chain → after the chain", "crf_set_query", {"path": E, "sql": "var sql=\"SELECT 1 FROM DUAL WHERE 1=1\";\r\nif('{parameter.A}' != ''){\r\nsql += \" AND A=1\";\r\n}\r\nelse {\r\nsql += \" AND A=2\";\r\n}\r\nsql += \" ORDER BY 1\";\r\nreturn sql;", "output": OUT + "/v10_el.crf"}, contains("OK"))
+    case("append_query_condition: after:A=1 lands after the else block", "crf_append_query_condition", {"path": OUT + "/v10_el.crf", "param": "B", "sql": "AND B=1", "position": "after:A=1", "output": OUT + "/v10_el2.crf"},
+         lambda t, e: None if not e and t.index("AND A=2") < t.index("+ if('{parameter.B}'") and t.index("+ }") < t.index("ORDER BY 1") else f"else chain: {t[:500]}")
+    case("plain SQL '&lt;' literal preserved (no XML decode)", "crf_append_query_condition", {"path": E, "param": "X", "sql": "AND T1.NM <> '&lt;'", "output": OUT + "/v10_lt.crf"}, contains("'&lt;'"))
+    MBFE2 = '<select id="x">SELECT 1 FROM T WHERE X IN <foreach collection="ids" item="i" open="(" separator="," close=")">\'#{i}\'</foreach></select>'
+    case("foreach: already-quoted '#{item}' is not double-quoted", "crf_set_query", {"path": E, "sql": MBFE2, "output": OUT + "/v10_fe2.crf"}, contains("OK"))
+    case("foreach: quoted placeholder JS", "crf_get_query", {"path": OUT + "/v10_fe2.crf"}, lambda t, e: None if not e and "sql += \"'\" + __fe1[__i1] + \"'\\r\\n\";" in t and "''\" + __fe1" not in t else f"quoted item: {t[:600]}")
     case("append_query_condition ignores ORDER BY inside OVER(...)", "crf_append_query_condition",
          {"path": E, "param": "X", "sql": "AND 1=1", "output": OUT + "/v10_over.crf", "dataset": "0"}, contains("OK"))
     case("set_query with window ORDER BY only", "crf_set_query", {"path": E, "sql": "SELECT ROW_NUMBER() OVER (ORDER BY T1.EMPNO) AS RN, T1.EMPNO FROM ADM.AHRM100 T1", "output": OUT + "/v10_win.crf"}, contains("OK"))
@@ -490,7 +503,7 @@ if os.path.isfile(E):
          contains("OK", "(ORDER BY 앞, 3줄)", "평문 SQL 을 JavaScript 동적쿼리로 변환", "+ if('{parameter.JGRDCD}' != ''){", "+ sql += \"AND T1.JGRD_CD = '{parameter.JGRDCD}'\\r\\n\";", "  sql += \"ORDER BY T1.EMPNO\\r\\n\";"))
     case("append_query_condition: after:<text> inside if → after the block", "crf_append_query_condition",
          {"path": OUT + "/v10_c.crf", "param": "EMPNM", "sql": "AND T2.EMP_NM LIKE '%' || '{parameter.EMPNM}' || '%'", "position": "after:JGRD_CD", "output": OUT + "/v10_d.crf"},
-         contains("OK", "('JGRD_CD' 다음, 3줄)", "기준 줄이 if 블록 안이라 그 블록이 닫힌 뒤에 삽입"))
+         contains("OK", "('JGRD_CD' 다음, 3줄)", "기준 줄이 if 블록 안이라 그 블록(else 분기 포함)이 닫힌 뒤에 삽입"))
     case("append_query_condition: declares new param", "crf_append_query_condition",
          {"path": OUT + "/v10_d.crf", "param": "NATNCD", "sql": "AND T1.NATN_CD = '{parameter.NATNCD}'", "output": OUT + "/v10_e.crf"}, contains("OK", "+ 매개변수 선언: [NATNCD]"))
     case("append_query_condition: validate has return + no errors", "crf_validate", {"path": OUT + "/v10_e.crf"}, contains("ERROR 0"))
@@ -500,7 +513,7 @@ if os.path.isfile(E):
             '<foreach collection="deptList" item="d" open="(" separator="," close=")">#{d}</foreach></if></trim> ORDER BY T1.EMPNO</select>')
     case("MyBatis foreach → split loop, trim WHERE → 1=1", "crf_set_query", {"path": E, "sql": MBFE, "output": OUT + "/v10_fe.crf"}, contains("OK", "<foreach collection=deptList> → 매개변수 DEPTLIST 를 쉼표로"))
     case("MyBatis foreach: generated JS", "crf_get_query", {"path": OUT + "/v10_fe.crf"},
-         contains("sql += \" WHERE 1=1 \\r\\n\";", "var __fe1 = ('{parameter.DEPTLIST}' == '') ? [] : '{parameter.DEPTLIST}'.split(',');", "for(var __i1=0; __i1<__fe1.length; __i1++){", "if(__i1>0) sql += \",\";", "sql += \"'\" + __fe1[__i1] + \"'\";", "/*FOREACH"))
+         contains("sql += \" WHERE 1=1 \\r\\n\";", "var __fe1 = ('{parameter.DEPTLIST}' == '') ? [] : '{parameter.DEPTLIST}'.split(',');", "for(var __i1=0; __i1<__fe1.length; __i1++){", "if(__i1>0) sql += \",\";", "sql += \"'\" + __fe1[__i1] + \"'\\r\\n\";", "/*FOREACH"))
     GENSQL = "SELECT T1.DEPT_NM, T1.EMPNO, T2.EMP_NM, T1.JGRD_NM, TO_CHAR(T1.APPNM_DT,'YYYY-MM-DD') AS APPNM_DT, T1.SAL_AMT FROM ADM.AHRM100 T1, ADM.AHRM110 T2 WHERE T1.EMPNO=T2.EMPNO AND T1.STDR_DT = '{parameter.STDRDT}' ORDER BY T1.DEPT_NM, T1.EMPNO"
     GENCOLS = [{"field": "DEPT_NM", "title": "부서", "width": 500}, {"field": "EMPNO", "title": "사번", "width": 300}, {"field": "EMP_NM", "title": "성명", "width": 300}, {"field": "JGRD_NM", "title": "직급"},
                {"field": "APPNM_DT", "title": "임용일자", "align": "Center", "width": 350}, {"field": "SAL_AMT", "title": "급여", "format": "#,##0", "total": "sum", "width": 400}]

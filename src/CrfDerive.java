@@ -120,7 +120,9 @@ public class CrfDerive {
     List<Object[]> out=new ArrayList<>(); RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); int di=CrfMcpServer.detailIndex(secs);
     List<Section> heads=new ArrayList<>(); for(int i=0;i<di;i++) if(secs.get(i) instanceof SectionGroupHeader) heads.add(secs.get(i));
     List<Section> foots=new ArrayList<>(); for(int i=di+1;i<secs.size();i++) if(secs.get(i) instanceof SectionGroupFooter) foots.add(secs.get(i));
+    List<Integer> bb=CrfMcpServer.tableBounds(body);
     for(Object[] e: CrfMcpServer.allControls(rf)){ if(!(e[0] instanceof SectionGroupFooter)||!(e[3] instanceof ControlTable)) continue; ControlTable t=(ControlTable)e[3]; if(t.getColumnCount()!=body.getColumnCount()) continue;
+      List<Integer> tb=CrfMcpServer.tableBounds(t); int score=0; for(int i=0;i<tb.size();i++) if(Math.abs(tb.get(i)-bb.get(i))<=10) score++; if(score<2) continue;   // 열 수만 같은 다른 용도의 표는 제외
       int fi=foots.indexOf(e[0]); int hi=heads.size()-1-fi; String gf=null; if(hi>=0&&hi<heads.size()){ Group gr=((SectionGroupHeader)heads.get(hi)).getGroup(); if(gr!=null&&gr.getGroupingField()!=null) gf=nameOf(gr.getGroupingField()); }
       out.add(new Object[]{t,gf}); }
     return out;
@@ -130,7 +132,7 @@ public class CrfDerive {
     List<String> out=new ArrayList<>(); TreeSet<Integer> grid=new TreeSet<>(CrfMcpServer.tableBounds(body));
     for(Object[] e: CrfMcpServer.allControls(rf)){ Control c=(Control)e[3]; if(c instanceof ControlTable||!c.getVisible()||e[0] instanceof SectionPageFooter) continue; int x=c.getX1(), w=CrfMcpServer.ix(c,"getWidth"); if(w<=0) continue;
       Integer nl=nearest(grid,x), nr=nearest(grid,x+w); boolean ml=nl!=null&&nl!=x&&Math.abs(nl-x)<=tol, mr=nr!=null&&nr!=x+w&&Math.abs(nr-(x+w))<=tol;
-      if(!ml&&!mr) continue; int nx=ml?nl:x, nright=mr?nr:x+w; if(nright-nx<50||nright-nx<w*7/10) continue;   // 글자가 잘릴 만큼 줄이진 않음
+      if(!ml&&!mr) continue; int nx=ml?nl:x, nright=mr?nr:x+w; if(nright-nx<50||10L*(nright-nx)<7L*w) continue;   // 글자가 잘릴 만큼 줄이진 않음
       c.setX1(nx); CrfMcpServer.call(c,"setWidth",int.class,nright-nx); out.add(c.getClass().getSimpleName().replace("Control","")+" \""+c.getName()+"\" "+x+"~"+(x+w)+" → "+nx+"~"+nright); }
     return out;
   }
@@ -157,14 +159,15 @@ public class CrfDerive {
       for(int i=0;i<n;i++){ Col c=cols.get(i); TableCellNormal cell=cell(foot,fr,i); if(cell==null) continue;
         if(c.total!=null&&c.f!=null){ FieldFormula ff=totalFormula(rf,c.field,c.total,groupField); CrfMcpServer.call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); CrfMcpServer.call(cell,"setApplyValueField",Field.class,ff); CrfMcpServer.call(cell,"setOutputFormat",String.class,c.format==null?"#,##0":c.format); JSONObject a=new JSONObject(); a.put("align","Right"); CrfMcpServer.applyProps(rf,cell,a,"F"); any=true; }
         else { setText(rf,cell,"",null); if(labelAt<0&&c.total==null) labelAt=i; } }
-      if(any){ int at=labelAt<0?0:labelAt; TableCellNormal lc=cell(foot,fr,at); if(lc!=null) setText(rf,lc,totalLabel==null?(groupField==null?"합 계":"소 계"):totalLabel,"Center"); r.notes.add("합계 표 '"+foot.getName()+"' — "+(totalLabel==null?(groupField==null?"합 계":"소 계"):totalLabel)+" 라벨 ["+at+"], 집계 열 "+countTotals(cols)+"개"); }
+      if(any&&labelAt<0) r.notes.add("합계 표 '"+foot.getName()+"' — 모든 열이 집계라 라벨 생략, 집계 열 "+countTotals(cols)+"개");
+      else if(any){ int at=labelAt; TableCellNormal lc=cell(foot,fr,at); if(lc!=null) setText(rf,lc,totalLabel==null?(groupField==null?"합 계":"소 계"):totalLabel,"Center"); r.notes.add("합계 표 '"+foot.getName()+"' — "+(totalLabel==null?(groupField==null?"합 계":"소 계"):totalLabel)+" 라벨 ["+at+"], 집계 열 "+countTotals(cols)+"개"); }
       else r.notes.add("합계 표 '"+foot.getName()+"' 열 맞춤(집계 열 없음 — columns[].total 로 지정)"); }
     // 그룹 바닥글 소계 표: 같은 열 구조면 그룹 필드 기준 rexpert.sum 으로 재구성
     for(Object[] gt: gfoots){ ControlTable t=(ControlTable)gt[0]; String gf=(String)gt[1]; int fr=t.getRowCount()-1; unmergeRow(t,fr); resizeCols(t,n); setWidths(t,r.widths); t.setX1(body.getX1()); boolean any=false; int labelAt=-1;
       for(int i=0;i<n;i++){ Col c=cols.get(i); TableCellNormal cell=cell(t,fr,i); if(cell==null) continue;
         if(c.total!=null&&c.f!=null&&gf!=null){ FieldFormula ff=totalFormula(rf,c.field,c.total,gf); CrfMcpServer.call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); CrfMcpServer.call(cell,"setApplyValueField",Field.class,ff); CrfMcpServer.call(cell,"setOutputFormat",String.class,c.format==null?"#,##0":c.format); JSONObject a=new JSONObject(); a.put("align","Right"); CrfMcpServer.applyProps(rf,cell,a,"F"); any=true; }
         else { setText(rf,cell,"",null); if(labelAt<0&&c.total==null) labelAt=i; } }
-      if(any){ int at=labelAt<0?0:labelAt; TableCellNormal lc=cell(t,fr,at); if(lc!=null) setText(rf,lc,"소 계","Center"); r.notes.add("그룹 바닥글 표 '"+t.getName()+"' — 소 계("+gf+" 기준) 집계 열 "+countTotals(cols)+"개"); }
+      if(any){ if(labelAt>=0){ TableCellNormal lc=cell(t,fr,labelAt); if(lc!=null) setText(rf,lc,"소 계","Center"); } r.notes.add("그룹 바닥글 표 '"+t.getName()+"' — 소 계("+gf+" 기준) 집계 열 "+countTotals(cols)+"개"+(labelAt<0?", 라벨 생략(전 열 집계)":"")); }
       else r.notes.add("그룹 바닥글 표 '"+t.getName()+"' 열 맞춤"+(gf==null?"(그룹 필드 없음)":"(집계 열 없음)")); }
     return r;
   }
@@ -172,7 +175,16 @@ public class CrfDerive {
 
   // ===================== 쿼리에 조건 추가 =====================
   /** 평문 SQL → JS 동적쿼리(var sql=""; sql += "…\r\n"; … return sql;) */
-  static String plainToJs(String sql){ StringBuilder js=new StringBuilder("var sql = \"\";\r\n"); CrfGen2.emitText(js,CrfGen2.stripComments(sql)); js.append("return sql;\r\n"); return js.toString(); }
+  static String plainToJs(String sql){ StringBuilder js=new StringBuilder("var sql = \"\";\r\n"); CrfGen2.emitText(js,CrfGen2.stripComments(sql),false); js.append("return sql;\r\n"); return js.toString(); }
+  static String stripStrings(String line){ return line.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'",""); }
+  /** sql += "…" 줄의 문자열 내용(큰따옴표 안)만 — SQL 괄호 깊이 계산용 */
+  static String stringContent(String line){ StringBuilder b=new StringBuilder(); java.util.regex.Matcher m=java.util.regex.Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(line); while(m.find()) b.append(m.group(1)).append(' '); return b.toString(); }
+  static int parenDelta(String sql){ String t=sql.replaceAll("'(?:[^'\\\\]|\\\\.)*'",""); int d=0; for(char ch: t.toCharArray()){ if(ch=='(') d++; else if(ch==')') d--; } return d; }
+  /** 한 줄에 `…; return sql;` / `…; if(` 처럼 문장이 이어져 있으면 문자열 밖의 `;` 뒤 return/if/else/var/for/} 앞에서 나눈다 */
+  static List<String> splitStatements(String line){ List<String> out=new ArrayList<>(); int start=0; boolean inS=false; char qc=0;
+    for(int i=0;i<line.length();i++){ char ch=line.charAt(i); if(inS){ if(ch=='\\'){ i++; continue; } if(ch==qc) inS=false; continue; } if(ch=='"'||ch=='\''){ inS=true; qc=ch; continue; }
+      if(ch==';'){ int j=i+1; while(j<line.length()&&Character.isWhitespace(line.charAt(j))) j++; String rest=line.substring(j); if(rest.matches("(?s)(return\\b|if\\s*\\(|else\\b|var\\s|for\\s*\\(|\\}).*")){ out.add(line.substring(start,i+1)); start=j; i=j-1; } } }
+    out.add(line.substring(start)); return out; }
   static int braceDelta(String line){ String t=line.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'",""); int d=0; for(char ch: t.toCharArray()){ if(ch=='{') d++; else if(ch=='}') d--; } return d; }
   /** crf_append_query_condition */
   @SuppressWarnings("unchecked")
@@ -189,18 +201,23 @@ public class CrfDerive {
     String pname=param.isEmpty()?null:CrfGen2.rp(param);
     String fragN=CrfGen2.normParamTokens(CrfGen2.subParamsQuoted(frag));
     if(pname!=null&&!fragN.toUpperCase().contains("{PARAMETER."+pname.toUpperCase()+"}")) notes.add("⚠ sql 조각에 {parameter."+pname+"} 가 없습니다 — 조건만 걸리고 값은 쓰이지 않음");
-    StringBuilder blk=new StringBuilder(); String c=cond.isEmpty()?"'{parameter."+pname+"}' != ''":CrfGen2.normParamTokens(CrfGen2.subParamsQuoted(cond)); blk.append("if(").append(c).append("){\r\n"); CrfGen2.emitText(blk,fragN); blk.append("}\r\n");
-    // 삽입 위치
-    String[] lines=js.replace("\r\n","\n").replace("\r","\n").split("\n",-1); List<String> L=new ArrayList<>(Arrays.asList(lines)); int at=-1; String how;
+    StringBuilder blk=new StringBuilder(); String c=cond.isEmpty()?"'{parameter."+pname+"}' != ''":CrfGen2.normParamTokens(CrfGen2.subParamsQuoted(cond)); blk.append("if(").append(c).append("){\r\n"); CrfGen2.emitText(blk,fragN,false); blk.append("}\r\n");
+    // 삽입 위치 — 먼저 한 줄에 여러 문장이 있으면 `…; return` / `…; if(` 앞에서 줄을 나눠 줄 단위 처리가 되게
+    String[] lines=js.replace("\r\n","\n").replace("\r","\n").split("\n",-1); List<String> L=new ArrayList<>(); for(String ln: lines) L.addAll(splitStatements(ln)); int at=-1; String how;
     java.util.regex.Pattern orderBy=java.util.regex.Pattern.compile("(?i)^\\s*sql\\s*\\+=\\s*\"(.*?)\\bORDER\\s+BY\\b(.*)$");
-    if(pos.isEmpty()||pos.equalsIgnoreCase("before_order")){ for(int i=L.size()-1;i>=0&&at<0;i--){ java.util.regex.Matcher m=orderBy.matcher(L.get(i)); if(m.find()){ String before=m.group(1); if(before.chars().filter(ch->ch=='(').count()!=before.chars().filter(ch->ch==')').count()) continue;   // OVER (ORDER BY …) 같은 괄호 안은 최종 ORDER BY 가 아님
+    if(pos.isEmpty()||pos.equalsIgnoreCase("before_order")){ for(int i=L.size()-1;i>=0&&at<0;i--){ java.util.regex.Matcher m=orderBy.matcher(L.get(i)); if(m.find()){ String before=m.group(1);
+          int depth=0; for(int k=0;k<i;k++) depth+=parenDelta(stringContent(L.get(k))); depth+=parenDelta(before); if(depth!=0) continue;   // OVER (ORDER BY …)/서브쿼리 안(앞 줄에서 열린 괄호 포함)은 최종 ORDER BY 가 아님
           if(before.trim().isEmpty()) at=i; else { // 한 줄에 WHERE … ORDER BY 가 같이 있으면 둘로 나눔
             L.set(i,"sql += \""+before.replaceAll("\\s+$","")+"\\r\\n\";"); L.add(i+1,"sql += \"ORDER BY"+m.group(2)); at=i+1; } } }
       how=at>=0?"ORDER BY 앞":"ORDER BY 없음 → return 앞"; }
     else if(pos.equalsIgnoreCase("end")) how="return 앞";
     else if(pos.toLowerCase().startsWith("after:")){ String key=pos.substring(6).trim(); int hit=-1; for(int i=0;i<L.size()&&hit<0;i++) if(L.get(i).contains(key)) hit=i; if(hit<0) return "ERROR: position=after: 기준 문자열 '"+key+"' 이 쿼리에 없습니다";
       // 기준 줄이 if 블록 안이면 그 블록이 닫힌 뒤에 넣는다(조건 블록이 다른 조건 안에 중첩되지 않게)
-      int depth=0; for(int i=0;i<=hit;i++) depth+=braceDelta(L.get(i)); at=hit+1; if(depth>0){ int d=depth; for(int i=hit+1;i<L.size();i++){ d+=braceDelta(L.get(i)); if(d<depth){ at=i+1; break; } } notes.add("기준 줄이 if 블록 안이라 그 블록이 닫힌 뒤에 삽입"); }
+      int depth=0; for(int i=0;i<=hit;i++) depth+=braceDelta(L.get(i)); at=hit+1;
+      if(depth>0){ // 가장 바깥 블록이 닫힐 때까지(중첩 포함), 그리고 이어지는 else / else if 분기까지 지난 뒤에 삽입
+        int d=depth; int i=hit+1; for(;i<L.size();i++){ d+=braceDelta(L.get(i)); if(d<=0) break; } at=Math.min(i+1,L.size());
+        while(at<L.size()){ String nx=L.get(at).trim(); if(nx.isEmpty()){ at++; continue; } if(!nx.startsWith("else")) break; int d2=0; int j=at; for(;j<L.size();j++){ d2+=braceDelta(L.get(j)); if(j>at||d2>0){ if(d2<=0) break; } } at=Math.min(j+1,L.size()); }
+        notes.add("기준 줄이 if 블록 안이라 그 블록(else 분기 포함)이 닫힌 뒤에 삽입"); }
       how="'"+key+"' 다음"; }
     else return "ERROR: position 은 before_order|end|after:<문자열>";
     if(at<0){ for(int i=L.size()-1;i>=0;i--) if(L.get(i).trim().startsWith("return")){ at=i; break; } if(at<0) at=L.size(); }
@@ -224,6 +241,8 @@ public class CrfDerive {
     for(Object[] e: CrfMcpServer.allControls(rf)){ Control c=(Control)e[3];
       if(c instanceof ControlTable){ ControlTable t=(ControlTable)c; for(int r=0;r<t.getRowCount();r++) for(int k=0;k<t.getColumnCount();k++){ TableCellNormal cell=cell(t,r,k); if(cell!=null&&cell.getApplyValueField()==f) setText(rf,cell,"",null); } }
       else if(go(c,"getApplyValueField")==f) setText(rf,c,"",null); }
+    // 누적합산이 이 필드를 집계/기준으로 쓰면 그 누적합산도 같이 제거(안 그러면 지워진 객체를 가리킴)
+    RexObjectList<?> rt=rf.getGlobe().getMainReport().getReportObjectManager().getFieldRunningTotalList(); if(rt!=null) for(int i=rt.size()-1;i>=0;i--){ Object r=rt.get(i); if(r==f) continue; boolean uses=false; for(String m: new String[]{"getSummaryField","getRunningTotalEvaluateOnChangeField","getRunningTotalResetOnChangeField"}) if(go(r,m)==f) uses=true; if(uses){ warns.add("누적합산 "+nameOf(r)+" 제거(필드 "+f.getName()+" 를 집계/기준으로 씀)"); dropField(rf,(Field)r,warns); } }
     for(String r: CrfMcpServer.refsOf(rf,f)) if(r.startsWith("공식")||r.contains("그룹")||r.contains("누적")) warns.add("필드 "+f.getName()+" 제거 — 남은 참조: "+r);
     CrfMcpServer.removeFromLists(rf,f);
   }
@@ -236,7 +255,9 @@ public class CrfDerive {
     RexObjectList<?> gn=rep.getReportObjectManager().getFieldGroupNameList(); if(gn!=null) for(int i=gn.size()-1;i>=0;i--){ Field f=(Field)gn.get(i); dropField(rf,f,warns); }
     RexObjectList<?> gi=rep.getReportObjectManager().getFieldGroupIndexList(); if(gi!=null) for(int i=gi.size()-1;i>=0;i--){ Field f=(Field)gi.get(i); dropField(rf,f,warns); }   // 그룹인덱스 필드도 그룹을 가리킴
     // 누적합산의 그룹 기준(리셋/평가)은 그룹이 사라지므로 해제 — 안 풀면 지워진 Group 이 참조로 남는다
-    RexObjectList<?> rt=rep.getReportObjectManager().getFieldRunningTotalList(); if(rt!=null) for(int i=0;i<rt.size();i++){ Object r=rt.get(i); for(String m: new String[]{"RunningTotalResetOnChangeGroup","RunningTotalEvaluateOnChangeGroup"}) if(go(r,"get"+m)!=null){ try{ CrfMcpServer.call(r,"set"+m,Group.class,null); warns.add("누적합산 "+nameOf(r)+": 그룹 기준("+m.replace("RunningTotal","")+") 해제 — 리포트 전체 기준으로 동작"); }catch(Throwable t){} } }
+    RexObjectList<?> rt=rep.getReportObjectManager().getFieldRunningTotalList(); if(rt!=null) for(int i=0;i<rt.size();i++){ Object r=rt.get(i);
+      if(go(r,"getRunningTotalResetOnChangeGroup")!=null){ try{ CrfMcpServer.call(r,"setRunningTotalResetOnChangeGroup",Group.class,null); CrfMcpServer.call(r,"setRunningTotalResetType",RunningTotalResetType.class,RunningTotalResetType.ResetNever); warns.add("누적합산 "+nameOf(r)+": 그룹 리셋 해제 → ResetNever(리포트 전체 누적)"); }catch(Throwable t){} }
+      if(go(r,"getRunningTotalEvaluateOnChangeGroup")!=null){ try{ CrfMcpServer.call(r,"setRunningTotalEvaluateOnChangeGroup",Group.class,null); CrfMcpServer.call(r,"setRunningTotalEvaluateType",RunningTotalEvaluateType.class,RunningTotalEvaluateType.ForEachRecord); warns.add("누적합산 "+nameOf(r)+": 그룹 평가 해제 → ForEachRecord"); }catch(Throwable t){} } }
     return g;
   }
   static ControlLabel biggestLabel(TheReportFile rf,boolean staticOnly){ ControlLabel best=null; int bs=-1;
@@ -285,8 +306,9 @@ public class CrfDerive {
       java.util.Map<String,DataType> meta; try{ meta=CrfMcpServer.dbMeta(plain,params,skipped); }catch(RuntimeException e){ if(r.noColumns) return "ERROR: SELECT 목록을 파싱하지 못했고(SELECT * 등) DB 메타데이터도 실패 — "+e.getMessage(); warns.add("fields_from_db 실패, SQL 파싱 결과 사용: "+e.getMessage().split("\n")[0]); meta=null; }
       if(meta!=null){ for(java.util.Map.Entry<String,DataType> e: meta.entrySet()){ FieldData f=CrfMcpServer.findDataField(ds,e.getKey()); if(f==null) f=CrfMcpServer.addDataFieldTo(ds,e.getKey(),e.getValue()); else f.setDataType(e.getValue()); }
         List<String> cols=new ArrayList<>(meta.keySet()); List<String> orphan=new ArrayList<>(); CrfMcpServer.reorderFields(ds,cols,orphan); did.add("DB 메타데이터로 필드 "+cols.size()+"개 확정(타입 포함)"+(skipped.isEmpty()?"":" ⚠ 건너뜀 "+skipped));
-        if(clean) for(String o: orphan){ Field f=CrfMcpServer.findDataField(ds,o); if(f!=null) dropField(rf,f,warns); } } }
-    // 2c) SELECT 에 없는 필드는 바인딩을 풀고 제거(clean)
+        if(clean) for(String o: orphan){ Field f=CrfMcpServer.findDataField(ds,o); if(f!=null) dropField(rf,f,warns); }
+        r.orphan.clear(); if(clean&&!orphan.isEmpty()) did.add("DB 메타데이터 기준으로 없는 필드 "+orphan.size()+"개 제거: "+orphan); } }
+    // 2c) SELECT 에 없는 필드는 바인딩을 풀고 제거(clean) — DB 메타데이터를 썼으면 그 결과가 우선(파서 결과는 위에서 비움)
     if(clean&&!r.orphan.isEmpty()){ List<String> dropped=new ArrayList<>(); for(String o: r.orphan){ Field f=CrfMcpServer.findDataField(ds,o); if(f!=null){ dropField(rf,f,warns); dropped.add(o); } } if(!dropped.isEmpty()) did.add("SELECT 에 없는 필드 "+dropped.size()+"개 바인딩 해제·제거: "+dropped); }
     else if(!r.orphan.isEmpty()) warns.add("SELECT 에 없는 필드가 남아 있음(값이 빔): "+r.orphan);
     if(!r.placeholders.isEmpty()) warns.add("별칭 없는 식 컬럼 → 자리 필드 "+r.placeholders+" (AS 별칭 권장)");
@@ -333,12 +355,14 @@ public class CrfDerive {
     if(!groupCols.isEmpty()){ TheReportFile g2=CrfMcpServer.open(output); ControlTable b2=bodyTable(g2,body.getName()); if(b2!=null){ List<Integer> bounds=CrfMcpServer.tableBounds(b2); int moved=0;
         for(Object[] e: CrfMcpServer.allControls(g2)){ if(!(e[0] instanceof SectionGroupFooter||e[0] instanceof SectionGroupHeader)||!(e[3] instanceof ControlLabel)) continue; ControlLabel l=(ControlLabel)e[3]; Object f=go(l,"getApplyValueField");
           int colIdx=-1; if(f instanceof FieldFormula){ java.util.regex.Matcher mm=java.util.regex.Pattern.compile("\"data\\.([A-Za-z0-9_$#가-힣]+)\"").matcher(q(((FieldFormula)f).getScript())); if(mm.find()) for(int i=0;i<cols.size();i++) if(cols.get(i).field.equalsIgnoreCase(mm.group(1))) colIdx=i; }
-          if(colIdx>=0){ l.setX1(bounds.get(colIdx)); l.setWidth(bounds.get(colIdx+1)-bounds.get(colIdx)); JSONObject a=new JSONObject(); a.put("align","Right"); CrfMcpServer.applyProps(g2,l,a,"F"); moved++; }
+          if(colIdx>=0){ l.setX1(bounds.get(colIdx)); l.setWidth(bounds.get(colIdx+1)-bounds.get(colIdx)); JSONObject a=new JSONObject(); a.put("align","Right"); CrfMcpServer.applyProps(g2,l,a,"F"); moved++;
+            Col cc=cols.get(colIdx); if(cc.total!=null&&!cc.total.equals("sum")){ String sc=q(((FieldFormula)f).getScript()); String sc2=sc.replaceFirst("rexpert\\.sum\\(","rexpert."+cc.total+"("); if(!sc2.equals(sc)){ ((FieldFormula)f).setScript(sc2); did.add("소계 "+nameOf(f)+": "+cc.total+" 로 변경"); } } }
           else { int x=l.getX1(), right=x+l.getWidth(); Integer nr=new TreeSet<>(bounds).ceiling(right); if(nr!=null&&nr!=right){ l.setWidth(nr-x); moved++; } } }
         // 그룹 바닥글에 정적 텍스트가 없으면 첫 소계 라벨 왼쪽 열에 "소 계" 라벨 추가(스타일은 소계 라벨에서 복사)
         int added=0; for(Object[] e: CrfMcpServer.allControls(g2)){ if(!(e[0] instanceof SectionGroupFooter)||!(e[3] instanceof ControlLabel)) continue; ControlLabel l=(ControlLabel)e[3]; if(!(go(l,"getApplyValueField") instanceof FieldFormula)) continue;
           boolean hasText=false; RexObjectList<Control> cl2=(RexObjectList<Control>)e[2]; for(int i=0;i<cl2.size();i++){ Control o=cl2.get(i); if(o instanceof ControlLabel && go(o,"getApplyValueField")==null && !q(g(o,"getApplyValueText")).trim().isEmpty()) hasText=true; } if(hasText) continue;
-          int idx=-1; for(int i=0;i<bounds.size()-1;i++) if(bounds.get(i)==l.getX1()) idx=i; int li=idx>0?idx-1:(idx==0&&bounds.size()>2?1:-1); if(li<0) continue;
+          int idx=-1; for(int i=0;i<bounds.size()-1;i++) if(bounds.get(i)==l.getX1()) idx=i; if(idx<0) continue;
+          int li=-1; for(int i=idx-1;i>=0&&li<0;i--) if(cols.get(i).total==null) li=i; for(int i=idx+1;i<cols.size()&&li<0;i++) if(cols.get(i).total==null) li=i; if(li<0) continue;   // 집계가 아닌 열에만 라벨
           ControlLabel t=new ControlLabel(); t.setName(CrfMcpServer.uniqueControlName(g2,"lbl_subtotal")); t.setVisible(true); t.setX1(bounds.get(li)); t.setY1(l.getY1()); t.setWidth(bounds.get(li+1)-bounds.get(li)); t.setHeight(l.getHeight());
           t.setApplyValueType(ApplyValueType.Text); t.setApplyValueText("소 계"); CrfMcpServer.copyTextInfo(l,t); JSONObject a=new JSONObject(); a.put("align","Center"); a.put("bold","true"); CrfMcpServer.applyProps(g2,t,a,"F");
           try{ Object li1=go(l,"getLineInfo"), li2=go(t,"getLineInfo"); if(li1!=null&&li2!=null){ CrfMcpServer.call(t,"setShapeType",com.clipsoft.clipreport.common.enums.ShapeType.class,go(l,"getShapeType")); CrfMcpServer.call(li2,"setLineStyle",com.clipsoft.clipreport.common.enums.LineStyle.class,go(li1,"getLineStyle")); CrfMcpServer.call(t,"setLineStyle",com.clipsoft.clipreport.common.enums.LineStyle.class,go(l,"getLineStyle")); } }catch(Throwable x){}
