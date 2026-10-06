@@ -9,11 +9,12 @@
 | 단계 | 도구/방법 |
 |---|---|
 | 결정 질문 | 시작 전에 사용자에게 **결정 목록**(요소 구성·체크 모양·글꼴·저장 위치 등, GUIDE 9-2)을 한 번에 물어 답을 받는다 — 임의로 정하지 않는다 |
-| 양식 읽기 | **형식 불문 모든 요소를 좌표까지 인벤토리**(x,y,w,h mm·정렬·글꼴·색·테두리·데이터 자리). HWPX: `samples/document/parse_hwpx.py` (문단·표·도형·글자색·**정렬**·세로위치) / PDF: PyMuPDF 로 텍스트 블록 bbox + 페이지 이미지(`pdf_text` 만으로는 위치가 사라짐) / DOCX: `word/document.xml`(EMU÷36000=mm) / HTML: 스크린샷 + `getBoundingClientRect` / 이미지: 비율 + 용지 크기 확인. 빠진 요소가 있으면 미완성 |
+| 양식 읽기 | **형식 불문 모든 요소를 좌표까지 인벤토리**(x,y,w,h mm·정렬·글꼴·색·테두리·데이터 자리). **`doc_text(path)`** 가 PDF·HWP·HWPX·DOCX·XLSX/XLS·PPTX·HTML 을 읽어 용지/여백·문단 y/정렬/글꼴·표 셀 주소/병합/크기·도형 위치를 mm 로 준다(예전의 `parse_hwpx.py`·PyMuPDF·document.xml 수작업 대체; 이미지는 크기만). 빠진 요소가 있으면 미완성 |
+| 그림 대조 | **`doc_image(path)`** 로 양식을 그림으로 받아 직접 보고 파싱 결과와 대조(도장·선·체크칸·병합·정렬·테두리) → 맞으면 작업 시작. 그림을 못 얻으면 사용자에게 PDF/이미지를 요청 |
 | 데이터 매핑 | 양식의 **파란 글자 = 데이터 자리**(관례). 화면(.xfdl/.vue)→백엔드 매퍼→테이블→`db_columns`/`db_sample` 로 컬럼 확정. 코드값은 `COM.CSYS011` |
 | 리포트 뼈대 | 같은 저장소의 단순 .crf 를 템플릿으로 열어 필드/쿼리/매개변수/섹션을 갈아끼움(DB 연결정보 유지) — `crf_generate` 또는 SDK |
 | 배치 | 본문(Detail) 밴드 하나에 글상자/표를 **0.1mm 좌표**로 배치 — `crf_add_label`(style/border) · `crf_add_table`(columns / **rows=문단 목록**) · `crf_merge_labels`/`crf_split_label` · `crf_merge_cells` · `crf_set_cell`(color/underline/linespace/padding) · `crf_set_cell_checkbox` · `crf_set_font` |
-| 검증 | `crf_validate` → 실서버 렌더(아래 §5) → **정렬 체크리스트**(§6) 대조 |
+| 검증 | `crf_validate` → **`crf_preview`**(배치 그림을 원본 그림과 나란히 대조, 고치고 반복) → 실서버 렌더(아래 §5) → **정렬 체크리스트**(§6) 대조 |
 
 ## 1. 단위·색·글꼴
 
@@ -60,6 +61,8 @@ return y + "년 " + parseInt("" + rexpert.field("data.VOW_MM"), 10) + "월 " + p
 - 날짜 매개변수는 쿼리에서 `TO_DATE` 먼저(문자열에 `TO_CHAR(str, fmt)` 하면 JDBC-5075 로 쿼리 전체 실패).
 
 ## 5. 실서버 렌더 검증 (이 ERP 기준)
+
+**먼저 `crf_render`** — WAS 를 띄우지 않고 같은 서버 엔진으로 PDF 를 만들어 그림으로 돌려준다(`.env` 의 `CLIP_RENDER_WEBAPP` = 리포트 서버 웹앱 폴더). `mode=sample` 로 배치·줄바꿈·쪽 나눔을, `mode=db params={…}` 로 실제 데이터까지 확인한다. 아래 WAS 경로는 화면에서 넘기는 파라미터·세션 값까지 포함한 최종 확인용이다.
 
 - 리포트 서버: 로컬 WAS `/report/callReport.jsp` (`-Dreport.meta.path` 가 report repo 의 `meta/` 를 그대로 서빙). `.crf` 를 `meta/<모듈경로>/` 에 복사하면 즉시 반영.
 - 서버가 파일을 잡고 있어 복사가 `Device or resource busy` 면 PowerShell `Copy-Item -Force` 로 몇 초 후 재시도.

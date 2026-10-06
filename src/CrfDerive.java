@@ -223,6 +223,7 @@ public class CrfDerive {
     if(at<0){ for(int i=L.size()-1;i>=0;i--) if(L.get(i).trim().startsWith("return")){ at=i; break; } if(at<0) at=L.size(); }
     List<String> blkLines=new ArrayList<>(Arrays.asList(blk.toString().replace("\r\n","\n").split("\n"))); L.addAll(at,blkLines);
     String out=String.join("\r\n",L); qm.setQueryString(out); qm.setScriptType(ScriptType.JavaScript);
+    String jsErr=CrfMcpServer.jsQueryProblem(out); if(jsErr!=null) notes.add("⚠ JavaScript 쿼리 "+jsErr+" — 저장은 했지만 실행 시 오류/0건이 됩니다(조각/조건식의 따옴표·괄호 확인)");
     // 매개변수 선언
     List<String> declared=new ArrayList<>(); Set<String> have=CrfMcpServer.declaredParams(rf);
     for(String u: CrfMcpServer.usedParams(out)) if(!have.contains(u.toUpperCase())){ CrfMcpServer.addGlobalParam(rf,u,CrfMcpServer.nullType(),"",u); have.add(u.toUpperCase()); declared.add(u); }
@@ -300,12 +301,13 @@ public class CrfDerive {
     CrfMcpServer.QueryApply r=CrfMcpServer.applyQuery(rf,ds,sql,s(args,"script_type"),true,clean?"replace":"add",true);
     did.add("쿼리 설정: scriptType "+r.after+", 매개변수 선언 "+r.declared+(r.noReturn?" ⚠ return 없음":""));
     if(!r.warns.isEmpty()) warns.add("MyBatis 변환: "+r.warns);
+    if(r.jsError!=null) warns.add("✖ JavaScript 쿼리 "+r.jsError+" — 리포트 실행 시 오류/0건이 됩니다(쿼리를 고쳐 crf_set_query)");
     // 2b) DB 메타데이터
-    if(fromDb||r.noColumns){ java.util.Map<String,String> params=new HashMap<>(); String pj=s(args,"params"); if(pj!=null&&!pj.trim().isEmpty()){ try{ JSONObject po=(JSONObject)CrfMcpServer.P.parse(pj); for(Object k: po.keySet()) params.put(String.valueOf(k),String.valueOf(po.get(k))); }catch(Exception e){ return "ERROR: params 는 JSON 객체여야 합니다"; } }
-      String plain=r.after==ScriptType.JavaScript?CrfMcpServer.jsToPlainSql(r.conv):r.conv; List<String> skipped=new ArrayList<>();
-      java.util.Map<String,DataType> meta; try{ meta=CrfMcpServer.dbMeta(plain,params,skipped); }catch(RuntimeException e){ if(r.noColumns) return "ERROR: SELECT 목록을 파싱하지 못했고(SELECT * 등) DB 메타데이터도 실패 — "+e.getMessage(); warns.add("fields_from_db 실패, SQL 파싱 결과 사용: "+e.getMessage().split("\n")[0]); meta=null; }
+    if(fromDb||r.noColumns){ java.util.Map<String,String> params; try{ params=CrfMcpServer.paramsArg(args); }catch(IllegalArgumentException e){ return "ERROR: "+e.getMessage(); }
+      List<String> skipped=new ArrayList<>(); String[] how=new String[1];
+      java.util.Map<String,DataType> meta; try{ meta=CrfMcpServer.dbMetaOf(r.conv,r.after==ScriptType.JavaScript,params,skipped,how); }catch(RuntimeException e){ if(r.noColumns) return "ERROR: SELECT 목록을 파싱하지 못했고(SELECT * 등) DB 메타데이터도 실패 — "+e.getMessage(); warns.add("fields_from_db 실패, SQL 파싱 결과 사용: "+e.getMessage().split("\n")[0]); meta=null; }
       if(meta!=null){ for(java.util.Map.Entry<String,DataType> e: meta.entrySet()){ FieldData f=CrfMcpServer.findDataField(ds,e.getKey()); if(f==null) f=CrfMcpServer.addDataFieldTo(ds,e.getKey(),e.getValue()); else f.setDataType(e.getValue()); }
-        List<String> cols=new ArrayList<>(meta.keySet()); List<String> orphan=new ArrayList<>(); CrfMcpServer.reorderFields(ds,cols,orphan); did.add("DB 메타데이터로 필드 "+cols.size()+"개 확정(타입 포함)"+(skipped.isEmpty()?"":" ⚠ 건너뜀 "+skipped));
+        List<String> cols=new ArrayList<>(meta.keySet()); List<String> orphan=new ArrayList<>(); CrfMcpServer.reorderFields(ds,cols,orphan); did.add("DB 메타데이터로 필드 "+cols.size()+"개 확정(타입 포함"+(how[0]==null?"":", "+how[0])+")"+(skipped.isEmpty()?"":" ⚠ 건너뜀 "+skipped));
         if(clean) for(String o: orphan){ Field f=CrfMcpServer.findDataField(ds,o); if(f!=null) dropField(rf,f,warns); }
         r.orphan.clear(); if(clean&&!orphan.isEmpty()) did.add("DB 메타데이터 기준으로 없는 필드 "+orphan.size()+"개 제거: "+orphan); } }
     // 2c) SELECT 에 없는 필드는 바인딩을 풀고 제거(clean) — DB 메타데이터를 썼으면 그 결과가 우선(파서 결과는 위에서 비움)

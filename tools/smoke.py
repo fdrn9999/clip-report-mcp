@@ -443,14 +443,13 @@ if os.path.isfile(E):
     # 엑셀 격자 lint (v0.9.0): 페이지 바닥글 제외, 글상자 좌우·표 경계·선 x 를 본문 경계와 대조
     F1 = os.environ.get("CLIP_SMOKE_F1", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmhr/ahrmhr0120_prn01.crf")
     if os.path.isfile(F1):
-        # ui-f6 가 실파일을 이미 맞춰 놓았으므로(v0.9.0), 어긋난 사본을 만들어 검사
-        case("make misaligned copy (글상자2 width 620)", "crf_set_label", {"path": F1, "name": "글상자2", "width": "620", "output": OUT + "/f1_mis.crf"}, contains("OK"))
+        # 실파일은 사용자가 격자에 맞춰 놓은 상태(열 구성은 계속 바뀌므로 경계 값은 고정하지 않는다) → 어긋난 사본(오른쪽 변 623 = 1mm 단위 경계가 아님)을 만들어 검사
+        case("aligned original: no excel grid finding", "crf_validate", {"path": F1, "excel": "true"}, lambda t, e: None if not e and "엑셀 격자" not in t else f"original F1 is not grid-aligned any more: {t[:300]}")
+        case("make misaligned copy (글상자2 width 623)", "crf_set_label", {"path": F1, "name": "글상자2", "left": "0", "width": "623", "output": OUT + "/f1_mis.crf"}, contains("OK"))
         F1 = OUT + "/f1_mis.crf"
         case("validate excel grid INFO lists misaligned label edge only", "crf_validate", {"path": F1},
-             lambda t, e: None if not e and "ℹ 엑셀 격자: 본문 표 경계 11개 외에 어긋난 세로선 1개([620])" in t and '글상자2": 오른쪽 620(가까운 경계 460/840)' in t and "글상자3" not in t.split("엑셀 격자")[1].split("ℹ")[0] and "글상자4" not in t else f"excel grid: {t[:600]}")
+             lambda t, e: None if not e and re.search(r"ℹ 엑셀 격자: 본문 표 경계 \d+개 외에 어긋난 세로선 1개\(\[623\]\)", t) and re.search(r'글상자2": 오른쪽 623\(가까운 경계 \d+(/\d+)?\)', t) and "글상자3" not in t.split("엑셀 격자")[1].split("ℹ")[0] and "글상자4" not in t else f"excel grid: {t[:600]}")
         case("validate excel=true -> WARN", "crf_validate", {"path": F1, "excel": "true"}, contains("⚠ 엑셀 격자"))
-        case("align label to body boundary clears the finding", "crf_set_label", {"path": F1, "name": "글상자2", "width": "840", "output": OUT + "/f1_al.crf"}, contains("OK"))
-        case("validate after align: no excel grid finding", "crf_validate", {"path": OUT + "/f1_al.crf", "excel": "true"}, lambda t, e: None if not e and "엑셀 격자" not in t else f"still: {t[:300]}")
 if os.path.isfile(C):
     case("set_paper Landscape swaps size, reports body width", "crf_set_paper", {"path": C, "orientation": "Landscape", "output": OUT + "/c_p1.crf"},
          contains("OK", "크기 2100x2970→2970x2100", "본문 너비=2370", "fit=true 를 주면"))
@@ -529,13 +528,305 @@ if os.path.isfile(E):
     case("generate v2: output==template -> ERROR", "crf_generate", {"template": E, "sql": "SELECT 1 FROM DUAL", "output": E}, err_contains("output 이 template 과 같습니다"))
     case("generate v2: missing template -> ERROR", "crf_generate", {"template": "C:/nope.crf", "sql": "SELECT 1 FROM DUAL", "output": OUT + "/v10_gen3.crf"}, err_contains("template 파일 없음"))
 
+# ---- v0.11.0: JS 쿼리 실제 실행(Rhino) — 실행 SQL / 문법·실행 오류 lint / foreach 루프 변수 / where·trim·set 정리 ----
+if os.path.isfile(E):
+    def evalsql(*subs, absent=()):
+        """crf_get_query mode=eval 응답의 '실행 SQL' 구간(공백 정규화)에 subs 가 있고 absent 는 없는지"""
+        def chk(text, err):
+            if err or "----- 실행 SQL" not in text: return f"no executed SQL section err={err}: {text[:300]}"
+            sql = re.sub(r"\s+", " ", text.split("----- 실행 SQL", 1)[1].split("\n", 1)[1])
+            miss = [s for s in subs if s not in sql]; bad = [s for s in absent if s in sql]
+            return None if not miss and not bad else f"missing {miss} unexpected {bad}: {sql[:400]}"
+        return chk
+    case("get_query eval: real report JS runs (all params empty)", "crf_get_query", {"path": E, "dataset": "0", "mode": "eval"},
+         lambda t, e: None if not e and "실행 SQL (매개변수 전부 빈 값으로 JS 를 실제 실행한 결과)" in t and "SELECT" in t.split("----- 실행 SQL", 1)[1] and "✖" not in t and "JavaScript 원문" not in t else f"eval E: {t[:400]}")
+    case("get_query params: bad JSON -> ERROR", "crf_get_query", {"path": E, "params": "DEPTCD=1"}, err_contains("params 는 JSON 객체"))
+    case("get_query: bad mode -> ERROR", "crf_get_query", {"path": E, "mode": "sql"}, err_contains("both|raw|plain|eval"))
+    MB11 = ('<select id="x">SELECT T1.EMPNO, T1.EMP_NM FROM T T1 <where> T1.USE_YN = \'Y\' '
+            '<if test="deptList != null and deptList.size() > 0"> AND T1.DEPT_CD IN <foreach collection="vo.deptList" item="d" index="idx" open="(" separator="," close=")">#{d}</foreach></if>'
+            '<foreach collection="kwList" item="kw" index="i"><if test="kw != null and kw != \'\'"> AND T1.EMP_NM LIKE \'%\' || #{kw} || \'%\'</if><if test="i > 0"> /*kw${i}*/</if></foreach>'
+            '</where> ORDER BY T1.EMPNO</select>')
+    case("MyBatis: <where> static-first + foreach loop-var test", "crf_set_query", {"path": E, "sql": MB11, "output": OUT + "/v11_a.crf"},
+         lambda t, e: None if not e and t.startswith("OK") and "DEPTLIST" in t and "KWLIST" in t and "매개변수 VO " not in t and "✖" not in t else f"mb11: {t[:500]}")
+    case("MyBatis: loop-var test → element/index, no {parameter.KW}", "crf_get_query", {"path": OUT + "/v11_a.crf", "mode": "raw"},
+         lambda t, e: None if not e and "if(__fe2[__i2] != '' && __fe2[__i2] != ''){" in t and "if(__i2 > 0){" in t and "{parameter.KW}" not in t and "{parameter.I}" not in t and 'sql += " WHERE \\r\\n";' in t and "1=1" not in t else f"mb11 js: {t[:900]}")
+    case("eval: lists given", "crf_get_query", {"path": OUT + "/v11_a.crf", "mode": "eval", "params": {"DEPTLIST": "A01,B02", "kwList": "김,,이"}},
+         evalsql("WHERE T1.USE_YN = 'Y' AND T1.DEPT_CD IN ('A01' ,'B02' )", "AND T1.EMP_NM LIKE '%' || '김' || '%'", "/*kw1*/", "AND T1.EMP_NM LIKE '%' || '이' || '%' /*kw2*/", "ORDER BY T1.EMPNO", absent=("/*kw0*/", "|| '' ||")))
+    case("eval: lists empty → no IN, no LIKE", "crf_get_query", {"path": OUT + "/v11_a.crf", "mode": "eval", "params": "{}"},
+         evalsql("WHERE T1.USE_YN = 'Y' ORDER BY T1.EMPNO", absent=("DEPT_CD IN", "LIKE")))
+    case("validate: converted foreach query has no JS error", "crf_validate", {"path": OUT + "/v11_a.crf"}, lambda t, e: None if not e and "JavaScript 쿼리" not in t else f"v11_a validate: {t[:400]}")
+    MB11B = ('<select id="x">SELECT EMPNO, EMP_NM FROM T <where><if test="empno != null and empno != \'\'"> EMPNO = #{empno}</if>'
+             '<if test="empNm != null and empNm != \'\'"> AND EMP_NM = #{empNm}</if>'
+             '<trim prefix="AND (" suffix=")" prefixOverrides="OR "><if test="a != null and a != \'\'"> OR A = #{a}</if><if test="b != null and b != \'\'"> OR B = #{b}</if></trim></where> ORDER BY EMPNO</select>')
+    case("MyBatis: <where> whose first fragment has no AND → runtime __trim", "crf_set_query", {"path": E, "sql": MB11B, "output": OUT + "/v11_b.crf"}, lambda t, e: None if not e and t.startswith("OK") and "✖" not in t else f"mb11b: {t[:500]}")
+    case("__trim: helper in JS, hidden in plain view", "crf_get_query", {"path": OUT + "/v11_b.crf"},
+         lambda t, e: None if not e and "function __trim(b, pre, suf, po, so){" in t and 'sql = __t1 + __trim(sql, "WHERE", "", ' in t and "/*TRIM:" in t and "/*END TRIM*/" in t
+         and "toUpperCase" not in t.split("평문 복원", 1)[1] else f"trim js: {t[:900]}")
+    case("__trim eval: only 2nd condition → leading AND removed", "crf_get_query", {"path": OUT + "/v11_b.crf", "mode": "eval", "params": {"EMPNM": "홍길동"}},
+         evalsql("FROM T WHERE EMP_NM = '홍길동' ORDER BY EMPNO", absent=("WHERE AND", "AND (", "1=1")))
+    case("__trim eval: all → WHERE a AND b AND ( A OR B )", "crf_get_query", {"path": OUT + "/v11_b.crf", "mode": "eval", "params": {"EMPNO": "7", "EMPNM": "홍", "A": "1", "B": "2"}},
+         evalsql("WHERE EMPNO = '7' AND EMP_NM = '홍' AND ( A = '1' OR B = '2' ) ORDER BY EMPNO"))
+    case("__trim eval: none → no WHERE at all", "crf_get_query", {"path": OUT + "/v11_b.crf", "mode": "eval"}, evalsql("FROM T ORDER BY EMPNO", absent=("WHERE",)))
+    case("__trim: fields still parsed from SELECT, validate clean", "crf_validate", {"path": OUT + "/v11_b.crf"}, lambda t, e: None if not e and "JavaScript 쿼리" not in t and "return 문이 없음" not in t else f"v11_b validate: {t[:400]}")
+    case("append_query_condition on __trim query: before ORDER BY, still valid JS", "crf_append_query_condition",
+         {"path": OUT + "/v11_b.crf", "param": "DEPTCD", "sql": "AND DEPT_CD = '{parameter.DEPTCD}'", "output": OUT + "/v11_c.crf"}, lambda t, e: None if not e and t.startswith("OK") and "ORDER BY 앞" in t and "JavaScript 쿼리" not in t else f"append on trim: {t[:500]}")
+    BADJS = 'var sql = "";\nsql += "SELECT EMPNO FROM T ";\nif(\'{parameter.EMPNO}\' != \'\'){\nsql += " WHERE EMPNO = \'{parameter.EMPNO}\'"\nsql += " ORDER BY 1";\nreturn sql;'
+    case("set_query: JS syntax error is reported", "crf_set_query", {"path": E, "sql": BADJS, "output": OUT + "/v11_bad.crf"}, contains("OK", "✖ JavaScript 쿼리 문법 오류"))
+    case("validate: JS syntax error → ✖", "crf_validate", {"path": OUT + "/v11_bad.crf"}, lambda t, e: None if not e and "JavaScript 쿼리 문법 오류" in t and "ERROR 0" not in t else f"bad js validate: {t[:400]}")
+    BADJS2 = 'var sql = "";\nsqll += "SELECT EMPNO FROM T ";\nreturn sql;'
+    case("set_query: JS runtime error (undeclared variable) is reported", "crf_set_query", {"path": E, "sql": BADJS2, "script_type": "javascript", "output": OUT + "/v11_bad2.crf"}, contains("✖ JavaScript 쿼리 실행 오류", "sqll"))
+    case("get_query eval on broken JS → ✖ with reason", "crf_get_query", {"path": OUT + "/v11_bad2.crf", "mode": "eval"}, contains("실행 SQL", "✖", "sqll"))
+    case("eval is sandboxed: no Java access from report script", "crf_set_query",
+         {"path": E, "sql": 'var sql = "SELECT 1 A FROM DUAL /*" + java.lang.System.getProperty("user.name") + "*/";\nreturn sql;', "script_type": "javascript", "output": OUT + "/v11_sbx.crf"},
+         contains("✖ JavaScript 쿼리 실행 오류", '"java" is not defined'))
+    case("eval NotScript query: tokens bound for display", "crf_get_query", {"path": A, "dataset": "SQLDS3", "params": {"RECRUYY": "2024"}},
+         lambda t, e: None if not e and "실행 SQL (매개변수 {RECRUYY=2024}, 나머지는 빈 값을 대입)" in t and "2024" in t.split("----- 실행 SQL", 1)[1] and "{parameter.RECRUYY}" not in t.split("----- 실행 SQL", 1)[1] else f"notscript eval: {t[-500:]}") if os.path.isfile(A) else None
+    # Codex 리뷰 반영: AND/OR 혼합 where, 빈 foreach, 내용 기준 구분자, 리터럴 안 토큰의 따옴표, 사용자 도우미 함수
+    MBR = ('<select id="x">SELECT EMPNO FROM T <where><if test="a != null and a != \'\'">AND A = #{a}</if><if test="b != null and b != \'\'">OR B = #{b}</if></where>'
+           ' AND X IN <foreach collection="ids" item="item" open="(" separator="," close=")"><if test="item != \'\'">#{item}</if></foreach></select>')
+    case("review: mixed AND/OR <where> goes to runtime trim (no WHERE 1=1)", "crf_set_query", {"path": E, "sql": MBR, "output": OUT + "/v11_r.crf"}, lambda t, e: None if not e and t.startswith("OK") and "✖" not in t else f"mbr: {t[:400]}")
+    case("review: only the OR fragment → WHERE B (not WHERE 1=1 OR B); foreach separator only between emitted items", "crf_get_query", {"path": OUT + "/v11_r.crf", "mode": "eval", "params": {"B": "2", "IDS": "K,,M"}},
+         evalsql("FROM T WHERE B = '2' AND X IN ('K' ,'M' )", absent=("1=1", ",,", "(,")))
+    case("review: empty foreach emits neither open nor close", "crf_get_query", {"path": OUT + "/v11_r.crf", "mode": "eval", "params": {"A": "1"}}, evalsql("WHERE A = '1' AND X IN", absent=("(", ")")))
+    case("review: token inside a larger SQL literal — quote doubled", "crf_set_query", {"path": E, "sql": 'var sql = "SELECT EMPNO FROM T WHERE NM LIKE \'%{parameter.EMPNM}%\'";\nreturn sql;', "script_type": "javascript", "output": OUT + "/v11_q.crf"}, contains("OK"))
+    case("review: quote in value stays inside the literal", "crf_get_query", {"path": OUT + "/v11_q.crf", "mode": "eval", "params": {"EMPNM": "x%' OR 1=1 --"}}, evalsql("NM LIKE '%x%'' OR 1=1 --%'"))
+    case("review: user helper function is not dropped from the plain view", "crf_set_query", {"path": E, "sql": 'function mk(){ return "SELECT EMPNO, EMP_NM FROM T"; }\nvar sql = mk();\nsql += " ORDER BY 1";\nreturn sql;', "script_type": "javascript", "sync_fields": "none", "output": OUT + "/v11_fn.crf"}, lambda t, e: None if not e and "return 문이 없" not in t and "✖" not in t else f"fn: {t[:300]}")
+    case("review: plain view keeps SQL built in a user function", "crf_get_query", {"path": OUT + "/v11_fn.crf", "mode": "plain"}, contains("SELECT EMPNO, EMP_NM FROM T", "ORDER BY 1"))
+    if os.environ.get("CLIP_SMOKE_DB", "1") == "1":
+        case("sync_fields db on JS query uses the executed SQL", "crf_sync_fields", {"path": E, "dataset": "0", "mode": "db", "output": OUT + "/v11_sync.crf"},
+             lambda t, e: None if not e and t.startswith("OK") and "DB ResultSetMetaData, JS 실행 SQL" in t else f"sync db eval: {t[:400]}")
+
+# ---- v0.11.0: 양식 문서 파서(doc_text / doc_image) + 리포트 배치 미리보기(crf_preview) ----
+# 픽스처는 여기서 직접 만든다(zip+XML 형식은 파이썬 표준 라이브러리만으로). HWP(바이너리)는 실파일이 있을 때만(CLIP_SMOKE_HWP).
+import zipfile, zlib, struct
+DOCS = OUT + "/docs"
+os.makedirs(DOCS, exist_ok=True)
+
+
+def _zip(name, files):
+    p = DOCS + "/" + name
+    with zipfile.ZipFile(p, "w", zipfile.ZIP_DEFLATED) as z:
+        for k, v in files.items():
+            z.writestr(k, v)
+    return p
+
+
+W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+DOCX = _zip("form.docx", {
+    "[Content_Types].xml": '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>',
+    "word/document.xml": f'<?xml version="1.0" encoding="UTF-8"?><w:document {W}><w:body>'
+    '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="40"/></w:rPr><w:t>재직증명서</w:t></w:r></w:p>'
+    '<w:tbl><w:tblGrid><w:gridCol w:w="2268"/><w:gridCol w:w="3402"/><w:gridCol w:w="3402"/></w:tblGrid>'
+    '<w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>인적사항</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>성명</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>홍길동</w:t></w:r></w:p></w:tc></w:tr>'
+    '<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>기계공학과</w:t></w:r><w:r><w:tab/><w:t>&lt;교무처&gt;</w:t></w:r></w:p></w:tc></w:tr>'
+    '<w:tr><w:trPr><w:gridBefore w:val="2"/></w:trPr><w:tc><w:p><w:r><w:t>끝칸</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>'})
+S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+XLSX = _zip("form.xlsx", {
+    "xl/workbook.xml": f'<?xml version="1.0"?><workbook {S}><sheets><sheet name="집계" sheetId="1" r:id="rId1"/><sheet name="빈시트" sheetId="2" r:id="rId2"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="t" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="t" Target="worksheets/sheet2.xml"/></Relationships>',
+    "xl/sharedStrings.xml": f'<?xml version="1.0"?><sst {S}><si><t>학과</t></si><si><r><t>인</t></r><r><t>원</t></r></si><si><t>기계공학과</t></si></sst>',
+    "xl/styles.xml": f'<?xml version="1.0"?><styleSheet {S}><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>',
+    "xl/worksheets/sheet1.xml": f'<?xml version="1.0"?><worksheet {S}><dimension ref="A1:C3"/><cols><col min="1" max="1" width="20" customWidth="1"/></cols><sheetData>'
+    '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="inlineStr"><is><t>기준일</t></is></c></row>'
+    '<row r="2" ht="30"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>42</v></c><c r="C2" s="1"><v>46297</v></c></row>'
+    '<row r="3"><c r="B3"><f>SUM(B2:B2)</f><v>42</v></c><c r="C3" s="1"><v>1</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A3:A4"/></mergeCells></worksheet>',
+    "xl/worksheets/sheet2.xml": f'<?xml version="1.0"?><worksheet {S}><sheetData/></worksheet>'})
+P_ = 'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+PPTX = _zip("form.pptx", {
+    "ppt/presentation.xml": f'<?xml version="1.0"?><p:presentation {P_}><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="6858000"/></p:presentation>',
+    "ppt/_rels/presentation.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="t" Target="slides/slide1.xml"/></Relationships>',
+    "ppt/slides/slide1.xml": f'<?xml version="1.0"?><p:sld {P_}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/></p:nvGrpSpPr><p:grpSpPr/>'
+    '<p:sp><p:nvSpPr><p:cNvPr id="2" name="제목 1"/></p:nvSpPr><p:spPr><a:xfrm><a:off x="360000" y="720000"/><a:ext cx="3600000" cy="1080000"/></a:xfrm></p:spPr><p:txBody><a:bodyPr/><a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="2400" b="1"/><a:t>화면 설계</a:t></a:r></a:p></p:txBody></p:sp>'
+    '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="3" name="표 2"/></p:nvGraphicFramePr><p:xfrm><a:off x="360000" y="2160000"/><a:ext cx="7200000" cy="720000"/></p:xfrm><a:graphic><a:graphicData><a:tbl><a:tblGrid><a:gridCol w="3600000"/><a:gridCol w="3600000"/></a:tblGrid>'
+    '<a:tr h="360000"><a:tc gridSpan="2"><a:txBody><a:bodyPr/><a:p><a:r><a:t>조회조건</a:t></a:r></a:p></a:txBody></a:tc><a:tc hMerge="1"><a:txBody><a:bodyPr/><a:p/></a:txBody></a:tc></a:tr>'
+    '<a:tr h="360000"><a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>학년도</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>2026</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>'
+    '</p:spTree></p:cSld></p:sld>'})
+HP = 'xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core"'
+HWPX = _zip("form.hwpx", {
+    "mimetype": "application/hwp+zip",
+    "Contents/header.xml": f'<?xml version="1.0" encoding="UTF-8"?><hh:head {HP}><hh:refList><hh:fontfaces><hh:fontface lang="HANGUL"><hh:font id="0" face="바탕체"/></hh:fontface><hh:fontface lang="LATIN"><hh:font id="0" face="Arial"/></hh:fontface></hh:fontfaces>'
+    '<hh:charProperties><hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0"/></hh:charPr><hh:charPr id="1" height="1600" textColor="#0000FF"><hh:fontRef hangul="0"/><hh:bold/></hh:charPr></hh:charProperties>'
+    '<hh:paraProperties><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr><hh:paraPr id="1"><hh:align horizontal="CENTER"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>',
+    "Contents/section0.xml": f'<?xml version="1.0" encoding="UTF-8"?><hs:sec {HP}>'
+    '<hp:p paraPrIDRef="1"><hp:run charPrIDRef="1"><hp:secPr><hp:pagePr landscape="WIDELY" width="59528" height="84188"><hp:margin header="4252" footer="4252" gutter="0" left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr><hp:t>위촉 통지서</hp:t></hp:run><hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1600"/></hp:linesegarray></hp:p>'
+    '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl rowCnt="2" colCnt="2"><hp:sz width="28346" height="4252"/><hp:pos treatAsChar="1"/>'
+    '<hp:tr><hp:tc><hp:subList><hp:p paraPrIDRef="1"><hp:run charPrIDRef="0"><hp:t>소속</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="2"/><hp:cellSz width="14173" height="4252"/></hp:tc>'
+    '<hp:tc><hp:subList><hp:p paraPrIDRef="1"><hp:run charPrIDRef="1"><hp:t>입학팀</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="14173" height="2126"/></hp:tc></hp:tr>'
+    '<hp:tr><hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>줄1<hp:lineBreak/>줄2</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="1" rowAddr="1"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="14173" height="2126"/></hp:tc></hp:tr></hp:tbl></hp:run>'
+    '<hp:linesegarray><hp:lineseg textpos="0" vertpos="7200" vertsize="1000"/></hp:linesegarray></hp:p></hs:sec>'})
+HTMLF = DOCS + "/form.html"
+with open(HTMLF, "w", encoding="utf-8") as _f:
+    _f.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>양식</title><style>body{margin:10mm;font-size:11pt}td{border:1px solid #000}</style></head><body><h1 style="text-align:center">재 직 증 명 서</h1>'
+             '<table><tr><th rowspan="2">구분</th><td>성명</td></tr><tr><td colspan="1">홍길동 &lt;교무처&gt;</td></tr></table><p style="display:none">숨은 글</p><script>var x="스크립트 문자열";</script></body></html>')
+
+
+def _png(path, w, h):
+    raw = b"".join(b"\x00" + b"\xff\xff\xff" * w for _ in range(h))
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    return path
+
+
+PNGF = _png(DOCS + "/scan.png", 420, 594)
+with open(DOCS + "/junk.bin", "wb") as _f:
+    _f.write(b"\x00\x01\x02 not a document")
+with open(DOCS + "/old.hwp", "wb") as _f:
+    _f.write(b"HWP Document File V3.00 \x1a\x01\x02\x03\x04\x05" + b"\x00" * 64)
+
+case("doc_text DOCX: page, paragraph style, table grid + merges", "doc_text", {"path": DOCX},
+     contains("[DOCX,", "용지 210×297mm", "본문 너비 159.2mm", 'P center 20pt B: "재직증명서"', "[표 3행×3열 너비 160mm 열너비[40, 60, 60]", "[0,0] 세로병합 시작 40mm", '[0,2] 60mm left: "홍길동"', "[1,0] 40mm ‹세로병합 — 위 셀에 이어짐›", '[1,1] 가로병합 2 120mm left: "기계공학과→<교무처>"', '[2,2] 60mm left: "끝칸"', "doc_image(path)"))
+case("doc_text XLSX: shared/inline strings, date style, merges, formula in detail", "doc_text", {"path": XLSX, "detail": "true"},
+     contains("[XLSX,", "시트 2개: 집계, 빈시트", '== 시트 1 "집계" 범위 A1:C3', "병합(1): A3:A4", 'A1="학과" | B1="인원" | C1="기준일"', 'A2="기계공학과" | B2=42 | C2=2026-10-02', "(행높이 10.6mm)", "B3=42 {=SUM(B2:B2)} | C3=1900-01-01", "(값 있는 셀 없음)"))
+XLSX1904 = _zip("d1904.xlsx", {
+    "xl/workbook.xml": f'<?xml version="1.0"?><workbook {S}><workbookPr date1904="1"/><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="t" Target="worksheets/sheet1.xml"/></Relationships>',
+    "xl/styles.xml": f'<?xml version="1.0"?><styleSheet {S}><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>',
+    "xl/worksheets/sheet1.xml": f'<?xml version="1.0"?><worksheet {S}><sheetData><row r="1"><c r="A1" s="1"><v>1</v></c></row></sheetData></worksheet>'})
+case("doc_text XLSX: 1904 date system", "doc_text", {"path": XLSX1904}, contains("A1=1904-01-02"))
+case("doc_text XLSX: sheet selector", "doc_text", {"path": XLSX, "sheet": "2"}, lambda t, e: None if not e and '"빈시트"' in t and '"집계" 범위' not in t else f"sheet sel: {t[:300]}")
+case("doc_text XLSX: missing sheet -> ERROR lists sheets", "doc_text", {"path": XLSX, "sheet": "없는시트"}, err_contains("시트 '없는시트' 없음", "집계, 빈시트"))
+case("doc_text PPTX: slide size, shape position, table with merge (r:id vs id)", "doc_text", {"path": PPTX},
+     contains("[PPTX,", "슬라이드 1장  크기 254×190.5mm", '[도형 "제목 1" x=10 y=20 100×30mm]', '· ctr 24pt B: "화면 설계"', '[표 "표 2" x=10 y=60 200×20mm 2행×2열 열너비[100, 100]]', '[0,0] 병합 1×2 "조회조건"', '[1,1] "2026"'))
+case("doc_text HWPX: page/margins, paragraph y+style, table cell address/span/size", "doc_text", {"path": HWPX},
+     contains("[HWPX,", "용지 210×297mm  여백 왼30 오른30 위20 아래15", "본문 너비 150mm", 'P y=0 CENTER 16pt B 바탕체 #0000FF: "위촉 통지서"', "[표 2행×2열 100×15mm 글자처럼 문단정렬=JUSTIFY]", '[0,0] 병합 2×1 50×15mm CENTER 10pt 바탕체: "소속"', '[1,1] 50×7.5mm JUSTIFY 10pt 바탕체: "줄1⏎줄2"'))
+case("doc_text HTML: visible text + table spans (with or without a browser)", "doc_text", {"path": HTMLF},
+     lambda t, e: None if not e and "[HTML," in t and "재 직 증 명 서" in t and "홍길동 <교무처>" in t and "병합 2×1" in t and "숨은 글" not in t.replace("(브라우저", "") and "스크립트 문자열" not in t else f"html: {t[:600]}")
+case("doc_text image: size + points to doc_image (no OCR)", "doc_text", {"path": PNGF}, contains("[IMAGE,", "이미지 420×594px (세로", "1px ≈ 0.5000mm", "doc_image(path)"))
+case("doc_image image: returned as an MCP image", "doc_image", {"path": PNGF, "max_px": "300"}, contains("이미지 원본 420×594px", "전송 크기 212×300px", "[image image/png 212x300"))
+with open(DOCS + "/huge.png", "wb") as _f:   # 머리글만 60000×60000 인 PNG — 통째로 풀기 전에 크기로 거부해야 함
+    _ck = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    _f.write(b"\x89PNG\r\n\x1a\n" + _ck(b"IHDR", struct.pack(">IIBBBBB", 60000, 60000, 8, 2, 0, 0, 0)) + _ck(b"IDAT", zlib.compress(b"\x00" * 64)) + _ck(b"IEND", b""))
+case("doc_image: oversized image dimensions are rejected before decoding", "doc_image", {"path": DOCS + "/huge.png"}, err_contains("그림이 너무 큼(60000×60000px)"))
+case("doc_image: bad max_px -> ERROR", "doc_image", {"path": PNGF, "max_px": "big"}, err_contains("max_px"))
+case("doc_image: bad source -> ERROR", "doc_image", {"path": PNGF, "source": "ocr"}, err_contains("auto|convert|preview"))
+case("doc_image DOCX source=preview without embedded thumbnail -> clear ERROR", "doc_image", {"path": DOCX, "source": "preview"}, err_contains("그림으로 만들 수 없습니다", "미리보기 그림도 없습니다"))
+case("doc_image DOCX auto: image (converter present) or clear ERROR (none) — never a crash", "doc_image", {"path": DOCX},
+     lambda t, e: None if (not e and "DOCX → PDF(" in t and "[image image/" in t) or (e and "그림으로 만들 수 없습니다" in t and "변환 실패" in t) else f"docx image: {t[:400]}")
+case("doc_text: unknown format -> ERROR lists supported formats", "doc_text", {"path": DOCS + "/junk.bin"}, err_contains("지원하지 않는 문서 형식", "HWP(5.x), HWPX, DOCX"))
+case("doc_text: HWP 3.x -> ERROR with advice", "doc_text", {"path": DOCS + "/old.hwp"}, err_contains("HWP 3.x", "HWPX 또는 PDF"))
+case("doc_text: missing file -> ERROR", "doc_text", {"path": DOCS + "/nope.docx"}, err_contains("파일 없음"))
+case("doc_text: empty path -> ERROR", "doc_text", {"path": ""}, err_contains("path"))
+case("doc_text: max_chars truncates with a hint", "doc_text", {"path": XLSX, "max_chars": "1000"}, lambda t, e: None if not e and len(t) < 1400 else f"cap: {len(t)}")
+HWPF = os.environ.get("CLIP_SMOKE_HWP", "")
+if os.path.isfile(HWPF):
+    case("doc_text HWP 5.x (real file): page line first, paragraphs with y", "doc_text", {"path": HWPF},
+         lambda t, e: None if not e and "[HWP," in t and re.search(r"== Section0\n용지 [\d.]+×[\d.]+mm  여백 왼", t) and re.search(r'\nP y=[\d.]+ \w+ [\d.]+pt', t) else f"hwp: {t[:500]}")
+    case("doc_image HWP (real file): converted page or embedded preview", "doc_image", {"path": HWPF}, lambda t, e: None if (not e and "[image image/" in t) or (e and "그림으로 만들 수 없습니다" in t) else f"hwp image: {t[:400]}")
+if os.path.isfile(C):
+    case("crf_preview: document-type report drawn as an image", "crf_preview", {"path": C},
+         lambda t, e: None if not e and "배치 미리보기 — 용지 2100×2970" in t and re.search(r"밴드 \d+개\(높이 합 \d+\), 컨트롤 \d+개", t) and re.search(r"\[image image/png \d+x1600 ", t) else f"preview: {t[:400]}")
+    case("crf_preview: max_px + guides=false", "crf_preview", {"path": C, "max_px": "800", "guides": "false"}, lambda t, e: None if not e and re.search(r"\[image image/png \d+x800 ", t) else f"preview small: {t[:300]}")
+    case("crf_preview: bad max_px -> ERROR", "crf_preview", {"path": C, "max_px": "x"}, err_contains("max_px"))
+case("crf_preview: missing file -> ERROR", "crf_preview", {"path": "C:/nope.crf"}, err_contains("파일 없음"))
+
 # ---- DB 가드 (DB 미연결이어도 가드가 먼저) ----
 case("db_query DML refused", "db_query", {"sql": "DELETE FROM X"}, err_contains("SELECT"))
 case("db_query DDL refused", "db_query", {"sql": " /*c*/ drop table x"}, error)
 
+# ---- v0.12.0: 저장 무결성(CrfIO) — 크로스탭이 든 리포트는 엔진 기본 writer 로 저장하면 되읽기에서 EOFException ----
+XT = os.environ.get("CLIP_SMOKE_XT", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmrc/ahrmrc0160_prn01.crf")  # 크로스탭 1개(셀 16)
+if os.path.isfile(XT):
+    case("crfio: save a report containing a crosstab", "crf_set_param", {"path": XT, "name": "ZZ_XT", "output": OUT + "/v12_xt.crf"}, ok)
+    case("crfio: saved crosstab report reads back", "crf_describe_layout", {"path": OUT + "/v12_xt.crf"}, contains("Crosstab"))
+    case("crfio: second-generation save reads back", "crf_remove_param", {"path": OUT + "/v12_xt.crf", "name": "ZZ_XT", "output": OUT + "/v12_xt2.crf"}, ok)
+    case("crfio: crosstab report unchanged after two saves", "crf_diff", {"a": XT, "b": OUT + "/v12_xt2.crf"}, contains("차이 없음"))
+
+# ---- v0.12.0: crf_render — 실제 서버 엔진 PDF 출력(서버 웹앱이 있을 때만; CLIP_RENDER_WEBAPP 또는 .env) ----
+def _render_webapp():
+    v = os.environ.get("CLIP_RENDER_WEBAPP", "")
+    if not v:
+        for f in (os.path.expanduser("~/clip-report-mcp/.env"), os.path.join(PROJ, ".env")):
+            if os.path.isfile(f):
+                for ln in open(f, encoding="utf-8"):
+                    if ln.strip().startswith("CLIP_RENDER_WEBAPP="): v = ln.split("=", 1)[1].strip()
+    return v if v and os.path.isdir(os.path.join(v, "WEB-INF", "lib")) else ""
+RENDER = _render_webapp()
+case("render: bad mode -> ERROR", "crf_render", {"path": E, "mode": "live"}, err_contains("mode"))
+case("render: missing file -> ERROR", "crf_render", {"path": "C:/definitely/missing.crf"}, err_contains("missing.crf"))
+if RENDER and os.path.isfile(E):
+    case("render sample: generated rows, group subtotals + grand total, linked logo", "crf_render", {"path": E, "rows": "12", "pdf": OUT + "/v12_render.pdf"},
+         contains("실제 엔진 출력(가상 데이터", "SQLDS1: 12행 (자동 생성)", "bottom_logo.crf 포함", "1/1쪽", "합 계 12", "EMP_NM12"))
+    case("render sample: output pdf readable", "doc_text", {"path": OUT + "/v12_render.pdf"}, contains("퇴직교원현황", "UNIV_NM3"))
+    case("render sample: page break with many rows", "crf_render", {"path": E, "rows": "80", "page": "2"}, contains("80행", "2/", "구분 대학 사번"))
+    case("render sample: explicit data rows by field name", "crf_render", {"path": E, "data": {"SQLDS1": [{"UNIV_NM": "공과대학", "EMPNO": "A001", "EMP_NM": "김가상"}, {"UNIV_NM": "공과대학", "EMPNO": "A002", "EMP_NM": "이가상"}]}},
+         contains("SQLDS1: 2행 (data)", "김가상", "이가상", "합 계 2"))
+    case("render sample: unknown dataset in data -> warning", "crf_render", {"path": E, "rows": "1", "data": {"NOPE": []}}, contains("'NOPE' 에 해당하는 데이터셋이 없습니다"))
+    case("render sample: zero rows", "crf_render", {"path": E, "rows": "0"}, contains("SQLDS1: 0행", "합 계 0"))
+    if os.path.isfile(A): case("render sample: 22 datasets", "crf_render", {"path": A, "rows": "2"}, contains("SQLDS8_4: 2행", "임용지원서", "/11쪽"))
+    if os.path.isfile(XT): case("render sample: crosstab report", "crf_render", {"path": XT, "rows": "6"}, contains("APPLY_FLD_NM1", "합계"))
+    case("render: pdf path equal to the report -> ERROR", "crf_render", {"path": E, "pdf": E}, err_contains("pdf"))
+    case("render: in_place must not turn the report into the pdf target", "crf_render", {"path": E, "in_place": "true", "pdf": OUT + "/x.crf"}, err_contains(".pdf"))
+    case("render sample: array rows longer than the field list are truncated with a warning", "crf_render", {"path": E, "data": {"SQLDS1": [["a"] * 40]}}, contains("넘치는 값은 버렸습니다"))
+
+# ---- v0.12.0: 크로스탭 생성 / 누적합산 필드 ----
+if os.path.isfile(E):
+    case("crosstab: add (row x column, Count) into a new data header", "crf_add_crosstab", {"path": E, "row": "UNIV_NM", "column": "JGRD_NM", "value": "EMPNO", "function": "Count", "header": "대학/직급", "output": OUT + "/v12_x1.crf"},
+         contains("OK", "행=UNIV_NM", "열=JGRD_NM", "값=Count(EMPNO)", "밴드=DataHeader"))
+    case("crosstab: unknown field -> ERROR", "crf_add_crosstab", {"path": E, "row": "NOPE", "column": "JGRD_NM", "value": "EMPNO", "output": OUT + "/v12_xbad.crf"}, err_contains("NOPE"))
+    case("crosstab: parameter field refused", "crf_add_crosstab", {"path": E, "row": "UNIV_NM", "column": "JGRD_NM", "value": "G_REPORTLOG", "output": OUT + "/v12_xbad.crf"}, err_contains("매개변수"))
+    case("crosstab: total=false -> smaller control", "crf_add_crosstab", {"path": E, "row": "UNIV_NM", "column": "JGRD_NM", "value": "EMPNO", "total": "false", "output": OUT + "/v12_xnt.crf"}, contains("OK", "합계 행=false 열=false"))
+    case("crosstab: total=false geometry", "crf_describe_layout", {"path": OUT + "/v12_xnt.crf"}, contains("너비650,높이140"))
+    case("crosstab: bad function -> ERROR", "crf_add_crosstab", {"path": E, "row": "UNIV_NM", "column": "JGRD_NM", "value": "EMPNO", "function": "Median", "output": OUT + "/v12_xbad.crf"}, err_contains("function"))
+    case("crosstab: describe shows groups and 4 matrices", "crf_describe_layout", {"path": OUT + "/v12_x1.crf"},
+         contains('ControlCrosstab "크로스탭1"', "행 그룹: UNIV_NM", "열 그룹: JGRD_NM", "RowLabel «그룹 이름»", 'RowTotal "합계"', "Summarized 데이터:EMPNO Count{#,##0}"))
+    case("crosstab: label cells are not reported as empty bindings", "crf_validate", {"path": OUT + "/v12_x1.crf"}, lambda t, e: None if not e and "바인딩 비어 있음" not in t else f"validate: {t[:300]}")
+    if os.path.isfile(XT): case("crosstab: real crosstab report has no empty-binding false positive", "crf_validate", {"path": XT}, lambda t, e: None if not e and "바인딩 비어 있음" not in t else f"validate: {t[:300]}")
+    case("running total: reset on group", "crf_add_running_total", {"path": OUT + "/v12_x1.crf", "name": "RT_GRP", "field": "EMPNO", "function": "Count", "reset_group": "UNIV_NM", "output": OUT + "/v12_x2.crf"}, contains("OK", "Count(EMPNO)", "그룹 'UNIV_NM' 이 바뀔 때 초기화"))
+    case("running total: never reset", "crf_add_running_total", {"path": OUT + "/v12_x2.crf", "name": "RT_ALL", "field": "EMPNO", "function": "Count", "output": OUT + "/v12_x3.crf"}, contains("OK", "초기화 없음"))
+    case("running total: duplicate name -> ERROR", "crf_add_running_total", {"path": OUT + "/v12_x3.crf", "name": "RT_ALL", "field": "EMPNO", "output": OUT + "/v12_xbad.crf"}, err_contains("이미"))
+    case("running total: unknown group -> ERROR", "crf_add_running_total", {"path": OUT + "/v12_x3.crf", "name": "RT_Z", "field": "EMPNO", "reset_group": "NOPE", "output": OUT + "/v12_xbad.crf"}, err_contains("1=UNIV_NM"))
+    case("running total: bind in group footer", "crf_set_cell", {"path": OUT + "/v12_x3.crf", "table": "표2", "row": "0", "col": "3", "field": "RT_GRP", "output": OUT + "/v12_x4.crf"}, contains("OK", "RT_GRP(누적합산)"))
+    case("running total: bind in detail", "crf_set_cell", {"path": OUT + "/v12_x4.crf", "table": "표3", "row": "0", "col": "14", "field": "RT_ALL", "output": OUT + "/v12_x5.crf"}, contains("OK", "RT_ALL(누적합산)"))
+    case("running total: listed in summary", "crf_summary", {"path": OUT + "/v12_x5.crf"}, contains("RT_GRP", "RT_ALL"))
+    if RENDER:
+        _rows = [{"UNIV_NM": "공과대학", "EMPNO": "A1", "EMP_NM": "김", "JGRD_NM": "교수"}, {"UNIV_NM": "공과대학", "EMPNO": "A2", "EMP_NM": "이", "JGRD_NM": "교수"}, {"UNIV_NM": "공과대학", "EMPNO": "A3", "EMP_NM": "박", "JGRD_NM": "조교수"},
+                 {"UNIV_NM": "인문대학", "EMPNO": "B1", "EMP_NM": "최", "JGRD_NM": "부교수"}, {"UNIV_NM": "인문대학", "EMPNO": "B2", "EMP_NM": "정", "JGRD_NM": "교수"}]
+        # 실제 엔진 출력: 교차표 집계(공과 2·0·1=3, 인문 1·1·0=2, 합계 3·1·1=5), 그룹 소계(공식 3 = 누적합산 3), 줄 누계 1..5
+        case("crosstab + running total: real engine output has the right numbers", "crf_render", {"path": OUT + "/v12_x5.crf", "data": {"SQLDS1": _rows}},
+             contains("대학/직급 교수 부교수 조교수 합계", "공과대학 2 0 1 3", "인문대학 1 1 0 2", "합계 3 1 1 5", "소 계 3 3", "소 계 2 2", "합 계 5"))
+
+
+def docs_check():
+    """문서가 코드와 어긋나지 않는지(README 가 현상과 달라지는 것 방지): 도구 수·도구 이름·케이스 수·버전."""
+    rd = lambda *p: open(os.path.join(PROJ, *p), encoding="utf-8").read()
+    src, readme, version = rd("src", "CrfMcpServer.java"), rd("README.md"), rd("VERSION").strip()
+    tools = re.findall(r'arr\.add\(tool\("([a-z_]+)"', src)
+    crf, db = [t for t in tools if t.startswith("crf_")], [t for t in tools if t.startswith("db_")]
+    out = []
+    want = f"도구 {len(tools)}개 (.crf {len(crf)} + DB {len(db)} + 문서 {len(tools) - len(crf) - len(db)})"
+    out.append(("docs: README tool count matches tools/list", None if want in readme and f"## MCP 도구 ({len(tools)})" in readme and f"도구 {len(tools)}개 노출" in readme else f"README 에 '{want}' / '## MCP 도구 ({len(tools)})' / '도구 {len(tools)}개 노출' 이 있어야 함"))
+    miss = [t for t in tools if f"`{t}" not in readme]
+    out.append(("docs: every tool is documented in README", None if not miss else f"README 에 없는 도구: {miss}"))
+    total = len(CASES) + 6 - (2 if os.path.isfile(HWPF) else 0)   # README 의 숫자는 선택 픽스처(CLIP_SMOKE_HWP) 없이 센 값
+    full =all(os.path.isfile(f) for f in (A, B, C, D, E, X, XT)) and bool(RENDER) and os.environ.get("CLIP_SMOKE_DB", "1") == "1"   # 픽스처가 다 있을 때만 케이스 수가 고정
+    out.append(("docs: README smoke case count" + ("" if full else " (픽스처 일부 없음 — 건너뜀)"), None if not full or f"{total} 케이스" in readme else f"README 테스트 절의 케이스 수를 {total} 로"))
+    out.append(("docs: CHANGELOG has the current VERSION", None if f"## [{version}]" in rd("CHANGELOG.md") else f"CHANGELOG.md 에 [{version}] 항목 없음"))
+    return out
+
+
+import hashlib
+def _sha(p): return hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.isfile(p) else None
+ORIG = {p: _sha(p) for p in (A, B, C, D, E, X, XT)}   # 픽스처 원본은 어떤 도구도 건드리면 안 된다
+
+
+def files_check(since):
+    """이번 실행이 쓴 .crf 에 평문 SQL(속성 900, type 9)이 없는지 — 엔진 기본 writer 는 쿼리 본문을 평문으로 쓴다(CrfIO 가 암호화)."""
+    plain, n = [], 0
+    for f in os.listdir(OUT):
+        fp = os.path.join(OUT, f)
+        if not f.lower().endswith(".crf") or os.path.getmtime(fp) < since: continue
+        n += 1
+        if bytes([0x84, 0x03, 9, 0]) in open(fp, "rb").read(): plain.append(f)
+    changed = [os.path.basename(p) for p, h in ORIG.items() if h is not None and _sha(p) != h]
+    return [("files: saved .crf keep SQL encrypted (%d files)" % n, None if n and not plain else f"평문 SQL 이 남은 파일: {plain[:8]} (검사 {n}개)"),
+            ("files: fixture originals are byte-identical after the run", None if not changed else f"원본이 바뀜: {changed}")]
+
 
 def main():
-    calls = [(t, a) for _, t, a, _ in CASES]
+    import time; since = time.time() - 2
+    calls =[(t, a) for _, t, a, _ in CASES]
     res, stderr = mcpcall.call(calls)
     print("server:", res[0][1])
     fails = 0
@@ -545,7 +836,12 @@ def main():
         if msg is not None: fails += 1
         print(f"[{status}] {name}" + (f"\n        {msg}" if msg else ""))
         if VERBOSE: print("        " + text.replace("\n", "\n        ")[:600])
-    print(f"\n{len(CASES) - fails}/{len(CASES)} passed")
+    doc = files_check(since) + docs_check()
+    for name, msg in doc:
+        if msg is not None: fails += 1
+        print(f"[{'PASS' if msg is None else 'FAIL'}] {name}" + (f"\n        {msg}" if msg else ""))
+    total = len(CASES) + len(doc)
+    print(f"\n{total - fails}/{total} passed")
     if VERBOSE and stderr.strip(): print("--- stderr ---\n" + stderr[-2000:])
     sys.exit(1 if fails else 0)
 

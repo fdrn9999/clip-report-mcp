@@ -86,7 +86,7 @@ public class SampleDocumentReport {
     cl=(RexObjectList<Control>)(RexObjectList<?>) clp.getControlList();
     det.getSubSectionList().add(sd); secs.add(det);
     sd.setHeight(buildForm());
-    Rexpert4.write(rf,out);
+    CrfIO.write(rf,out);
     ps.println("written "+out+" ("+Files.size(Paths.get(out))+" bytes)");
   }
 

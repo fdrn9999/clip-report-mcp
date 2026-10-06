@@ -37,6 +37,33 @@ def _rpc(id_, method, params):
                        ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def _images(content, idx, tool):
+    """image content(doc_image / crf_preview)를 텍스트 한 줄로 요약: [image <mime> <w>x<h> <KB>]. CLIP_MCP_SAVE_IMAGES=<폴더> 면 파일로도 저장."""
+    import base64, struct
+    out = ""
+    for k, c in enumerate(content or []):
+        if not isinstance(c, dict) or c.get("type") != "image":
+            continue
+        try:
+            raw = base64.b64decode(c.get("data", ""), validate=True)
+        except Exception:
+            out += "\n[image: base64 디코딩 실패]"; continue
+        mime = c.get("mimeType", "?"); size = ""
+        if raw[:8] == b"\x89PNG\r\n\x1a\n" and len(raw) > 24 and mime == "image/png":
+            size = " %dx%d" % struct.unpack(">II", raw[16:24])
+        elif not (raw[:2] == b"\xff\xd8" and mime == "image/jpeg"):
+            out += "\n[image: 잘못된 그림 데이터(%s, %d bytes)]" % (mime, len(raw)); continue
+        out += "\n[image %s%s %d KB]" % (mime, size, len(raw) // 1024)
+        d = os.environ.get("CLIP_MCP_SAVE_IMAGES")
+        if d:
+            os.makedirs(d, exist_ok=True)
+            fn = os.path.join(d, "%02d_%s_%d.%s" % (idx, tool, k, "jpg" if "jpeg" in mime else "png"))
+            with open(fn, "wb") as f:
+                f.write(raw)
+            out += " → " + fn
+    return out
+
+
 def call(calls, list_tools=False, stop_on_error=False):
     """calls=[[name,args],...] -> (list of (name, text, is_error), stderr). 서버 1회 기동.
     요청을 하나씩 보내고 응답을 기다리므로 stop_on_error=True 면 첫 isError 뒤 호출은 보내지 않는다(SKIPPED)."""
@@ -89,6 +116,7 @@ def call(calls, list_tools=False, stop_on_error=False):
                 text = r["content"][0]["text"]
             except (KeyError, IndexError, TypeError):
                 text, is_err = "MALFORMED RESULT " + json.dumps(r, ensure_ascii=False)[:500], True
+            text += _images(r.get("content"), i, t)
             res.append((t, text, is_err))
             if is_err and stop_on_error:
                 stopped = True

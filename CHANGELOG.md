@@ -3,6 +3,78 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.12.0] - 2026-10-06
+사내 "CLIP Report 제작 하네스"(벤더 JAR 로 CRF 를 읽고 쓰는 Java 묶음)와 비교해 나온 4가지: **저장 무결성**(쿼리 암호화·크로스탭 저장), **실제 엔진 출력**, **크로스탭 생성**, **누적합산**. 새 코드는 `src/CrfIO.java`·`src/CrfRender.java`·`src/CrfCrosstab.java`. 도구 53 → 56.
+### Fixed
+- **저장하면 쿼리가 평문이 되던 문제**: 엔진 기본 writer(`Rexpert4.write`)는 쿼리 본문(SQL 객체의 속성 900)을 평문 문자열로 쓴다(pre/post SQL 만 암호화). 디자이너가 저장한 리포트는 쿼리도 암호화돼 있으므로(저장소 2,549개 중 2,534개), 지금까지 이 MCP 로 저장한 파일은 쿼리가 전부 평문이 됐다 — 예: 데이터셋 22개 리포트가 암호화 22 → 평문 22. 이제 모든 저장이 `CrfIO.write` 를 거쳐 엔진의 암호화 함수로 쓴다(리더는 두 형식을 다 읽으므로 기존 파일 호환). 두 번 이어 저장해도 암호화 22 유지, `crf_diff` 차이 없음.
+  - **이미 평문으로 저장된 리포트**는 아무 수정 도구로 한 번 다시 저장하거나 `java -cp "<CLIP jar>\*;clip-report-mcp.jar" CrfIO in.crf out.crf` 로 되돌린다.
+- **크로스탭이 든 리포트를 저장하면 깨지던 문제**: `CrosstabCellNormalWriter` 가 헤더에 속성 23개를 선언하고 24개를 써서 되읽기에서 `EOFException`. 저장소의 크로스탭 리포트 48개 전부가 엔진 기본 writer 로는 저장 후 열리지 않았다 → 그 객체·그 개수일 때만 24 로 보정.
+- **웹 링크 팝업 크기가 저장할 때 바뀌던 문제**: `WebLinkInfoWriter` 가 팝업 너비를 팝업 높이의 속성 ID 로 써서 되읽으면 높이가 너비 값으로 덮였다(저장소 8개) → 한 객체 안의 두 번째 값을 너비 ID 로 쓴다.
+- 저장은 **임시 파일에 쓰고 되읽어 본 뒤** 제자리로 옮긴다 — 쓰다 실패하거나 되읽기에 실패하면 기존 파일이 그대로 남는다(`in_place=true` 에서 원본이 깨지는 경우 방지).
+- 검증: 저장소 2,549개 전부 읽기 → 저장 → 읽기 → 저장 했을 때 내용이 같다(보정 전: 크로스탭 48개 되읽기 실패, 8개 값 변경).
+- **DB 도구를 한 번 쓰면 다른 도구가 엉뚱하게 깨지던 문제**(간헐적): `DriverManager` 는 처음 쓸 때 classpath 의 모든 JDBC 드라이버를 올리는데, CLIP 디자이너 jar 폴더의 Sybase jConnect(`jconn4.jar`)가 생성자에서 `DriverManager` 를 다시 불러 무한 재귀 → `StackOverflowError`(JDK 가 삼킴). 그 순간 초기화 중이던 JDK 클래스가 그 프로세스에서 영구히 깨졌다 — 실제로 본 증상은 `doc_text` 의 엑셀 날짜에서 `NoClassDefFoundError: Could not initialize class java.time.LocalDateTime`. JVM 예외 로그로 재귀를 확인하고, `db_*`·`crf_sync_fields mode=db`·`fields_from_db` 가 `DriverManager.getConnection` 을 거치지 않고 Tibero/Oracle 드라이버 인스턴스에 직접 연결하도록 바꿨다(그 밖의 DB URL 만 종전 경로; 드라이버가 스스로 하는 `registerDriver` 는 드라이버 일괄 로딩을 일으키지 않음). 수정 후 예외 로그의 StackOverflowError 0건, DB 를 켠 smoke 2회 연속 360/360.
+- `crf_validate` 가 크로스탭 라벨 셀을 "바인딩 비어 있음" 으로 잘못 보고하던 것(필드 없는 Field 타입 = 그 축의 그룹 이름, 정상).
+### Added
+- **`crf_render` — 실제 CLIP 서버 엔진으로 PDF 출력**(WAS 없이): 리포트 서버 웹앱 폴더의 엔진 jar·설정·라이선스를 빌려 **별도 java 프로세스**에서 `ClipReportExport.createExportForPDF` 를 부르고(서블릿 요청은 동적 프록시), 한 쪽을 그림(MCP image) + 글자로 돌려준다. `crf_preview`(설계 화면)와 달리 데이터 행 반복·셀 확장·페이지 나눔·그룹 소계·누적합산·크로스탭·서브리포트(공통 로고)가 반영된 진짜 출력.
+  - `mode=sample`(기본): 리포트 **사본**의 모든 데이터셋을 CSV 메모 데이터로 바꿔 가상 행을 넣는다 — DB 접속 없음, 쿼리 실행 안 함. `data={"데이터셋":[{필드:값},…]}`(필드 순서 배열·TSV 문자열도), `data_file`, 또는 필드 이름·타입으로 `rows` 행 자동 생성(그룹 필드는 같은 값이 이어지게, 칸마다 다른 값이라 잘못 연결된 칸이 보임). 데이터셋 여러 개(22개 리포트 확인)는 데이터셋마다 연결을 하나씩 만들어 넘긴다. 링크 서브리포트는 사본 옆 같은 상대 위치에 복사.
+  - `mode=db`: 원본을 서버가 하는 그대로 출력 — 서버 설정(`DataConnection.properties`)의 DB 에서 쿼리 실행, `params={"이름":"값"}`. 데이터셋별 읽은 행 수를 응답에 표시. 확인: 같은 조건의 `db_query COUNT(*)` 1,050 = 엔진이 읽은 1,050행(43쪽).
+  - 엔진 설정 폴더는 임시 폴더에 복사해 쓴다 — 엔진이 시작할 때 temp 폴더를 비우는데, 원본 폴더를 그대로 주면 웹앱 소스 트리의 자리표시 파일이 지워졌다.
+  - 설정: `.env`/환경변수 `CLIP_RENDER_WEBAPP`(또는 `CLIP_RENDER_LIB`+`CLIP_RENDER_PROPS`), `CLIP_RENDER_CP`, `CLIP_RENDER_DBNAME`, `CLIP_RENDER_TIMEOUT`. 없으면 설정 안내와 함께 ERROR.
+- **`crf_add_crosstab` — 크로스탭(교차표) 생성**: `row` × `column` × `value`(`Sum|Count|Avg|Min|Max`), 행/열 합계, 표시 이름 필드(`row_name`/`column_name`), 정렬, 머리 칸 글자, 출력 양식, 열·행 크기. 데이터 머리글 밴드에 둔다(없으면 생성, 밴드 높이 자동). 새 셀의 대각선은 None 으로(표 셀과 같은 함정). 실제 엔진 출력으로 5행 표본의 교차 집계(2·0·1=3 / 1·1·0=2 / 합계 3·1·1=5)를 대조.
+- **`crf_add_running_total` — 누적합산 필드**: 레코드마다 누적, `reset_group` 이면 그룹이 바뀔 때 초기화(그룹 바닥글에 두면 소계), 없으면 전체 누계. `crf_set_cell field=` 로 바인딩. 실제 엔진 출력에서 기존 `rexpert.sum()` 공식 소계와 같은 값(3=3, 2=2), 본문에 두면 줄 누계 1…5.
+- **`crf_describe_layout` 이 크로스탭 내부를 보여 줌**: 행/열 그룹(그룹 필드·표시 필드·정렬·합계 표시), 네 행렬(머리/행 라벨/열 라벨/값)의 열 너비·행 높이와 셀별 종류·바인딩·집계 함수·출력 양식(`detail=true` 면 글꼴·정렬).
+- **서버 instructions `[★고친 뒤에는 실제 출력으로 확인]`·`[★크로스탭·누적합산]`**, `/clipreport` 명령의 ⑤단계, GUIDE 의도→도구 표, 문서형 레시피 §5.
+- `CrfIO` CLI(`java -cp … CrfIO in.crf out.crf`), 환경변수 `CLIP_SQL_PLAIN=1`(평문 저장, 디버깅용).
+- **Codex 리뷰(13건) 재검토 후 반영 11건**:
+  - `crf_render` 가 **원본 `.crf` 를 PDF 로 덮어쓸 수 있던 문제**(HIGH): 인자 이름이 `output` 이라 공통 `in_place` 처리가 붙어 `in_place=true` 나 `output=<리포트>` 면 리포트 자리에 PDF 가 써졌다 → 인자를 `pdf` 로 바꾸고 `.pdf` 가 아니거나 리포트와 같은 경로면 거부.
+  - 저장 교체를 **원자적 이동**으로(안 되는 파일시스템만 일반 교체), 교체에 실패하면 검증까지 끝난 내용을 `<이름>.unsaved` 로 남기고 경로를 알린다.
+  - `crf_render` 작업 폴더: 리포트 사본·설정 사본(DB 접속정보·라이선스)·넘긴 데이터를 **실패·시간 초과 때도** 지움, 시간 초과 시 자식·손자 프로세스 종료를 기다려 확인, 엔진 로그는 통째로 올리지 않고 줄 단위로 읽음, `data_file` 20MB 상한. README 의 보존 기간 설명을 실제 동작(다음 실행 때 하루 지난 것 삭제)에 맞춤.
+  - `mode=sample`: 연결을 먼저 다 지우지 않고 바꾸지 못한 데이터셋의 연결은 남김(+⚠), 필드 수보다 긴 배열 행은 잘라내고 ⚠, 필드 없는 데이터셋은 0행. 링크 서브리포트는 `.crf` 만 복사.
+  - `crf_add_crosstab`/`crf_add_running_total`: 데이터·공식 필드만 받고(매개변수 등 거부), 크로스탭의 세 필드가 서로 다른 데이터셋이면 거부. `total=false` 면 컨트롤·밴드 크기도 합계 칸만큼 줄임(실제 출력에서 합계가 빠지는 것 확인).
+  - `crf_validate` 의 크로스탭 예외를 행/열 **라벨 셀**로만 좁힘(머리·합계 칸의 빈 바인딩은 계속 보고).
+  - smoke: "원본 그대로" 검사가 자기 자신과 비교하던 것을 **픽스처 원본 해시 비교**로.
+  - 미반영 2건: ① "드라이버 클래스 로딩만으로도 DriverManager 재귀가 난다" — JDK 17 `registerDriver` 바이트코드에 드라이버 일괄 로딩이 없고, 수정 후 MCP 서버와 `crf_render mode=db` 자식 프로세스 모두 JVM 예외 로그의 StackOverflowError 0건이라 기각(CHANGELOG 문구만 정확하게 고침). ② `mode=db` 가 모든 데이터셋을 연결 이름 하나로 보내는 것 — 이 ERP 의 리포트 서버 JSP 와 같은 동작이라 유지하고 한계로 명시.
+- `tools/smoke.py` 366 케이스(+36): 크로스탭 리포트 저장·되읽기 4, `crf_render` 11, 크로스탭/누적합산 14(실제 엔진 수치 대조 포함), **이번 실행이 쓴 모든 `.crf` 에 평문 SQL 이 없는지** 바이트 검사 1.
+### 한계(미반영)
+- `crf_render`: 서버 엔진 5.0.343·Windows·JDK 17 에서만 확인. `mode=sample` 은 쿼리를 실행하지 않고, 링크 서브리포트 안의 쿼리 데이터셋은 비어 나온다. 화면이 넘기는 세션 값은 `params` 로 직접 줘야 한다.
+- 크로스탭 생성은 행 그룹 1 × 열 그룹 1 × 값 1 까지. 만든 크로스탭·누적합산을 **디자이너에서 열어 다시 저장**하는 호환성은 확인하지 않았다(엔진 되읽기·실제 출력만 확인).
+- 하네스에 있고 여기 없는 것: 수정 시 현재 값이 예상과 같은지 확인하는 `expected` 잠금, 제작 Java 의 네트워크 차단(SecurityManager, JDK 17 한정), 보고서별 작업 기록 폴더 구조.
+
+## [0.11.0] - 2026-10-02
+양식을 어떤 형식으로 받아도 읽고 **그림으로 대조 검증**한 뒤 작업하는 흐름, JS 동적쿼리를 **실제로 실행**해 보는 기능, v0.10.0 에서 한계로 남긴 MyBatis 변환 3건. 새 코드는 `src/CrfDocs.java`·`src/CrfPreview.java`·`src/CrfJsEval.java`. 도구 50 → 53.
+### Added
+- **`doc_text` — 양식 문서 파서(PDF · HWP 5.x · HWPX · DOCX · XLSX/XLSM · XLS · PPTX · HTML · 이미지)**: 확장자가 아니라 파일 내용으로 형식을 판별하고, 글자와 함께 **배치를 mm 로** 돌려준다(리포트 좌표 0.1mm = mm×10) — 용지·여백·본문 너비, 문단(y·정렬·글꼴 크기·굵게/기울임/밑줄·글꼴·색), 표(셀 `[행,열]`·병합·너비×높이, 셀 안 문단), 도형/그림(크기·위치·글상자 안 글), 엑셀(시트 목록·병합 범위·열 너비·셀 값·날짜 서식·수식), 슬라이드 도형(x·y·크기·표), HTML(헤드리스 Edge/Chrome 으로 A4 폭에 배치한 요소별 x·y·크기·글꼴·정렬, 입력칸·체크박스). `detail=true`, `sheet=`, `pages=`, `max_chars=`. 예전에 형식마다 파이썬 스크립트(`parse_hwpx.py`)·PyMuPDF·`document.xml` 수작업으로 하던 판독을 대체한다.
+  - **HWP(바이너리)** 는 한글 없이 직접 해석한다: CLIP 엔진 jar 폴더의 poi(POIFS)로 OLE2 를 열고 DocInfo(글꼴·글자 모양·문단 모양)와 BodyText 레코드(문단 머리/글자/글자 모양/줄 배치, 표·개체 컨트롤, 셀 목록, 용지 정의)를 읽는다. 같은 문서의 HWP 와 HWPX 판독 결과가 문단·표·좌표까지 일치함을 실파일로 확인. 암호·배포용 문서, HWP 3.x, 구버전 `.doc`/`.ppt` 는 무엇으로 다시 저장하면 되는지 알려 주는 ERROR.
+  - HTML 은 헤드리스 브라우저가 표준출력을 돌려주지 않아(실행 파일이 0.1초 만에 끝나고 뒤에서 처리), 페이지 안에서 좌표를 잰 뒤 문서를 결과 글자로 바꿔 **인쇄된 PDF 의 텍스트로 회수**한다. 브라우저가 없으면 JDK HTML 파서로 글자·표 구조만.
+- **`doc_image` — 문서를 그림으로(비전 검증용)**: 이미지는 그대로(축소), PDF 는 쪽 렌더, HWP/HWPX/DOCX/XLSX/XLS/PPTX/HTML 은 **PC 에 설치된 프로그램으로 PDF 변환**(한글 COM / MS Office COM — 매크로 강제 차단·읽기 전용 / LibreOffice / Edge·Chrome 헤드리스 A4 인쇄; 결과는 임시 폴더에 캐시) 후 `page` 쪽을 렌더해 MCP image 로 돌려준다. 변환기가 없으면 파일 안의 첫 쪽 미리보기 그림(HWP `PrvImage`, HWPX `Preview/PrvImage.png`, OOXML 썸네일). `source=auto|convert|preview`, `max_px`. 이 PC 에서 MS Word/Excel/PowerPoint·Edge·HWP 미리보기 경로를 실파일로 확인했다(한글·LibreOffice 경로는 미검증 — README 한계).
+- **`crf_preview` — 리포트 배치를 그림으로**: 용지 한 장에 밴드를 한 번씩 쌓고 글상자·표 셀(병합·셀별 테두리·배경색)·선·그림/서브리포트 자리를 0.1mm 좌표대로, 글꼴·크기·굵게·가로/세로 정렬·줄바꿈까지 그린다. 정적 텍스트는 검정, 필드 바인딩은 파란 `«필드명»`, 체크박스 셀은 상자. 원본 양식 그림과 나란히 놓고 요소 누락·위치·정렬·병합을 대조하는 용도(설계 화면 — 데이터 반복·확장·페이지 나눔 없음).
+- **서버 instructions `[★양식은 파싱 + 그림으로 교차 검증한 뒤 작업]`**: 양식을 받으면 ① `doc_text` ② `doc_image` 로 그림을 받아 직접 보고 ③ 둘을 대조(파싱에 빠진 도장·선·체크칸, 병합·정렬·테두리, 쪽 수)한 뒤 작업을 시작하고, 작업 후 `crf_preview` 를 원본 그림과 대조한다. 그림을 못 얻으면 사용자에게 알린다. `/clipreport` 명령(1-1 절)·GUIDE 9-1-1·문서형 레시피에도 같은 순서를 넣었다.
+- **JS 동적쿼리 실제 실행(`src/CrfJsEval.java`)**: CLIP 엔진 jar 폴더의 `batik.jar` 에 들어 있는 Rhino 로 쿼리 스크립트를 돌린다(별도 의존성 없음; Java 접근 차단 + 3초 제한 샌드박스). 저장소 실측 — JS 쿼리 1,495개 중 1,494개가 그대로 실행됐고 나머지 1개(saplap0210_prn01)는 `SQL`/`sql` 을 섞어 쓴 실제 버그였다.
+  - **`crf_get_query params={…}` / `mode=eval`** → 그 매개변수 값으로 실행한 **실행 SQL**(if 분기 반영). "0건/조건이 안 먹는다" 확인용.
+  - **`crf_validate`** 가 JS 쿼리의 **문법 오류·실행 오류**(매개변수 전부 빈 값 기준)를 ✖ 로. `crf_set_query`/`crf_append_query_condition`/`crf_generate` 도 저장한 JS 에 같은 검사를 해 응답에 알린다.
+  - **`crf_sync_fields mode=db` / `crf_generate fields_from_db`** 는 JS 쿼리를 실제 실행한 SQL 로 메타데이터를 읽고(전에는 모든 if 조각을 이어 붙인 평문 복원본이라 if/else·foreach 가 있으면 깨짐), 실패하면 평문 복원본으로 재시도한다.
+- **MyBatis 변환(v0.10.0 미반영 3건)**:
+  - `<foreach>` 안의 `<if test>`/`<when test>` 가 **루프 변수·index 변수**를 쓰면 매개변수가 아니라 현재 원소(`__feN[__iN]`)/인덱스(`__iN`)로 변환. 본문의 `#{index}`, 바깥 foreach 변수(중첩), `#{item,jdbcType=…}` 도 처리. `list.size() > 0`·`list.size == 0`·`list.isEmpty()`·`!list.isEmpty()` 조건 변환. `collection="vo.deptList"` 는 마지막 이름(`DEPTLIST`)을 매개변수로(전에는 `VO`).
+  - `<where>`/`<trim>`/`<set>` 일반 처리: 조건 조각이 전부 `AND` 로 시작하는 흔한 형태는 그대로 `WHERE 1=1`, 무조건 조각으로 시작하면 `WHERE` + 앞머리 AND/OR 만 변환 시점에 제거, 그 밖(첫 조각에 AND 가 없거나 OR 로 시작, `prefix="AND ("`·`suffix`·`suffixOverrides`, `<set>` 의 끝 쉼표)은 스크립트에 `__trim` 도우미 함수를 넣어 **실행 시점에 MyBatis 와 같은 규칙으로** 정리. `crf_get_query` 평문 복원은 도우미 함수를 숨기고 `/*TRIM*/…/*END TRIM*/` 로 표시.
+- `tools/mcpcall.py`: 도구가 돌려준 그림을 `[image mime WxH KB]` 로 요약하고 `CLIP_MCP_SAVE_IMAGES=<폴더>` 면 파일로 저장.
+- **Codex 리뷰(16건) 재검토 후 반영 14건**:
+  - 보안/자원 — HTML 을 여는 헤드리스 브라우저의 **네트워크 차단**(죽은 프록시 + DNS 차단; 로컬 서버로의 요청이 차단 전에는 닿고 후에는 안 닿는 것을 대조 확인, `CLIP_DOC_ALLOW_NETWORK=1` 로 해제) · JS 실행 전 스크립트 크기 상한과 메모리 부족 처리 · `'%{parameter.Q}%'` 처럼 **더 큰 SQL 리터럴 안의 토큰**도 값의 `'` 를 `''` 로(전에는 리터럴이 깨져 `mode=db` 로 보내는 SQL 이 바뀔 수 있었음) · 그림은 풀기 전에 화소 수 확인, zip 은 호출당 총량 예산, HWP 스트림 크기 상한 · 변환 캐시 키를 `String.hashCode`(경로·크기·시각) → **문서 내용 SHA-256** 으로, 변환은 임시 파일에 쓰고 완성 후 이름 변경 · LibreOffice 임시 폴더·변환 스크립트 정리.
+  - MyBatis — `<where>` 의 `WHERE 1=1` 단순화는 **맨 앞에 올 수 있는 조각이 전부 AND 로 시작할 때만**(둘째 조각이 OR 면 `WHERE 1=1 OR …` 가 되어 전체 행이 나오던 문제 → `__trim`) · **빈 `<foreach>` 는 open/close 도 내지 않음**(`IN ()` 방지) · foreach 본문에 `<if>` 가 있으면 **구분자를 실제로 내용이 나온 회차 사이에만**(`('A',,'B')` 방지).
+  - 파서 — HWP 레코드 길이 넘침/짧은 FileHeader 를 ERROR 로, XLSX 날짜의 1900 체계 60 미만·`date1904` 통합 문서, DOCX `gridBefore` 행의 열 번호·너비, 평문 복원이 사용자 도우미 함수 안의 SQL 을 지우던 것(변환기가 넣은 `__trim` 만 숨김), `/function/` 정규식 리터럴이 return 검사를 속이던 것, `mcpcall.py` 의 그림 base64 검증.
+  - 미반영 2건: JS 실행을 별도 JVM 으로 격리(내장 함수 한 번으로 큰 문자열을 만드는 경우까지 끊으려면 필요 — 상한·오류 처리만 넣고 README 보안 절에 명시), 시간 초과 시 남는 Office 프로세스 자동 종료(사용자가 띄운 프로그램과 구분 불가 — README 한계에 명시).
+- `tools/smoke.py` 330 케이스(+56): 문서 파서(픽스처를 테스트가 직접 생성)·미리보기·실행 SQL·JS lint·foreach/trim, 그리고 **문서 정합성 4건** — README 의 도구 수·도구 이름·케이스 수, CHANGELOG 의 현재 버전 항목이 코드와 어긋나면 FAIL.
+### Fixed
+- **`<where>` 가 무조건 조각으로 시작하면 깨진 SQL 을 만들던 문제**: `<where> USE_YN = 'Y' <if …>AND …</if></where>` → 전에는 `WHERE 1=1 USE_YN = 'Y'`.
+- `<foreach>` 에 `collection` 이 없으면 태그 문자열이 SQL 로 새고 중괄호가 안 맞아 JS 문법 오류가 나던 문제 → 빈 목록 루프로 처리.
+- `crf_append_query_condition` 등의 `return` 검사가 도우미 함수 안의 `return` 을 쿼리의 `return` 으로 세지 않게.
+- DB 오류 메시지 정리: Tibero 가 붙이는 수백 자 공백 제거, 접속 계열 오류(timeout 등)면 네트워크/`.env` 확인 안내.
+- README 를 현상에 맞춤: 도구 수(40/43 → 53), 구성요소(CrfTableOps·CrfDerive 등 누락), 테스트 케이스 수(152 → 321)와 픽스처, jar 크기, 릴리스 절차(소스의 VERSION 상수는 없어짐), `in_place`, 한계 절의 지난 내용(표 생성 미구현, foreach/choose 부분 지원, PLAN v0.7).
+- `tools/smoke.py` 의 엑셀 격자 케이스가 실 리포트(ahrmhr0120_prn01)의 열 구성 변경으로 깨져 있던 것 → 경계 값을 고정하지 않게 수정.
+### 한계(미반영)
+- `__trim` 도우미가 들어간 쿼리와 foreach 변환 쿼리는 MCP 의 JS 엔진으로만 검증했고 **실서버 렌더 확인은 못 했다**(이번 작업 중 로컬 WAS·개발 DB 접속 불가).
+- `doc_image` 의 한글(HWPFrame.HwpObject)·LibreOffice 변환 경로는 설치된 PC 가 없어 미검증. OCR 없음. `crf_preview` 는 설계 화면 그림(실제 출력 아님).
+- `<include>`/`<bind>` 는 여전히 수동. foreach 원소의 속성(`item.code`)은 원소 자체로 대체(경고).
+
 ## [0.10.0] - 2026-09-10
 v0.9.0 에서 미뤘던 ui-f6 요청 3건 + PLAN §3 생성기 개선을 한 번에. 새 코드는 `src/CrfDerive.java`.
 ### Added

@@ -28,22 +28,23 @@ argument-hint: [.crf|화면.xfdl/.vue|PDF|SQL|테이블|폴더] "할말" (※일
 → **도구는 "있는 입력 + 의도"로 선택**(고정 순서 아님). 없는 입력을 전제로 한 단계는 그냥 건너뛴다.
 
 ## 1) 있는 자료만 읽어 확보 (해당될 때만)
-- `.crf` 있으면 → `crf_summary` (+`crf_describe_layout`): 데이터셋·필드·그룹·섹션/서브섹션·표 셀. **쿼리 본문이 필요하면 `crf_get_query`**(JS 동적쿼리는 평문 복원본 포함), 공식은 `crf_get_formula`
+- `.crf` 있으면 → `crf_summary` (+`crf_describe_layout`): 데이터셋·필드·그룹·섹션/서브섹션·표 셀. **쿼리 본문이 필요하면 `crf_get_query`**(JS 동적쿼리는 평문 복원본 포함; `params={"X":"값"}` 을 주면 그 값으로 **실제 실행한 SQL** — 0건·조건 의심 시 이걸로 확정 후 `db_query`), 공식은 `crf_get_formula`, 배치를 눈으로 보려면 `crf_preview`
 - "어떤 리포트가 테이블/컬럼/매개변수/문구 X 를 쓰나" → `crf_search(dir, text, scope=query|xpath|field|formula|param|control|any)` (폴더 재귀, 파일명 필터 `like`)
 - 화면 있으면 → **Read**: 항목·조회조건·그리드·트랜잭션/데이터셋ID·테이블명
-- **참조 양식(HWPX/PDF/DOCX/HTML/이미지)이 있으면 → 요소 전부를 좌표까지 판독**(아래 1-1)
+- **참조 양식(PDF/HWP/HWPX/DOCX/XLSX/PPTX/HTML/이미지)이 있으면 → `doc_text` 로 요소 전부를 좌표까지 판독 + `doc_image` 로 그림을 받아 비전 대조**(아래 1-1)
 - 쿼리 텍스트 있으면 → 그대로 파싱: 컬럼·파라미터·동적조건
 - 백엔드 힌트/화면ID 있으면 → **Grep**: 매퍼 `.xml`·서비스 역추적해 실제 SQL
 - DB 연결되고 테이블 단서 있으면 → `db_tables`(이름검색) → `db_columns`(주석=업무의미) → `db_sample` → `db_query`(SELECT)
 
 ## 1-1) 참조 양식은 모든 요소의 배치·좌표를 꼼꼼히 (형식 불문)
 눈에 띄는 것만 옮기지 말고 **모든 요소**를 인벤토리한다: 제목·부제·문단·표(행/열/셀 크기·병합)·선·상자·도형·체크칸·서명란·직인 자리·머리글/바닥글·페이지번호·로고·용지 여백. 요소마다 **x,y,너비,높이(mm) · 정렬 · 글꼴/크기/굵게/색 · 테두리/배경 · 데이터 자리(파란 글자 등)** 를 표로 적고 나서 배치를 시작한다.
-- HWPX → `samples/document/parse_hwpx.py`(문단 `vertpos`, 표 셀 크기, 도형 절대좌표, **표 앵커 문단 정렬**)
-- PDF → `pdf_text` 는 위치가 사라짐 → **PyMuPDF** 로 텍스트 블록 bbox + 페이지 이미지(Read 로 눈으로 확인)
-- DOCX → `word/document.xml`(문단·표·정렬·섹션 여백, EMU→mm = ÷36000)
-- HTML → 렌더 스크린샷 + 요소 박스(`getBoundingClientRect`)
-- 이미지 → Read 로 보고 비율로 좌표를 잡되 실제 용지 크기는 유저에게 확인
-인벤토리에 있는 요소가 결과물에 없거나 위치·정렬이 다르면 **미완성**. 끝에 실서버 렌더(`render_report.cjs`)를 원본과 요소별로 나란히 대조하고 차이를 보고한다.
+**순서: ① 파싱 → ② 그림으로 받아 비전 대조 → ③ 작업 → ④ 결과 그림 대조.** 어떤 형식이든 같은 두 도구를 쓴다.
+- **① `doc_text(path)`** — PDF·HWP(5.x)·HWPX·DOCX·XLSX/XLS·PPTX·HTML 을 형식 자동 인식으로 읽어 용지/여백, 문단(y·정렬·글꼴 크기·굵게·색), 표(셀 `[행,열]`·병합·너비×높이), 도형/그림 위치를 **mm** 로 준다(리포트 좌표 0.1mm = mm×10). `detail=true`(빈 줄·구간별 글꼴·수식·PDF 줄 위치), 엑셀 `sheet=`, PDF `pages=`. 이미지는 크기만 알려 준다(OCR 없음).
+- **② `doc_image(path, [page|max_px])`** — 그 문서를 **그림으로** 받는다: 이미지는 그대로, PDF 는 쪽 렌더, HWP/HWPX/DOCX/XLSX/PPTX/HTML 은 PC 의 한글·MS Office·LibreOffice·Edge/Chrome 으로 PDF 변환 후 렌더(없으면 파일에 든 첫 쪽 미리보기). **그림을 직접 보고 ①과 대조**: 파싱에 빠진 요소(도장·선·체크칸·그림 속 글자), 병합 셀, 정렬, 테두리/배경, 쪽 수. 어긋나면 그림 기준으로 인벤토리를 고치거나 유저에게 묻는다. 그림을 못 얻으면(변환기·미리보기 없음) 유저에게 알리고 PDF/이미지를 요청하거나 파싱만으로 진행해도 되는지 확인.
+- 이미지 양식 → `doc_image` 로 보고 비율로 좌표를 잡되 **실제 용지 크기는 유저에게 확인**.
+- **④ 작업 후 `crf_preview(path)`** — 리포트 배치를 그림으로(정적 텍스트 검정, 필드 파란 «이름») 받아 ②의 원본 그림과 나란히 요소별 대조 → 고치고 다시 확인. 설계 화면이라 데이터·확장·페이지 나눔은 없다.
+- **⑤ `crf_render(path)` 로 실제 출력 확인** — 실제 CLIP 서버 엔진이 만든 PDF 한 쪽을 그림+글자로 받는다(WAS 불필요). `mode=sample`(기본): 가상 데이터 — 목록형은 `rows=60` + `page=2` 로 다음 쪽 머리글·그룹 이어짐, 합계·소계는 `data={"데이터셋":[{필드:값},…]}` 로 아는 값을 넣어 숫자 대조, `rows=0` 으로 0건. `mode=db` + `params={…}`: 개발 DB 에서 쿼리를 실제 실행한 출력(읽은 행 수 표시). 설정이 없다는 ERROR 면 안내(`CLIP_RENDER_WEBAPP`)를 유저에게 전한다. 화면 연동까지 보려면 실서버 렌더(`render_report.cjs`).
+인벤토리에 있는 요소가 결과물에 없거나 위치·정렬이 다르면 **미완성**. 대조 결과(일치/차이)를 보고에 적는다.
 
 ## 2) 부족한 정보는 질문으로 확보 (추정 금지)
 도구로 알 수 있는 건 직접 확인하고(파일 Read·`db_*`·Grep), **그래도 부족하거나 불명확하면 임의 추정·기본값으로 진행하지 말고 반드시 유저에게 질문**한다. 질문은 **한 번에 모아** 간결하게(필요 항목 묶어서).
@@ -64,7 +65,7 @@ argument-hint: [.crf|화면.xfdl/.vue|PDF|SQL|테이블|폴더] "할말" (※일
 형식: `항목: 선택지 A / B / C (권장 A — 이유)`. 답을 받으면 결정 요약을 한 줄로 되짚고 진행. 답 없이 임의로 정해 놓고 나중에 "이렇게 했다"고 통보하지 말 것.
 
 ## 3) 수행 + 보고
-- 의도→도구: **목록형 파생(템플릿+SQL)=`crf_generate`(columns/title/cond/groups 한 번에)** · 열 세트 교체 `crf_set_columns` · 쿼리에 조건 추가 `crf_append_query_condition` · 설명·제안=`crf_summary`+`crf_get_query`+`crf_describe_layout` · 리포트 찾기 `crf_search`/`crf_list_reports` · 공식 읽기 `crf_get_formula` · 쿼리 `crf_set_query`(매개변수 선언·필드 추가 자동; `SELECT *` 면 `crf_sync_fields mode=db`) · 데이터셋 `crf_add_dataset`/`crf_remove_dataset` · 매개변수 `crf_set_param`/`crf_remove_param` · 필드 `crf_rename_field`/`crf_remove_field`(참조는 `crf_field_refs`) · 그룹 `crf_add_group` · 본문필드 `crf_place_detail_fields` · 셀 값/공식/스타일 `crf_set_cell` · 글상자 `crf_set_label`(추가는 `crf_add_label`) · 밴드 행 `crf_set_subsection` · 표 생성 `crf_add_table`(columns 필드 표 / rows 문단 목록 표) · 표 구조 `crf_table_info`→`crf_table_rows`/`crf_table_cols`(action=insert|copy|delete|move|resize|equalize)·`crf_set_table`(위치/비례 크기/테두리 일괄/unmerge_all) · 글상자 합치기/나누기 `crf_merge_labels`/`crf_split_label` · 글꼴 일괄 `crf_set_font` · 그룹 `crf_add_group`(level/label/subtotal)/`crf_set_group`/`crf_remove_group` · 삭제 `crf_remove_control`/`crf_remove_section` · 계산필드 `crf_add_formula_field` · 필드 `crf_add_data_field` · 용지 `crf_set_paper` · **수정 후 `crf_validate`** · 비교 `crf_diff` · 생성 `crf_generate`
+- 의도→도구: **목록형 파생(템플릿+SQL)=`crf_generate`(columns/title/cond/groups 한 번에)** · 열 세트 교체 `crf_set_columns` · 쿼리에 조건 추가 `crf_append_query_condition` · 설명·제안=`crf_summary`+`crf_get_query`+`crf_describe_layout` · 리포트 찾기 `crf_search`/`crf_list_reports` · 공식 읽기 `crf_get_formula` · 쿼리 `crf_set_query`(매개변수 선언·필드 추가 자동; `SELECT *` 면 `crf_sync_fields mode=db`) · 데이터셋 `crf_add_dataset`/`crf_remove_dataset` · 매개변수 `crf_set_param`/`crf_remove_param` · 필드 `crf_rename_field`/`crf_remove_field`(참조는 `crf_field_refs`) · 그룹 `crf_add_group` · 본문필드 `crf_place_detail_fields` · 셀 값/공식/스타일 `crf_set_cell` · 글상자 `crf_set_label`(추가는 `crf_add_label`) · 밴드 행 `crf_set_subsection` · 표 생성 `crf_add_table`(columns 필드 표 / rows 문단 목록 표) · 표 구조 `crf_table_info`→`crf_table_rows`/`crf_table_cols`(action=insert|copy|delete|move|resize|equalize)·`crf_set_table`(위치/비례 크기/테두리 일괄/unmerge_all) · 글상자 합치기/나누기 `crf_merge_labels`/`crf_split_label` · 글꼴 일괄 `crf_set_font` · 그룹 `crf_add_group`(level/label/subtotal)/`crf_set_group`/`crf_remove_group` · 삭제 `crf_remove_control`/`crf_remove_section` · 계산필드 `crf_add_formula_field` · 필드 `crf_add_data_field` · 용지 `crf_set_paper` · **수정 후 `crf_validate`**(JS 쿼리 문법/실행 오류도 잡음) + **`crf_preview` 로 배치 그림 확인** · 비교 `crf_diff` · 양식 읽기 `doc_text` + `doc_image`
 - 쓰기는 `<원본>_edited.crf` 로 **원본 보존**. 한 파일에 여러 단계를 이어 고칠 때는 a/b 파일 교대 대신 `in_place=true`(첫 쓰기 때 `<path>.bak` 백업) — 한 단계가 ERROR 면 거기서 멈추고 보고(다음 단계가 한 단계 전 파일을 읽어 변경이 유실되는 사고 방지). 필드는 이름이 아니라 **위치**로 컬럼에 대응하므로 쿼리를 바꾼 뒤 `crf_summary` 의 필드 순서가 SELECT 순서와 같은지 확인(`crf_set_query` 가 자동 재정렬). 끝에 **[사용한 입력 / 가정·추정 / 건너뛴 단계 / 출력경로]** 를 한 번에 보고.
 
 ## 규칙

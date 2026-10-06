@@ -90,6 +90,11 @@ public class CrfGen2 {
     t=t.replaceAll("!\\s*(?:@[A-Za-z0-9_.$]+@)?(?:isEmpty|isBlank|isNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' != ''");
     t=t.replaceAll("(?:@[A-Za-z0-9_.$]+@)?(?:isValid|isNotEmpty|isNotBlank|isNotNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' != ''");
     t=t.replaceAll("(?:@[A-Za-z0-9_.$]+@)?(?:isEmpty|isBlank|isNull)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$1}' == ''");
+    // 컬렉션 검사: list.size() > 0 / list.size > 0 / !list.isEmpty() → 값 있음, list.size() == 0 / list.isEmpty() → 값 없음 (매개변수는 쉼표 문자열로 전달)
+    t=t.replaceAll("!\\s*([A-Za-z_][A-Za-z0-9_]*)\\.isEmpty\\(\\s*\\)","'{parameter.$1}' != ''");
+    t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\.isEmpty\\(\\s*\\)","'{parameter.$1}' == ''");
+    t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\.(?:size\\(\\s*\\)|length\\(\\s*\\)|size|length)\\s*(?:>\\s*0|!=\\s*0|>=\\s*1)(?![\\d.])","'{parameter.$1}' != ''");
+    t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\.(?:size\\(\\s*\\)|length\\(\\s*\\)|size|length)\\s*(?:==\\s*0|<\\s*1|<=\\s*0)(?![\\d.])","'{parameter.$1}' == ''");
     // "A".equals(p) / p.equals("A") / p == "A" / p == 'A'
     t=t.replaceAll("[\"']([^\"']*)[\"']\\.equals\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)","'{parameter.$2}' == '$1'");
     t=t.replaceAll("([A-Za-z_][A-Za-z0-9_]*)\\.equals\\(\\s*[\"']([^\"']*)[\"']\\s*\\)","'{parameter.$1}' == '$2'");
@@ -104,73 +109,152 @@ public class CrfGen2 {
     t=t.replaceAll("\\band\\b"," && ").replaceAll("\\bor\\b"," || ").replaceAll("\\s+"," ").trim();
     return t;
   }
-  static String testAttr(String tag){ Matcher t=Pattern.compile("test\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')").matcher(tag); if(!t.find()) return "true"; String v=t.group(1)!=null?t.group(1):t.group(2); return convertCond(v); }
+  static String testAttr(String tag){ return testAttr(tag,null,null); }
+  /** foreach 안의 test: 루프 변수(item / item.prop)와 index 변수는 매개변수가 아니라 현재 원소(__feN[__iN]) / 인덱스(__iN) 로 바꾼다. */
+  static String testAttr(String tag,java.util.Deque<Fe> fe,List<String> warns){ Matcher t=Pattern.compile("test\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')").matcher(tag); if(!t.find()) return "true"; String v=t.group(1)!=null?t.group(1):t.group(2);
+    if(fe==null||fe.isEmpty()) return convertCond(v);
+    for(Fe f: fe){   // 안쪽 foreach 부터
+      Matcher m=Pattern.compile("(?<![\\w.$'\"])"+Pattern.quote(f.item)+"((?:\\.[A-Za-z_][A-Za-z0-9_]*)*)(?![\\w(])").matcher(v); StringBuffer b=new StringBuffer();
+      while(m.find()){ if(!m.group(1).isEmpty()&&warns!=null) warns.add("<foreach> test 의 "+m.group()+" → 원소 자체로 비교(매개변수가 쉼표 문자열이라 원소의 속성은 없음)"); m.appendReplacement(b,"__FEV"+f.seq+"__"); } m.appendTail(b); v=b.toString();
+      if(f.index!=null) v=v.replaceAll("(?<![\\w.$'\"])"+Pattern.quote(f.index)+"(?![\\w(.])","__FEI"+f.seq+"__"); }
+    String c=convertCond(v);
+    for(Fe f: fe){ String el=f.v+"["+f.ix+"]"; c=c.replace("'{parameter.__FEV"+f.seq+"__}'",el).replace("__FEV"+f.seq+"__",el).replace("'{parameter.__FEI"+f.seq+"__}'",f.ix).replace("__FEI"+f.seq+"__",f.ix); }
+    return c; }
+  /** foreach 한 단계: item/index 변수명, JS 배열 변수(__feN)·인덱스 변수(__iN), close 문자열 */
+  static class Fe { String item, index, v, ix, close, sep=""; int seq; boolean buffered; Fe(String item,String index,int seq,String close){ this.item=item==null||item.isEmpty()?"item":item; this.index=index==null||index.isEmpty()?null:index; this.seq=seq; this.v="__fe"+seq; this.ix="__i"+seq; this.close=close==null?"":close; } }
   static String unescapeXml(String s){ return s==null?null:s.replace("&lt;","<").replace("&gt;",">").replace("&quot;","\"").replace("&apos;","'").replace("&amp;","&"); }
   /** MyBatis 동적 태그만 태그로 인식 — SQL 본문의 비교연산자(<, <=, <>)는 태그가 아니므로 보존. */
   static final Pattern MB_TAG=Pattern.compile("(?is)</?(?:if|where|foreach|choose|when|otherwise|trim|set|select|include|bind|sql|insert|update|delete)\\b(?:\"[^\"]*\"|'[^']*'|[^>\"'])*>|<!--.*?-->");  // 속성값 안의 > 는 태그 끝이 아님
   static String escLine(String s){ return s.replace("\\","\\\\").replace("\"","\\\""); }
   // ---------- MyBatis -> JavaScript builder ----------
+  /** <trim>/<where>/<set> 실행 시 처리용 JS 도우미(정규식 없이 기본 문자열 함수만): 본문을 trim 해 비었으면 '' ,
+   *  아니면 prefixOverrides(앞)/suffixOverrides(뒤) 중 처음 맞는 것(대소문자 무시)을 떼고 prefix/suffix 를 붙인다 — MyBatis TrimSqlNode 와 같은 규칙. */
+  static final String TRIM_HELPER=
+    "function __trim(b, pre, suf, po, so){\r\n"+
+    "  var ws = \" \\t\\r\\n\", s = 0, e = b.length, o, k, u, i;\r\n"+
+    "  while(s < e && ws.indexOf(b.charAt(s)) >= 0){ s++; }\r\n"+
+    "  while(e > s && ws.indexOf(b.charAt(e - 1)) >= 0){ e--; }\r\n"+
+    "  b = b.substring(s, e);\r\n"+
+    "  if(b == \"\"){ return \"\"; }\r\n"+
+    "  u = b.toUpperCase(); o = (po == \"\") ? [] : po.toUpperCase().split(\"|\");\r\n"+
+    "  for(k = 0; k < o.length; k++){ if(o[k] != \"\" && u.indexOf(o[k]) == 0){ b = b.substring(o[k].length); break; } }\r\n"+
+    "  u = b.toUpperCase(); o = (so == \"\") ? [] : so.toUpperCase().split(\"|\");\r\n"+
+    "  for(k = 0; k < o.length; k++){ i = u.length - o[k].length; if(o[k] != \"\" && i >= 0 && u.lastIndexOf(o[k]) == i){ b = b.substring(0, i); break; } }\r\n"+
+    "  return \" \" + pre + \" \" + b + \" \" + suf + \" \";\r\n"+
+    "}\r\n";
+  /** MyBatis <where> 가 떼는 앞머리(WhereSqlNode 와 동일) */
+  static final String WHERE_PO="AND |OR |AND\n|OR\n|AND\r|OR\r|AND\t|OR\t";
+  static String jsStr(String s){ return "\""+(s==null?"":s).replace("\\","\\\\").replace("\"","\\\"").replace("\r","\\r").replace("\n","\\n").replace("\t","\\t")+"\""; }
+  static String[] overrideTokens(String po){ return po==null||po.isEmpty()?new String[0]:po.split("\\|"); }
+  /** 텍스트 앞머리(공백 뒤)의 override 하나를 뗀다(대소문자 무시) */
+  static String stripLeading(String text,String[] toks){ int s=0; while(s<text.length()&&Character.isWhitespace(text.charAt(s))) s++; String u=text.substring(s).toUpperCase();
+    for(String t: toks){ if(!t.isEmpty()&&u.startsWith(t.toUpperCase())) return text.substring(0,s)+text.substring(s+t.length()); } return text; }
+  static boolean startsWithToken(String text,String[] toks){ String u=text.toUpperCase(); for(String t: toks) if(!t.isEmpty()&&u.startsWith(t.toUpperCase())) return true; return false; }
+  /** from 이후 블록의 첫 내용: [0]=처음 나오는 비어 있지 않은 텍스트(앞 공백 제거; 블록이 비었으면 ""), [1]="static"(동적 태그보다 텍스트가 먼저) | "dynamic" */
+  static String[] firstContent(String body,int from){ Matcher m=MB_TAG.matcher(body); int p=from; boolean dyn=false;
+    while(m.find(p)){ String t=body.substring(p,m.start()); if(!t.trim().isEmpty()) return new String[]{t.replaceAll("^\\s+",""),dyn?"dynamic":"static"};
+      String low=m.group().toLowerCase(); if(low.startsWith("</where")||low.startsWith("</trim")||low.startsWith("</set")||low.startsWith("</select")) return new String[]{"",dyn?"dynamic":"static"};
+      if(!low.startsWith("<!--")) dyn=true; p=m.end(); }
+    return new String[]{body.substring(p).replaceAll("^\\s+",""),dyn?"dynamic":"static"}; }
+  static final String[] AND_TOKS={"AND ","AND\n","AND\r","AND\t"};
+  /** <where>/<trim prefix=WHERE> 블록에서 '맨 앞에 올 수 있는' 조각(앞의 조건이 전부 거짓일 때 첫 출력이 되는 조각)이 모두 AND 로 시작하는지.
+   *  그럴 때만 WHERE 1=1 로 바꿔도 뜻이 같다 — 하나라도 OR 로 시작하거나 접속사가 없으면 실행 시점 정리(__trim)로 보낸다. 안쪽에 where/trim 이 또 있으면 보수적으로 false. */
+  static boolean allLeadAnd(String body,int from){ Matcher m=MB_TAG.matcher(body); int p=from; boolean staticSeen=false; java.util.ArrayDeque<boolean[]> cond=new java.util.ArrayDeque<>();
+    while(true){ boolean has=m.find(p); String t=body.substring(p,has?m.start():body.length());
+      if(!t.trim().isEmpty()&&!staticSeen){ boolean leading=true; for(boolean[] c: cond) if(c[0]) leading=false;
+        if(leading&&!startsWithToken(t.replaceAll("^\\s+",""),AND_TOKS)) return false;
+        if(cond.isEmpty()) staticSeen=true; else for(boolean[] c: cond) c[0]=true; }
+      if(!has) return true; String low=m.group().toLowerCase(); p=m.end();
+      if(low.startsWith("<!--")||low.endsWith("/>")) continue;
+      if(low.startsWith("<if")||low.startsWith("<when")||low.startsWith("<otherwise")) cond.push(new boolean[]{false});
+      else if(low.startsWith("</if")||low.startsWith("</when")||low.startsWith("</otherwise")){ if(!cond.isEmpty()) cond.pop(); }
+      else if(low.startsWith("<where")||low.startsWith("<trim")||low.startsWith("<set")) return false;
+      else if(low.startsWith("</where")||low.startsWith("</trim")||low.startsWith("</set")||low.startsWith("</select")) return true; } }
+  /** from(<foreach …> 바로 뒤)부터 짝이 맞는 </foreach> 사이에 조건 태그(<if>/<choose>)가 있는지 */
+  static boolean foreachHasDynamic(String body,int from){ Matcher m=MB_TAG.matcher(body); int p=from, depth=0;
+    while(m.find(p)){ String low=m.group().toLowerCase(); p=m.end(); if(low.startsWith("<foreach")&&!low.endsWith("/>")) depth++; else if(low.startsWith("</foreach")){ if(depth==0) return false; depth--; } else if(low.startsWith("<if")||low.startsWith("<choose")||low.startsWith("<when")) return true; }
+    return false; }
   static String mybatisToJs(String mb, List<String> warns){
     String body=mb;
     Matcher sel=Pattern.compile("(?is)<select[^>]*>(.*)</select>").matcher(mb);
     if(sel.find()) body=sel.group(1);
     body=body.replace("<![CDATA[","").replace("]]>","");
-    StringBuilder js=new StringBuilder("var sql = \"\";\r\n");
+    StringBuilder js=new StringBuilder();
     Matcher m=MB_TAG.matcher(body);
     int pos=0; java.util.ArrayDeque<int[]> choose=new java.util.ArrayDeque<>();  // choose 중첩: [분기 수]
-    java.util.ArrayDeque<String[]> fe=new java.util.ArrayDeque<>(); int feSeq=0;   // foreach 중첩: [item, 변수명, 인덱스명, close]
-    java.util.ArrayDeque<String> trimClose=new java.util.ArrayDeque<>();
+    java.util.ArrayDeque<Fe> fe=new java.util.ArrayDeque<>(); int feSeq=0;        // foreach 중첩(안쪽이 앞)
+    java.util.ArrayDeque<String> trims=new java.util.ArrayDeque<>(); int trimSeq=0; boolean helper=false;   // where/trim/set: 닫을 때 붙일 JS("" 면 없음)
+    String[] pendingStrip=null;   // 정적 텍스트로 시작하는 <where>/<trim prefix=WHERE>: 바로 다음 텍스트 앞머리의 AND/OR 를 변환 시점에 뗀다
     while(m.find()){
       String text=body.substring(pos,m.start());
-      if(fe.isEmpty()) emitText(js,text); else emitForeachBody(js,text,fe.peek());
+      if(pendingStrip!=null&&!text.trim().isEmpty()){ text=stripLeading(text,pendingStrip); pendingStrip=null; }
+      if(fe.isEmpty()) emitText(js,text); else emitForeachBody(js,text,fe);
       String tag=m.group().trim();
       String low=tag.toLowerCase();
       if(low.startsWith("<!--")) {}
       else if(low.startsWith("<include")) warns.add("<include> NOT expanded (refid 조각을 직접 붙여 넣으세요): "+tag);
       else if(low.startsWith("<bind")) warns.add("<bind> NOT converted: "+tag);
-      else if(low.startsWith("<where")) js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n");
-      else if(low.startsWith("</where")||low.startsWith("</set")||low.startsWith("</select")) {}
-      else if(low.startsWith("<if")){ String c=testAttr(tag); js.append("if(").append(c).append("){\r\n"); }
+      else if(low.startsWith("<where")||low.startsWith("<trim")||low.startsWith("<set")){
+        String prefix, suffix="", po, so="";
+        if(low.startsWith("<where")){ prefix="WHERE"; po=WHERE_PO; }
+        else if(low.startsWith("<set")){ prefix="SET"; po=","; so=","; }
+        else { prefix=attr(tag,"prefix"); suffix=attr(tag,"suffix"); po=attr(tag,"prefixOverrides"); so=attr(tag,"suffixOverrides"); if(prefix==null) prefix=""; if(suffix==null) suffix=""; if(po==null) po=""; if(so==null) so=""; }
+        boolean whereLike=prefix.trim().equalsIgnoreCase("WHERE")&&suffix.isEmpty()&&so.isEmpty();
+        String[] fc=firstContent(body,m.end()); String[] toks=overrideTokens(po);
+        if(low.endsWith("/>")||fc[0].isEmpty()&&fc[1].equals("static")) { if(!low.endsWith("/>")) trims.push(""); }   // 빈 블록: 아무것도 붙이지 않음
+        else if(whereLike&&fc[1].equals("static")){ js.append("sql += \" WHERE \\r\\n\";\r\n"); pendingStrip=toks; trims.push(""); }   // 무조건 조각으로 시작 → WHERE 는 항상, 앞머리 AND/OR 만 뗌
+        else if(whereLike&&startsWithToken(fc[0],AND_TOKS)&&startsWithToken(fc[0],toks)&&allLeadAnd(body,m.end())){ js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n"); trims.push(""); }   // 흔한 형태(<if> 조각이 전부 AND 로 시작) → 읽기 쉬운 WHERE 1=1
+        else { trimSeq++; helper=true; js.append("var __t").append(trimSeq).append(" = sql; sql = \"\";\r\n");
+          trims.push("sql = __t"+trimSeq+" + __trim(sql, "+jsStr(prefix.trim())+", "+jsStr(suffix.trim())+", "+jsStr(po)+", "+jsStr(so)+");\r\n"); }
+      }
+      else if(low.startsWith("</where")||low.startsWith("</trim")||low.startsWith("</set")){ if(!trims.isEmpty()) js.append(trims.pop()); }
+      else if(low.startsWith("</select")) {}
+      else if(low.startsWith("<if")){ String c=testAttr(tag,fe,warns); js.append("if(").append(c).append("){\r\n"); }
       else if(low.startsWith("</if")) js.append("}\r\n");
       else if(low.startsWith("<choose")) choose.push(new int[]{0});
-      else if(low.startsWith("<when")){ String c=testAttr(tag); int[] st=choose.peek(); boolean first=st==null||st[0]==0; if(st!=null) st[0]++; js.append(first?"if(":"else if(").append(c).append("){\r\n"); }
+      else if(low.startsWith("<when")){ String c=testAttr(tag,fe,warns); int[] st=choose.peek(); boolean first=st==null||st[0]==0; if(st!=null) st[0]++; js.append(first?"if(":"else if(").append(c).append("){\r\n"); }
       else if(low.startsWith("</when")) js.append("}\r\n");
       else if(low.startsWith("<otherwise")){ int[] st=choose.peek(); boolean first=st==null||st[0]==0; if(st!=null) st[0]++; js.append(first?"if(true){\r\n":"else {\r\n"); }
       else if(low.startsWith("</otherwise")) js.append("}\r\n");
       else if(low.startsWith("</choose")){ if(!choose.isEmpty()) choose.pop(); }
-      else if(low.startsWith("<foreach")){ feSeq++; String coll=attr(tag,"collection"), item=attr(tag,"item"), open=attr(tag,"open"), sep=attr(tag,"separator"), close=attr(tag,"close");
-        if(coll==null||coll.isEmpty()){ warns.add("<foreach> collection 없음 — 건너뜀: "+tag); fe.push(new String[]{item==null?"item":item,"__fe"+feSeq,"__i"+feSeq,""}); continue; }
-        String pn=rp(coll.replaceAll("[^A-Za-z0-9_].*$","")); String v="__fe"+feSeq, ix="__i"+feSeq;
-        js.append("var ").append(v).append(" = ('{parameter.").append(pn).append("}' == '') ? [] : '{parameter.").append(pn).append("}'.split(',');\r\n");
-        if(open!=null&&!open.isEmpty()) js.append("sql += \"").append(escLine(open)).append("\";\r\n");
-        js.append("for(var ").append(ix).append("=0; ").append(ix).append("<").append(v).append(".length; ").append(ix).append("++){\r\n");
-        if(sep!=null&&!sep.isEmpty()) js.append("if(").append(ix).append(">0) sql += \"").append(escLine(sep)).append("\";\r\n");
-        fe.push(new String[]{item==null?"item":item,v,ix,close==null?"":close});
-        warns.add("<foreach collection="+coll+"> → 매개변수 "+pn+" 를 쉼표로 이어 붙인 문자열(예 A,B,C)로 넘겨야 합니다(JS split 루프로 변환; 각 원소는 '…' 로 감쌈)"); }
-      else if(low.startsWith("</foreach")){ if(!fe.isEmpty()){ String[] st=fe.pop(); js.append("}\r\n"); if(!st[3].isEmpty()) js.append("sql += \"").append(escLine(st[3])).append("\";\r\n"); } }
-      else if(low.startsWith("<trim")){ String prefix=attr(tag,"prefix"), suffix=attr(tag,"suffix"), po=attr(tag,"prefixOverrides"), so=attr(tag,"suffixOverrides");
-        if(prefix!=null&&prefix.trim().equalsIgnoreCase("WHERE")){ js.append("sql += \" WHERE 1=1 \\r\\n\";\r\n"); if(po!=null&&po.toUpperCase().contains("OR")) warns.add("<trim prefix=WHERE prefixOverrides=\""+po+"\"> 를 WHERE 1=1 로 바꿈 — 첫 조각이 OR 로 시작하면 의미가 달라지니 확인"); }
-        else if(prefix!=null&&!prefix.isEmpty()){ js.append("sql += \" ").append(escLine(prefix)).append(" \";\r\n"); if(po!=null&&!po.isEmpty()) warns.add("<trim prefixOverrides=\""+po+"\"> 는 적용 못 함(첫 조각의 "+po+" 를 직접 제거하세요)"); }
-        if(so!=null&&!so.isEmpty()) warns.add("<trim suffixOverrides=\""+so+"\"> 는 적용 못 함(마지막 조각의 "+so+" 를 직접 제거하세요)");
-        trimClose.push(suffix==null?"":suffix); }
-      else if(low.startsWith("</trim")){ if(!trimClose.isEmpty()){ String c=trimClose.pop(); if(!c.isEmpty()) js.append("sql += \" ").append(escLine(c)).append(" \";\r\n"); } }
-      else if(low.startsWith("<set")){ js.append("sql += \" SET \";\r\n"); warns.add("<set> → ' SET ' 로만 변환(마지막 쉼표 제거는 수동)"); }
+      else if(low.startsWith("<foreach")){ feSeq++; String coll=attr(tag,"collection"), open=attr(tag,"open"), sep=attr(tag,"separator");
+        Fe f=new Fe(attr(tag,"item"),attr(tag,"index"),feSeq,attr(tag,"close"));
+        Matcher cm=Pattern.compile("([A-Za-z_][A-Za-z0-9_]*)\\s*$").matcher(coll==null?"":coll.trim());   // param.deptList → deptList (마지막 식별자)
+        if(!cm.find()){ warns.add("<foreach> collection 없음/해석 불가 — 빈 목록으로 처리(본문이 출력되지 않음): "+tag); js.append("var ").append(f.v).append(" = [];\r\n"); }
+        else { String pn=rp(cm.group(1));
+          js.append("var ").append(f.v).append(" = ('{parameter.").append(pn).append("}' == '') ? [] : '{parameter.").append(pn).append("}'.split(',');\r\n");
+          warns.add("<foreach collection="+coll+"> → 매개변수 "+pn+" 를 쉼표로 이어 붙인 문자열(예 A,B,C)로 넘겨야 합니다(JS split 루프로 변환; 각 원소는 '…' 로 감쌈)"); }
+        f.sep=sep==null?"":sep; f.buffered=!f.sep.isEmpty()&&foreachHasDynamic(body,m.end());
+        if(open!=null&&!open.isEmpty()) js.append("if(").append(f.v).append(".length > 0) sql += \"").append(escLine(open)).append("\";\r\n");   // 빈 목록이면 MyBatis 처럼 open/close 도 내지 않음(IN () 방지)
+        if(f.buffered){ helper=true; js.append("var __n").append(f.seq).append(" = 0;\r\n"); }
+        js.append("for(var ").append(f.ix).append("=0; ").append(f.ix).append("<").append(f.v).append(".length; ").append(f.ix).append("++){\r\n");
+        if(f.buffered) js.append("var __s").append(f.seq).append(" = sql; sql = \"\";\r\n");   // 본문에 <if> 가 있으면 회차 결과를 따로 모아, 내용이 있을 때만 구분자를 붙인다
+        else if(!f.sep.isEmpty()) js.append("if(").append(f.ix).append(">0) sql += \"").append(escLine(f.sep)).append("\";\r\n");
+        fe.push(f); }
+      else if(low.startsWith("</foreach")){ if(!fe.isEmpty()){ Fe f=fe.pop();
+          if(f.buffered) js.append("var __b").append(f.seq).append(" = sql; sql = __s").append(f.seq).append(";\r\nif(__trim(__b").append(f.seq).append(", \"\", \"\", \"\", \"\") != \"\"){ if(__n").append(f.seq).append(" > 0) sql += \"").append(escLine(f.sep)).append("\"; sql += __b").append(f.seq).append("; __n").append(f.seq).append("++; }\r\n");
+          js.append("}\r\n"); if(!f.close.isEmpty()) js.append("if(").append(f.v).append(".length > 0) sql += \"").append(escLine(f.close)).append("\";\r\n"); } }
       else if(low.startsWith("<select")) {}
       else warns.add("unhandled tag: "+tag);
       pos=m.end();
     }
-    if(fe.isEmpty()) emitText(js, body.substring(pos)); else emitForeachBody(js,body.substring(pos),fe.peek());
-    js.append("return sql;\r\n");
-    return js.toString();
+    String tail=body.substring(pos); if(pendingStrip!=null) tail=stripLeading(tail,pendingStrip);
+    if(fe.isEmpty()) emitText(js,tail); else emitForeachBody(js,tail,fe);
+    while(!trims.isEmpty()) js.append(trims.pop());   // 닫히지 않은 where/trim
+    return "var sql = \"\";\r\n"+(helper?TRIM_HELPER:"")+js+"return sql;\r\n";
   }
   static String attr(String tag,String name){ Matcher a=Pattern.compile("(?i)\\b"+Pattern.quote(name)+"\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')").matcher(tag); if(!a.find()) return null; return unescapeXml(a.group(1)!=null?a.group(1):a.group(2)); }
-  /** foreach 본문: #{item}/#{item.x} → '"+__feN[__iN]+"' (따옴표 감쌈), ${item} → "+__feN[__iN]+" ; 나머지 텍스트는 일반 변환 */
-  static void emitForeachBody(StringBuilder js,String text,String[] st){
-    if(text==null) return; String item=Pattern.quote(st[0]), v=st[1]+"["+st[2]+"]";
-    // '#{item}' 처럼 이미 SQL 따옴표로 감싸져 있으면 따옴표를 더 붙이지 않는다
-    String t=text.replaceAll("'\\s*#\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}\\s*'","\uE001").replaceAll("#\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}","\uE001").replaceAll("\\$\\{\\s*"+item+"(?:\\.[A-Za-z0-9_]+)?\\s*\\}","\uE002");
+  /** foreach 본문: #{item}/#{item.x} → '"+__feN[__iN]+"' (따옴표 감쌈), ${item} → "+__feN[__iN]+" , #{index}/${index} → "+__iN+" ; 바깥 foreach 의 변수도 같은 규칙(중첩); 나머지 텍스트는 일반 변환 */
+  static void emitForeachBody(StringBuilder js,String text,java.util.Deque<Fe> fe){
+    if(text==null) return; String t=text;
+    for(Fe f: fe){ String item=Pattern.quote(f.item), tail="\\s*(?:[.,][^}]*)?\\}", Q="\uE001"+f.seq+"\uE000", R="\uE002"+f.seq+"\uE000", I="\uE003"+f.seq+"\uE000";
+      // '#{item}' 처럼 이미 SQL 따옴표로 감싸져 있으면 따옴표를 더 붙이지 않는다
+      t=t.replaceAll("'\\s*#\\{\\s*"+item+tail+"\\s*'",Q).replaceAll("#\\{\\s*"+item+tail,Q).replaceAll("\\$\\{\\s*"+item+tail,R);
+      if(f.index!=null) t=t.replaceAll("[#$]\\{\\s*"+Pattern.quote(f.index)+"\\s*(?:,[^}]*)?\\}",I); }
     t=subParamsQuoted(unescapeXml(t));
-    for(String ln: t.replace("\r\n","\n").replace("\r","\n").split("\n",-1)){ if(ln.trim().isEmpty()) continue; String e=escLine(ln).replace("\uE001","'\" + "+v+" + \"'").replace("\uE002","\" + "+v+" + \""); js.append("sql += \"").append(e).append("\\r\\n\";\r\n"); }
+    for(String ln: t.replace("\r\n","\n").replace("\r","\n").split("\n",-1)){ if(ln.trim().isEmpty()) continue; String e=escLine(ln);
+      for(Fe f: fe){ String el=f.v+"["+f.ix+"]"; e=e.replace("\uE001"+f.seq+"\uE000","'\" + "+el+" + \"'").replace("\uE002"+f.seq+"\uE000","\" + "+el+" + \"").replace("\uE003"+f.seq+"\uE000","\" + "+f.ix+" + \""); }
+      js.append("sql += \"").append(e).append("\\r\\n\";\r\n"); }
   }
   static void emitText(StringBuilder js,String text){ emitText(js,text,true); }
   /** xml=false 면 평문 SQL(엔티티 복원 안 함 — '&lt;' 같은 리터럴 보존) */
@@ -222,7 +306,7 @@ public class CrfGen2 {
       System.out.println("[params NOT created in .crf; declare in Designer: "+params+"]");
     }
 
-    Rexpert4.write(rf,out);
+    CrfIO.write(rf,out);
 
     // verify
     TheReportFile rf2=Rexpert4.read(out);

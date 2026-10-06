@@ -119,7 +119,7 @@ public class CrfGen3 {
       pf.getSubSectionList().add(sd);
     }
 
-    Rexpert4.write(rf,out);
+    CrfIO.write(rf,out);
     ps.println("\nwritten "+out+"  size="+new File(out).length());
 
     // verify
