@@ -592,6 +592,10 @@ if os.path.isfile(E):
     case("review: quote in value stays inside the literal", "crf_get_query", {"path": OUT + "/v11_q.crf", "mode": "eval", "params": {"EMPNM": "x%' OR 1=1 --"}}, evalsql("NM LIKE '%x%'' OR 1=1 --%'"))
     case("review: user helper function is not dropped from the plain view", "crf_set_query", {"path": E, "sql": 'function mk(){ return "SELECT EMPNO, EMP_NM FROM T"; }\nvar sql = mk();\nsql += " ORDER BY 1";\nreturn sql;', "script_type": "javascript", "sync_fields": "none", "output": OUT + "/v11_fn.crf"}, lambda t, e: None if not e and "return 문이 없" not in t and "✖" not in t else f"fn: {t[:300]}")
     case("review: plain view keeps SQL built in a user function", "crf_get_query", {"path": OUT + "/v11_fn.crf", "mode": "plain"}, contains("SELECT EMPNO, EMP_NM FROM T", "ORDER BY 1"))
+    # v0.12.1: 암호화 쿼리의 NUL 종결 — 글자 수가 연속인 쿼리 4개를 저장(그중 하나는 4의 배수 = 엔진 암호화가 0 채움을 안 붙이는 길이). 바이트 검사는 nul_check()
+    for _k in range(4):
+        case("nul: save query of length L+%d" % _k, "crf_set_query", {"path": E, "sql": "SELECT EMPNO, EMP_NM FROM T" + "X" * _k, "sync_fields": "none", "output": OUT + "/v121_nul%d.crf" % _k},
+             lambda t, e: None if not e and t.startswith("OK") else f"set_query: {t[:300]}")
     if os.environ.get("CLIP_SMOKE_DB", "1") == "1":
         case("sync_fields db on JS query uses the executed SQL", "crf_sync_fields", {"path": E, "dataset": "0", "mode": "db", "output": OUT + "/v11_sync.crf"},
              lambda t, e: None if not e and t.startswith("OK") and "DB ResultSetMetaData, JS 실행 SQL" in t else f"sync db eval: {t[:400]}")
@@ -799,7 +803,7 @@ def docs_check():
     out.append(("docs: README tool count matches tools/list", None if want in readme and f"## MCP 도구 ({len(tools)})" in readme and f"도구 {len(tools)}개 노출" in readme else f"README 에 '{want}' / '## MCP 도구 ({len(tools)})' / '도구 {len(tools)}개 노출' 이 있어야 함"))
     miss = [t for t in tools if f"`{t}" not in readme]
     out.append(("docs: every tool is documented in README", None if not miss else f"README 에 없는 도구: {miss}"))
-    total = len(CASES) + 6 - (2 if os.path.isfile(HWPF) else 0)   # README 의 숫자는 선택 픽스처(CLIP_SMOKE_HWP) 없이 센 값
+    total = len(CASES) + 9 - (2 if os.path.isfile(HWPF) else 0)   # README 의 숫자는 선택 픽스처(CLIP_SMOKE_HWP) 없이 센 값
     full =all(os.path.isfile(f) for f in (A, B, C, D, E, X, XT)) and bool(RENDER) and os.environ.get("CLIP_SMOKE_DB", "1") == "1"   # 픽스처가 다 있을 때만 케이스 수가 고정
     out.append(("docs: README smoke case count" + ("" if full else " (픽스처 일부 없음 — 건너뜀)"), None if not full or f"{total} 케이스" in readme else f"README 테스트 절의 케이스 수를 {total} 로"))
     out.append(("docs: CHANGELOG has the current VERSION", None if f"## [{version}]" in rd("CHANGELOG.md") else f"CHANGELOG.md 에 [{version}] 항목 없음"))
@@ -824,6 +828,35 @@ def files_check(since):
             ("files: fixture originals are byte-identical after the run", None if not changed else f"원본이 바뀜: {changed}")]
 
 
+ZERO_BLOCK = bytes.fromhex("ac72da02d1a8453c")   # 엔진 키로 암호화한 0x00*8 — 디자이너가 4n 자 쿼리 끝에 붙이는 블록
+def _sql900(buf):
+    """첫 암호화 쿼리(속성 900, type 11)의 (길이 필드 위치, 암호문)."""
+    i = buf.find(bytes([0x84, 0x03, 11, 0]))
+    if i < 0: return None
+    ln = int.from_bytes(buf[i + 4:i + 8], "little")
+    return (i + 4, buf[i + 8:i + 8 + ln]) if ln and ln % 8 == 0 and i + 8 + ln <= len(buf) else None
+
+
+def nul_check():
+    """저장한 암호화 쿼리가 NUL 로 끝나는지(디자이너는 NUL 종결을 전제로 읽는다 — 없으면 쿼리 끝에 쓰레기 글자).
+    글자 수 L..L+3 인 쿼리 4개 중 4의 배수인 하나는 암호문이 0 블록으로 끝나야 한다. 그 블록을 떼어 낸 파일(v0.12.0 이 쓰던 모양)은 crf_validate 가 ✖ 로 잡아야 한다."""
+    fs = [OUT + "/v121_nul%d.crf" % k for k in range(4)]
+    if not os.path.isfile(E): return []
+    got = [_sql900(open(f, "rb").read()) if os.path.isfile(f) else None for f in fs]
+    ends = [k for k, g in enumerate(got) if g and g[1].endswith(ZERO_BLOCK)]
+    out = [("nul: the 4n-char query ends with an encrypted zero block (NUL terminator)", None if all(got) and len(ends) == 1 else f"0 블록으로 끝나는 파일 {ends} (기대: 정확히 1개), 암호문 길이 {[len(g[1]) if g else None for g in got]}")]
+    if len(ends) != 1: return out + [("nul: crf_validate flags a query saved without the terminator", "앞 검사 실패로 건너뜀"), ("nul: crf_validate is quiet on terminated queries", "앞 검사 실패로 건너뜀")]
+    buf = open(fs[ends[0]], "rb").read(); pos, ct = got[ends[0]]
+    bad = OUT + "/v121_nul_bad.crf"
+    open(bad, "wb").write(buf[:pos] + (len(ct) - 8).to_bytes(4, "little") + ct[:-8] + buf[pos + 4 + len(ct):])
+    res, _ = mcpcall.call([("crf_validate", {"path": bad})] + [("crf_validate", {"path": f}) for f in fs])
+    t = res[1][1]
+    out.append(("nul: crf_validate flags a query saved without the terminator", None if "NUL 종결 없음" in t and "데이터셋 " in t.split("NUL 종결 없음")[0].splitlines()[-1] else f"validate(bad): {t[:300]}"))
+    noisy = [os.path.basename(f) for f, r in zip(fs, res[2:]) if r[2] or "NUL 종결" in r[1]]
+    out.append(("nul: crf_validate is quiet on terminated queries", None if not noisy else f"잘못 경고한 파일: {noisy}"))
+    return out
+
+
 def main():
     import time; since = time.time() - 2
     calls =[(t, a) for _, t, a, _ in CASES]
@@ -836,7 +869,7 @@ def main():
         if msg is not None: fails += 1
         print(f"[{status}] {name}" + (f"\n        {msg}" if msg else ""))
         if VERBOSE: print("        " + text.replace("\n", "\n        ")[:600])
-    doc = files_check(since) + docs_check()
+    doc = files_check(since) + nul_check() + docs_check()
     for name, msg in doc:
         if msg is not None: fails += 1
         print(f"[{'PASS' if msg is None else 'FAIL'}] {name}" + (f"\n        {msg}" if msg else ""))

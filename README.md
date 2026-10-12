@@ -14,7 +14,7 @@ Claude에게 "리포트 조작 도구"를 쥐여주면, 사용자는 **자연어
 - **업무지식 + 쿼리 도움** — 화면파일(xfdl/vue)·문서양식 → 백엔드 역추적 + **DB 도메인테이블 조회**(`db_*` 도구)로 업무지식 확보 → 양식에 맞는 **추천 제안 + 쿼리 작성/변환**
 
 > ⚠️ 바이너리를 직접 조작하지 않습니다. Clipsoft **공식 Java 엔진**의 reader/writer 로 읽고 씁니다(REX30 포맷·직렬화·암복호는 엔진 것).
-> 단 엔진 기본 writer 에는 저장 결함이 셋 있어 `src/CrfIO.java` 가 보정합니다 — **쿼리 본문을 평문으로 쓰는 것**(디자이너는 암호화 저장), 크로스탭 셀 헤더 개수 불일치(되읽기 실패), 웹 링크 팝업 너비 속성 ID 오류. 아래 [핵심 노하우](#핵심-노하우-리버스-엔지니어링으로-확인) 참조.
+> 단 엔진 기본 writer 에는 저장 결함이 넷 있어 `src/CrfIO.java` 가 보정합니다 — **쿼리 본문을 평문으로 쓰는 것**(디자이너는 암호화 저장), 크로스탭 셀 헤더 개수 불일치(되읽기 실패), 웹 링크 팝업 너비 속성 ID 오류, **암호화 문자열의 NUL 종결 누락**(디자이너에서 쿼리 끝에 쓰레기 글자). 아래 [핵심 노하우](#핵심-노하우-리버스-엔지니어링으로-확인) 참조.
 
 ---
 
@@ -119,14 +119,14 @@ cd clip-report-mcp
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 366 케이스
+python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 373 케이스
 python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
 ```
 - 픽스처(실 리포트) 경로는 환경변수 `CLIP_SMOKE_A`~`E`, `CLIP_SMOKE_F1`, `CLIP_SMOKE_X` 로 바꾼다. 파일이 없으면 그 케이스는 건너뛴다(그만큼 총 케이스 수가 줄어든다).
 - 문서 파서 케이스는 DOCX/XLSX/PPTX/HWPX/HTML/PNG 픽스처를 테스트가 직접 만들어 쓴다(`.smoke-out/docs/`). 바이너리 HWP 는 `CLIP_SMOKE_HWP=<실제 .hwp>` 를 주면 2 케이스가 추가된다. `doc_image` 의 변환 케이스는 변환기가 있든 없든 통과하도록(그림 또는 명확한 ERROR) 되어 있다.
 - `CLIP_MCP_SAVE_IMAGES=<폴더>` 를 주면 `mcpcall.py`/`smoke.py` 가 `doc_image`·`crf_preview` 가 돌려준 그림을 그 폴더에 저장한다.
 - `crf_render` 케이스(11 + 크로스탭 수치 검증 1)는 리포트 서버 웹앱이 있을 때만 돈다(`CLIP_RENDER_WEBAPP` 환경변수 또는 `.env`). 크로스탭 저장 케이스의 픽스처는 `CLIP_SMOKE_XT`.
-- 끝에서 **이번 실행이 쓴 모든 `.crf` 에 평문 SQL 이 없는지**(속성 900 이 암호화 타입인지) 바이트로 검사하고, **픽스처 원본이 실행 전과 바이트 단위로 같은지** 해시로 확인한다.
+- 끝에서 **이번 실행이 쓴 모든 `.crf` 에 평문 SQL 이 없는지**(속성 900 이 암호화 타입인지) 바이트로 검사하고, **픽스처 원본이 실행 전과 바이트 단위로 같은지** 해시로 확인한다. 이어서 **암호화 쿼리의 NUL 종결**(글자 수가 4의 배수인 쿼리의 암호문이 0 블록으로 끝나는지, 그 블록이 없는 파일을 `crf_validate` 가 잡는지)을 3 케이스로 검사한다.
 - DB 를 실제로 치는 케이스(`crf_sync_fields mode=db` 4건)는 개발 DB 연결이 필요하다 — DB 가 없으면 `CLIP_SMOKE_DB=0` 으로 끈다.
 - 마지막 4 케이스는 **문서 정합성**: README 의 도구 수·도구 이름·케이스 수, CHANGELOG 의 현재 버전 항목이 코드와 어긋나면 FAIL(문서가 현상과 달라지는 것을 막는다).
 - `tools/mcpcall.py` 는 `clip-report.mcp.json`(install.ps1 생성)에서 java/classpath 를 읽는다(없으면 `CLIP_JAVA`/`CLIP_CP`). 여러 호출을 넘기면 첫 오류에서 멈추고(`--continue-on-error` 로 계속), 쓰기 결과는 `.smoke-out/`.
@@ -171,7 +171,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 |---|---|---|
 | 설명 | `crf_summary(path)` | 데이터셋·필드·쿼리·그룹·섹션 요약 |
 | 설명 | `crf_describe_layout(path, [detail])` | 섹션→서브섹션(유형/높이/숨김/서브리포트 링크)→컨트롤 + 표 셀 그리드(`‹병합›`, `{출력양식}`). `detail=true` 면 셀/컨트롤별 정렬·폰트·크기·굵게·줄바꿈·확장·셀합치기·조건스타일 |
-| 설명 | `crf_validate(path, [excel])` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, **JS 동적쿼리의 문법 오류·실행 오류**(실제 JS 엔진으로 실행해 확인: 닫히지 않은 괄호, 선언 안 한 변수 등), 그룹 필드 null, 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, `System` 기본 글꼴·글꼴 섞임, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음. **`excel=true`**: 엑셀 격자(엑셀로 내보내는 밴드의 표 열 경계·글상자 좌우·선 x 가 본문 표 경계 ±1mm 에 있는지, 페이지 바닥글 제외; 어긋난 변마다 엑셀 열이 쪼개짐)를 ⚠ 로 |
+| 설명 | `crf_validate(path, [excel])` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, **JS 동적쿼리의 문법 오류·실행 오류**(실제 JS 엔진으로 실행해 확인: 닫히지 않은 괄호, 선언 안 한 변수 등), 그룹 필드 null, **NUL 종결 없이 저장된 암호화 쿼리**(v0.12.0 저장본 — 디자이너에서 쿼리 끝에 쓰레기 글자), 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, `System` 기본 글꼴·글꼴 섞임, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음. **`excel=true`**: 엑셀 격자(엑셀로 내보내는 밴드의 표 열 경계·글상자 좌우·선 x 가 본문 표 경계 ±1mm 에 있는지, 페이지 바닥글 제외; 어긋난 변마다 엑셀 열이 쪼개짐)를 ⚠ 로 |
 | 설명 | `crf_get_query(path, [dataset|mode|params])` | **쿼리 본문** — 데이터셋별 scriptType·연결·필드·사용 매개변수(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JS 동적쿼리는 원문 + **평문 복원본**(if 블록은 `/*IF*/` 주석). **`params={"DEPTCD":"20399"}`(또는 `mode=eval`) 를 주면 그 값으로 JS 를 실제 실행한 SQL** — 리포트가 DB 로 보내는 문장 그대로라 "0건/조건이 안 먹는다" 를 바로 확인(XML/JSON 데이터셋은 루트 XPath·필드 경로) |
 | 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
 | 설명 | `crf_search(dir, text, [regex|scope|like|limit])` | 폴더 **검색** — scope=`query`(JS는 평문으로; XML/JSON 데이터셋의 **XPath** 포함)·`xpath`·`field`·`formula`·`param`·`control`(라벨/셀 텍스트·바인딩)·`any`. "테이블 X 쓰는 리포트", "매개변수 Y 받는 리포트" 찾기 (~5ms/파일) |
@@ -344,6 +344,7 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
   ① `DataAccessMethodSQLWriter` 가 쿼리 본문(속성 900)을 평문 문자열(type 9)로 쓴다 — pre/post SQL(910/911)만 암호화(type 11). 디자이너가 저장한 파일은 900 도 암호화라, 그대로 저장하면 쿼리가 평문이 된다(저장소 2,549개 중 2,534개가 암호화 상태). 리더는 두 타입을 다 읽는다.
   ② `CrosstabCellNormalWriter` 가 헤더에 속성 23개를 선언하고 24개를 쓴다 → 크로스탭이 든 리포트는 저장 후 되읽기에서 `EOFException`(저장소의 크로스탭 리포트 48개 전부).
   ③ `WebLinkInfoWriter` 가 팝업 너비를 팝업 높이의 속성 ID(48116)로 쓴다 → 되읽으면 높이 값이 바뀐다(8개).
+  ④ 암호화 함수(`StringUtil.encrypt`: UTF-16LE → `DES/ECB/NoPadding`)가 평문을 8바이트 블록에 맞춰 0 으로 채우기만 한다 → **글자 수가 4의 배수면 복호화 평문에 NUL 종결이 없다.** 디자이너는 NUL 종결을 전제로 읽어 쿼리 끝에 쓰레기 글자를 보여 준다(엔진 리더는 길이만큼만 읽어 증상 없음). 디자이너가 쓴 값은 항상 NUL 로 끝난다(이미 8의 배수면 0 블록을 하나 더; 빈 문자열도 0 블록 하나) → 문자열 끝에 NUL 한 글자를 붙여 암호화하면 같은 바이트가 된다(v0.12.1).
   보정 후 저장소 전체 2,549개가 읽기→저장→읽기→저장에서 내용이 같다.
 - **크로스탭 구조**: `ControlCrosstab` = 행/열 `GroupCrosstab`(그룹 필드 + 표시 이름 필드) + 네 행렬(머리 1×1, 행 라벨, 열 라벨, 값). 라벨 셀은 **필드 없이 `ApplyValueType.Field`** 이면 그 축의 그룹 이름이 찍힌다. 값 셀은 필드 + `Summary.function`. 합계는 각 축 행렬의 둘째 칸(`RowTotal`/`ColumnTotal`). 보통 데이터 머리글 밴드에 두고 본문 높이는 0.
 - **누적합산**: `FieldRunningTotal` = 요약 필드 + 함수 + `ForEachRecord` + (`ResetNever` | `ResetOnChangeOfGroup` + 그룹). 그룹 바닥글에 두면 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 공식과 같은 값(실제 엔진 출력으로 대조).
@@ -386,7 +387,7 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 
 - **Clipsoft 엔진 jar는 라이선스 자산** — 공개 저장소 포함 금지. 본 프로젝트(래퍼 코드)만 공유, 실행 호스트에 CLIP report 설치 필요.
 - 쓰기 도구는 기본 `output` 별도 지정 → **원본 비파괴**. `in_place=true` 일 때만 원본에 쓰고 첫 쓰기 전에 `<path>.bak` 백업.
-- **저장 시 쿼리 본문은 암호화**된다(`CrfIO`, 엔진의 암호화 함수 사용 — 디자이너 저장과 같은 형식). v0.11.0 까지의 도구로 저장한 리포트는 쿼리가 **평문**으로 들어 있다: 그런 파일은 `java -cp "<CLIP jar>\*;clip-report-mcp.jar" CrfIO in.crf out.crf` 또는 아무 수정 도구로 한 번 다시 저장하면 암호화된다. 암호화는 파일을 열어 본 사람이 쿼리를 바로 읽지 못하게 하는 수준이고(엔진 jar 가 있으면 누구나 복호), 접근 통제를 대신하지 않는다. `CLIP_SQL_PLAIN=1` 이면 평문으로 쓴다(디버깅용).
+- **저장 시 쿼리 본문은 암호화**된다(`CrfIO`, 엔진의 암호화 함수 사용 — 디자이너 저장과 같은 형식). v0.11.0 까지의 도구로 저장한 리포트는 쿼리가 **평문**으로 들어 있다: 그런 파일은 `java -cp "<CLIP jar>\*;clip-report-mcp.jar" CrfIO in.crf out.crf` 또는 아무 수정 도구로 한 번 다시 저장하면 암호화된다. **v0.12.0 으로 저장한 리포트** 중 쿼리 글자 수가 4의 배수인 것은 디자이너에서 쿼리 끝에 쓰레기 글자가 보인다 — `crf_validate` 가 ✖ 로 알려 주며 같은 방법(v0.12.1 이상으로 다시 저장)으로 고친다. 암호화는 파일을 열어 본 사람이 쿼리를 바로 읽지 못하게 하는 수준이고(엔진 jar 가 있으면 누구나 복호), 접근 통제를 대신하지 않는다. `CLIP_SQL_PLAIN=1` 이면 평문으로 쓴다(디버깅용).
 - `crf_render mode=db` 는 리포트에 든 SQL 을 서버 설정의 DB 계정으로 실행한다 — **출처를 모르는 `.crf` 에는 쓰지 말 것**(`mode=sample` 은 DB 에 접속하지 않고 쿼리도 실행하지 않는다). 출력 PDF 에는 실제 데이터가, 엔진 로그에는 실행한 SQL 이 들어가며 `%TEMP%/clip-report-mcp-render/` 에 남는다(다음 실행 때 하루 지난 것 삭제 — 위 설정 절 참조).
 - `.crf` 안의 JS 쿼리를 실행해 볼 때(`crf_get_query params`, `crf_validate`, `crf_set_query` 검사 등)는 **샌드박스**: 스크립트에서 Java 클래스 접근(`java.*`/`Packages`)을 막고 3초 시간 제한을 둔다. DB 에는 아무것도 보내지 않는다(DB 를 치는 것은 `db_*` 도구와 `mode=db`/`fields_from_db` 뿐).
 - 문서 파서는 XML 외부 엔티티(XXE)·DTD 를 끄고, 압축 해제 크기(항목당 64MB·호출당 256MB)와 그림 크기(1.2억 화소, 풀기 전에 머리글로 확인)를 제한한다.

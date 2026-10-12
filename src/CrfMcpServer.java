@@ -1095,6 +1095,12 @@ public class CrfMcpServer {
     for(String x: stackedLabelRuns(rf)){ if(x.startsWith("!")) warn.add(x.substring(1)); else info.add(x); }
     // 9) 엑셀 격자: 머리글 밴드 표의 열 경계가 본문 표 경계의 부분집합인지
     for(String x: excelGridIssues(rf)){ if("true".equalsIgnoreCase(s(args,"excel"))) warn.add(x); else info.add(x); }
+    // 10) 암호화 문자열의 NUL 종결(v0.12.0 저장본: 글자 수가 4의 배수인 쿼리) — 디자이너에서 쿼리 끝에 쓰레기 글자가 붙어 보인다
+    try{ for(String h: CrfIO.unterminated(new File(path.trim()).getPath())){ int t=h.indexOf('\t'); String id=h.substring(0,t), v=h.substring(t+1).trim(), who=null;
+        for(int i=0;i<dss.size() && who==null;i++){ DataSetItemNormal n=dss.get(i).getDataSetItemNormal(); DataAccessMethodSQL qm=n==null?null:n.getDataAccessMethodSQL(); if(qm==null) continue;
+          String cmp=id.equals("900")?qm.getQueryString():id.equals("910")?qm.getPreSQL():id.equals("911")?qm.getPostSQL():null; if(cmp!=null && cmp.trim().equals(v)) who="데이터셋 "+dss.get(i).getName()+(id.equals("900")?"":id.equals("910")?" 실행 전 SQL":" 실행 후 SQL"); }
+        err.add((who==null?"암호화 문자열(속성 "+id+")":who)+": 저장된 쿼리에 NUL 종결 없음("+v.length()+"자) — 디자이너에서 열면 쿼리 끝에 쓰레기 글자가 붙어 보임(v0.12.0 저장본). v0.12.1 이상에서 아무 수정 도구로 다시 저장하거나 CrfIO CLI(java -cp … CrfIO in.crf out.crf)로 다시 쓰면 고쳐짐"); }
+    }catch(Throwable t){ info.add("암호화 문자열 NUL 종결 검사를 건너뜀: "+t); }
     StringBuilder b=new StringBuilder(new File(path).getName()+" — ERROR "+err.size()+" / WARN "+warn.size()+" / INFO "+info.size()+"  (바인딩 "+nRefs+"곳, 공식 "+fl.size()+", 그룹 "+gl.size()+", 데이터셋 "+dss.size()+")\n");
     for(String x: err) b.append("  ✖ ").append(x).append("\n"); for(String x: warn) b.append("  ⚠ ").append(x).append("\n"); for(String x: info) b.append("  ℹ ").append(x).append("\n");
     if(err.isEmpty()&&warn.isEmpty()) b.append("  ✔ 문제 없음\n");
