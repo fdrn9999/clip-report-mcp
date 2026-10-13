@@ -125,7 +125,7 @@ public class CrfMcpServer {
   static int numOf(String s){ try{ String d=s.replaceAll("[^0-9]",""); return d.isEmpty()?0:Integer.parseInt(d); }catch(Exception e){ return 0; } }
 
   @SuppressWarnings("unchecked")
-  static JSONObject initResult(){ JSONObject r=new JSONObject(); r.put("protocolVersion","2024-11-05"); JSONObject caps=new JSONObject(); caps.put("tools",new JSONObject()); r.put("capabilities",caps); JSONObject si=new JSONObject(); si.put("name","clip-report-mcp"); si.put("version",VERSION); r.put("serverInfo",si); r.put("instructions",INSTRUCTIONS+updateNotice()); return r; }
+  static JSONObject initResult(){ JSONObject r=new JSONObject(); r.put("protocolVersion","2024-11-05"); JSONObject caps=new JSONObject(); caps.put("tools",new JSONObject()); r.put("capabilities",caps); JSONObject si=new JSONObject(); si.put("name","clip-report-mcp"); si.put("version",VERSION); r.put("serverInfo",si); r.put("instructions",INSTRUCTIONS+dbToggleNote()+updateNotice()); return r; }
 
   @SuppressWarnings("unchecked")
   static JSONObject tool(String name,String desc, JSONObject schema){ JSONObject t=new JSONObject(); t.put("name",name); t.put("description",desc); t.put("inputSchema",schema); return t; }
@@ -229,13 +229,13 @@ public class CrfMcpServer {
     arr.add(tool("crf_diff","Compare two reports: datasets/fields/groups/sections and what was added or removed.",
         strSchema(new String[]{"a","b"}, "a","first .crf", "b","second .crf")));
     // ---- DB tools (도메인 테이블 조회로 업무지식 확보; 접속정보는 env CLIP_DB_URL/USER/PWD) ----
-    arr.add(tool("db_query","Run SQL against the connected DB (Tibero/Oracle) and return rows as TSV (capped). SELECT 권장. Tibero: ROWNUM<=N, SYSDATE, DUAL.",
+    arr.add(tool("db_query","Run SQL against the connected DB (Tibero/Oracle) and return rows as TSV (capped). DB access is OFF by default: needs CLIP_DB_READ=1 in .env (write statements additionally need CLIP_DB_WRITE=1 and allow_write=true). SELECT 권장. Tibero: ROWNUM<=N, SYSDATE, DUAL.",
         strSchema(new String[]{"sql"}, "sql","SQL statement (SELECT/WITH only unless allow_write=true)", "max","max rows (default 200)", "allow_write","true to permit INSERT/UPDATE/DELETE/DDL (default false)")));
-    arr.add(tool("db_tables","List DB tables whose name contains a keyword (ALL_TABLES). Empty keyword = my (USER) tables.",
+    arr.add(tool("db_tables","List DB tables whose name contains a keyword (ALL_TABLES). Needs CLIP_DB_READ=1 (DB access is off by default). Empty keyword = my (USER) tables.",
         strSchema(new String[]{}, "like","table-name keyword, e.g. AHRMEV (optional)")));
-    arr.add(tool("db_columns","Describe a table's columns: name, type, length, nullable, and COMMENT (업무 의미).",
+    arr.add(tool("db_columns","Describe a table's columns: name, type, length, nullable, and COMMENT (업무 의미). Needs CLIP_DB_READ=1 (DB access is off by default).",
         strSchema(new String[]{"table"}, "table","table name")));
-    arr.add(tool("db_sample","Sample rows from a table (SELECT * WHERE ROWNUM<=N).",
+    arr.add(tool("db_sample","Sample rows from a table (SELECT * WHERE ROWNUM<=N). Needs CLIP_DB_READ=1 (DB access is off by default).",
         strSchema(new String[]{"table"}, "table","table name", "max","row count (default 20)")));
     arr.add(tool("pdf_text","Extract plain text from a PDF document (문서 양식/사양 읽기). For positions, other formats, or a picture of the page use doc_text / doc_image.",
         strSchema(new String[]{"path"}, "path","PDF file path")));
@@ -352,10 +352,12 @@ public class CrfMcpServer {
       case "crf_diff":return textContent(diff((String)args.get("a"),(String)args.get("b")));
       case "db_query":{ String sql=s(args,"sql"); if(sql==null||sql.trim().isEmpty()) return textContent("ERROR: sql 인자가 비어 있습니다");
         if(!"true".equalsIgnoreCase(s(args,"allow_write")) && !isReadOnlySql(sql)) return textContent("ERROR: db_query 는 SELECT/WITH 조회만 허용합니다. 쓰기 문장(INSERT/UPDATE/DELETE/DDL)은 allow_write=true 를 명시해야 합니다: "+sql.trim().replaceAll("\\s+"," ").substring(0,Math.min(80,sql.trim().length())));
+        if(!isReadOnlySql(sql)){ requireDbRead("db_query"); if(!on("CLIP_DB_WRITE")) return textContent("ERROR: DB 쓰기가 꺼져 있습니다(기본값) — 쓰기 문장(INSERT/UPDATE/DELETE/DDL)은 실행하지 않았습니다. 켜려면 .env(또는 환경변수)에 CLIP_DB_WRITE=1 을 넣고 /mcp 로 재연결해야 합니다. 사용자에게 알리고, 임의로 설정을 바꾸지 마세요."); }
+        requireDbRead("db_query");
         return textContent(runSql(sql, pInt(args.get("max"),200))); }
-      case "db_tables":return textContent(dbTables((String)args.get("like")));
-      case "db_columns":return textContent(dbColumns((String)args.get("table")));
-      case "db_sample":{ int mx=pInt(args.get("max"),20); return textContent(runSql("SELECT * FROM "+safeName((String)args.get("table"))+" WHERE ROWNUM <= "+mx, mx+5)); }
+      case "db_tables":requireDbRead("db_tables"); return textContent(dbTables((String)args.get("like")));
+      case "db_columns":requireDbRead("db_columns"); return textContent(dbColumns((String)args.get("table")));
+      case "db_sample":{ requireDbRead("db_sample"); int mx=pInt(args.get("max"),20); return textContent(runSql("SELECT * FROM "+safeName((String)args.get("table"))+" WHERE ROWNUM <= "+mx, mx+5)); }
       case "pdf_text":return textContent(pdfText((String)args.get("path")));
       case "doc_text":return textContent(CrfDocs.text(args));
       case "doc_image":return CrfDocs.image(args);
@@ -798,7 +800,20 @@ public class CrfMcpServer {
       } m.put("__source", f.getPath()); break; }catch(Exception ex){} }
     return m;
   }
+  // ---- DB 접근 토글(기본 꺼짐) — 엄격한 사내 환경용. CLIP_DB_READ=1 이어야 DB 에 접속하고, 쓰기 문장은 CLIP_DB_WRITE=1 까지 있어야 한다. 환경변수 우선, 없으면 .env.
+  static String setting(String k){ String v=System.getenv(k); if(v==null||v.trim().isEmpty()){ try{ v=loadDotEnv().get(k); }catch(Throwable t){ v=null; } } return v==null?"":v.trim(); }
+  static boolean on(String k){ String v=setting(k).toLowerCase(); return v.equals("1")||v.equals("true")||v.equals("on")||v.equals("yes"); }
+  static final String DB_OFF="DB 접근이 꺼져 있습니다(기본값)";
+  static void requireDbRead(String what){
+    if(!on("CLIP_DB_READ")) throw new RuntimeException(DB_OFF+" — "+what+" 은(는) DB 에 접속하므로 실행하지 않았습니다. 켜려면 .env(또는 환경변수)에 CLIP_DB_READ=1 을 넣고 /mcp 로 clip-report 를 재연결하세요(쓰기 문장까지는 CLIP_DB_WRITE=1). 사용자에게 알리고, 임의로 설정을 바꾸지 마세요. DB 없이: 쿼리는 Qry.xml·crf_get_query 에 적힌 그대로 보고, 컬럼은 crf_sync_fields mode=sql, 출력은 crf_render mode=sample");
+  }
+  static String dbToggleNote(){
+    if(!on("CLIP_DB_READ")) return "\n[★DB 접근 꺼짐] 이 설치는 DB 접근이 꺼져 있습니다(기본값, CLIP_DB_READ 미설정): db_query/db_tables/db_columns/db_sample, crf_sync_fields mode=db, fields_from_db=true, crf_render mode=db 는 ERROR 를 돌려줍니다. **쿼리를 DB 에 실제로 날려 보는 일은 하지 않습니다** — 이 도구들을 시도하지 말고, 쿼리는 주어진 매퍼(Qry.xml)·리포트 안의 쿼리(crf_get_query)에 적힌 그대로, 화면은 주어진 화면 소스(.vue/.xfdl)만 보고 진행하세요. 컬럼·타입은 SELECT 목록 파싱(crf_sync_fields mode=sql)으로 정하고, 출력 확인은 crf_render mode=sample(가상 데이터)까지. DB 에서만 알 수 있는 것은 추정하지 말고 **사용자에게 요청**합니다: 프로시저·함수·뷰 본문이나 테이블 컬럼 정의가 필요하면 그 소스(DDL)를 달라고 하고, 실제 값·건수·'SELECT *' 의 컬럼 목록처럼 쿼리 결과가 필요하면 **실행할 SQL 을 그대로 적어 주고 조회 결과를 붙여 달라고** 요청하세요(요청은 한 번에 모아서). 확인하지 못한 것(실제 실행 결과)은 보고에 적습니다. 사용자가 켜 달라고 하면 .env 의 CLIP_DB_READ=1 을 안내합니다.\n";
+    if(!on("CLIP_DB_WRITE")) return "\n[★DB 는 조회 전용] DB 조회는 켜져 있고(CLIP_DB_READ=1) 쓰기 문장(INSERT/UPDATE/DELETE/DDL)은 꺼져 있습니다(CLIP_DB_WRITE 미설정) — db_query allow_write=true 는 ERROR.\n";
+    return "\n[★DB 쓰기 켜짐] CLIP_DB_WRITE=1 — db_query allow_write=true 로 쓰기 문장이 실행됩니다. 사용자가 명시적으로 요청한 문장만 실행하세요.\n";
+  }
   static Connection db() throws Exception {
+    requireDbRead("이 도구");
     String url=System.getenv("CLIP_DB_URL"), user=System.getenv("CLIP_DB_USER"), pwd=System.getenv("CLIP_DB_PWD");
     if(url==null||user==null||pwd==null){ java.util.Map<String,String> e=loadDotEnv();
       if(url==null) url=e.get("CLIP_DB_URL"); if(user==null) user=e.get("CLIP_DB_USER"); if(pwd==null) pwd=e.get("CLIP_DB_PWD"); }

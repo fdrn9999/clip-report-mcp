@@ -56,6 +56,8 @@ if(Test-Path $Tibero){ ok "Tibero JDBC jar 있음 (db_* 도구용)" } else { inf
 $envf=@("$proj\.env","$env:USERPROFILE\.dbtools\.env","$env:USERPROFILE\clip-report-mcp\.env") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if($envf){ ok ".env 발견"; info $envf; $keys=(Get-Content $envf|Where-Object{$_ -match '^\s*CLIP_DB_'}|ForEach-Object{($_ -split '=')[0].Trim()}); info ("키: "+($keys -join ', ')) }
 else{ info ".env 없음 → db_* 도구만 불가(연결과 무관)" }
+$dbRead = if($env:CLIP_DB_READ){ $env:CLIP_DB_READ } elseif($envf){ ((Get-Content $envf|Where-Object{$_ -match '^\s*CLIP_DB_READ\s*='}|Select-Object -Last 1) -split '=',2)[1] } else { $null }
+if("$dbRead".Trim().Trim('"',"'") -match '^(1|true|on|yes)$'){ info "DB 접근 토글: 조회 켜짐(CLIP_DB_READ)" } else { info "DB 접근 토글: 꺼짐(기본) → DB 도구는 ERROR. 켜려면 .env 에 CLIP_DB_READ=1 (쓰기는 CLIP_DB_WRITE=1)" }
 
 # 6) ★ 실제 서버 기동 테스트
 Write-Host "`n-- 서버 기동 테스트 (연결 불가의 진짜 원인) --"

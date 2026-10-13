@@ -3,6 +3,22 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.13.0] - 2026-10-13
+엄격한 사내 환경용 **DB 접근 토글**. ⚠ **기본값이 바뀐다 — DB 접근은 이제 꺼져 있다.** 지금까지 `.env` 에 접속정보만 있으면 되던 DB 도구는 `CLIP_DB_READ=1` 을 넣어야 다시 동작한다. 도구 수 변화 없음(56).
+### Changed
+- **DB 접근은 기본 꺼짐, 토글로 켠다**(`.env` 또는 환경변수, 값은 `1`/`true`/`on`/`yes`; 바꾼 뒤 `/mcp` 재연결):
+  - `CLIP_DB_READ=1` — DB **조회**: `db_query`(SELECT/WITH)·`db_tables`·`db_columns`·`db_sample`, `crf_sync_fields mode=db`, `crf_generate`/`crf_set_query` 의 `fields_from_db=true`, `crf_render mode=db`.
+  - `CLIP_DB_WRITE=1` — DB **쓰기 문장**(INSERT/UPDATE/DELETE/DDL): `db_query allow_write=true`. 조회 토글도 켜져 있어야 하고, 호출마다 `allow_write=true` 를 주는 기존 조건도 그대로다(토글 + 인자 둘 다 필요).
+  - 꺼져 있으면 위 도구는 **DB 에 접속하기 전에** ERROR 로 끝난다(접속정보가 `.env` 에 있어도 연결을 만들지 않음). 메시지에 켜는 방법과 "임의로 설정을 바꾸지 말고 사용자에게 알릴 것" 을 적는다. `.crf` 읽기·쓰기, 문서 파서, `crf_render mode=sample` 등 나머지 도구는 영향 없음.
+- **꺼진 상태에서의 작업 방식을 서버 안내문(instructions)에 넣음**(토글 상태에 따라 접속 시 달라짐): 쿼리를 DB 에 실제로 날려 보지 않고, 주어진 매퍼(Qry.xml)·리포트 안의 쿼리·화면 소스에 적힌 그대로 진행한다. 컬럼은 SELECT 목록 파싱, 출력 확인은 가상 데이터까지. DB 에서만 알 수 있는 것은 추정하지 않고 **사용자에게 요청** — 프로시저·함수·뷰 본문이나 테이블 정의는 소스를 달라고 하고, 실제 값·건수·`SELECT *` 의 컬럼처럼 결과가 필요하면 실행할 SQL 을 적어 주고 조회 결과를 받는다. 조회만 켠 상태·쓰기까지 켠 상태도 각각 한 줄로 알린다.
+- DB 도구 설명(tools/list)에 "기본 꺼짐, `CLIP_DB_READ=1` 필요" 를 적음. `/clipreport` 명령·README·`.env.example`·`doctor.ps1`(토글 상태 표시) 갱신.
+### 업그레이드할 때
+- DB 도구를 쓰던 PC 는 `.env` 에 `CLIP_DB_READ=1` 한 줄을 추가하고 `/mcp` 재연결. 넣지 않으면 DB 도구가 "DB 접근이 꺼져 있습니다" ERROR 를 돌려준다.
+- `tools/smoke.py` 는 본 실행을 조회만 켠 서버로 돌린다(환경에 무관하게 스스로 설정). 385 케이스(+12): 쓰기 문장 거부 2, 꺼진 서버에서 DB 에 닿는 도구 7종이 접속 전 ERROR 인지와 DB 와 무관한 도구는 되는지 8, 안내문 2.
+### 한계
+- 토글은 **이 MCP 서버가 DB 에 접속하는 것**만 막는다. `.env` 의 접속정보 자체를 숨기거나, 같은 PC 의 다른 도구(sqlplus, 다른 MCP)를 막지는 않는다 — 접속정보를 아예 두지 않는 것이 가장 확실하다.
+- `crf_render mode=db` 는 리포트에 든 쿼리(실행 전/후 SQL 포함)를 서버 엔진이 그대로 실행한다. 조회 토글로 묶여 있으며 문장 종류는 검사하지 않는다.
+
 ## [0.12.1] - 2026-10-12
 v0.12.0 의 암호화 저장이 만든 결함 하나를 고친다. 도구 수 변화 없음(56).
 ### Fixed

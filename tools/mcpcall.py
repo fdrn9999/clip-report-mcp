@@ -64,10 +64,11 @@ def _images(content, idx, tool):
     return out
 
 
-def call(calls, list_tools=False, stop_on_error=False):
+def call(calls, list_tools=False, stop_on_error=False, env_extra=None):
     """calls=[[name,args],...] -> (list of (name, text, is_error), stderr). 서버 1회 기동.
     요청을 하나씩 보내고 응답을 기다리므로 stop_on_error=True 면 첫 isError 뒤 호출은 보내지 않는다(SKIPPED)."""
     env = dict(os.environ, CLIP_MCP_UPDATE_CHECK="0")
+    if env_extra: env.update(env_extra)
     p = subprocess.Popen(server_cmd(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, env=env)
     err_buf = []

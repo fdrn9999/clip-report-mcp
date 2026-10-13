@@ -46,6 +46,7 @@ public class CrfRender {
     File crf=new File(path.trim()); if(!crf.isFile()) return CrfMcpServer.textContent("ERROR: 파일 없음: "+path);
     String mode=s(args,"mode"); mode=mode==null||mode.trim().isEmpty()?"sample":mode.trim().toLowerCase();
     if(!mode.equals("sample")&&!mode.equals("db")) return CrfMcpServer.textContent("ERROR: mode 는 sample(가상 데이터, 기본) 또는 db(실제 쿼리 실행)");
+    if(mode.equals("db")) CrfMcpServer.requireDbRead("crf_render mode=db");   // 리포트의 쿼리를 서버 설정 DB 에서 실행한다
     String webapp=env("CLIP_RENDER_WEBAPP"), lib=env("CLIP_RENDER_LIB"), props=env("CLIP_RENDER_PROPS");
     if(lib.isEmpty()&&!webapp.isEmpty()) lib=new File(webapp,"WEB-INF/lib").getPath();
     if(props.isEmpty()&&!webapp.isEmpty()) props=new File(webapp,"WEB-INF/clipreport5/clipreport5.properties").getPath();

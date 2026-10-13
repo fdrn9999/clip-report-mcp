@@ -20,6 +20,8 @@ os.makedirs(OUT, exist_ok=True)
 VERBOSE = "-v" in sys.argv
 
 CASES = []  # (name, tool, args, check(text,is_err)->str|None)
+# DB 접근은 기본 꺼짐(v0.13.0) — 본 실행은 조회만 켜고(쓰기는 끔) 돌린다. 꺼진 상태는 끝에서 toggle_check() 가 서버를 따로 띄워 검사.
+os.environ["CLIP_DB_READ"] = "1"; os.environ["CLIP_DB_WRITE"] = "0"
 
 
 def case(name, tool, args, check):
@@ -596,6 +598,9 @@ if os.path.isfile(E):
     for _k in range(4):
         case("nul: save query of length L+%d" % _k, "crf_set_query", {"path": E, "sql": "SELECT EMPNO, EMP_NM FROM T" + "X" * _k, "sync_fields": "none", "output": OUT + "/v121_nul%d.crf" % _k},
              lambda t, e: None if not e and t.startswith("OK") else f"set_query: {t[:300]}")
+    # v0.13.0: DB 쓰기 토글 — 조회만 켠 서버에서 쓰기 문장은 접속 전에 ERROR(allow_write=true 여도)
+    case("db toggle: write statement refused while CLIP_DB_WRITE is off", "db_query", {"sql": "DELETE FROM NO_SUCH_TABLE_X WHERE 1=0", "allow_write": "true"}, err_contains("DB 쓰기가 꺼져 있습니다", "CLIP_DB_WRITE=1"))
+    case("db toggle: write statement without allow_write still refused first", "db_query", {"sql": "DELETE FROM NO_SUCH_TABLE_X WHERE 1=0"}, err_contains("allow_write=true"))
     if os.environ.get("CLIP_SMOKE_DB", "1") == "1":
         case("sync_fields db on JS query uses the executed SQL", "crf_sync_fields", {"path": E, "dataset": "0", "mode": "db", "output": OUT + "/v11_sync.crf"},
              lambda t, e: None if not e and t.startswith("OK") and "DB ResultSetMetaData, JS 실행 SQL" in t else f"sync db eval: {t[:400]}")
@@ -803,7 +808,7 @@ def docs_check():
     out.append(("docs: README tool count matches tools/list", None if want in readme and f"## MCP 도구 ({len(tools)})" in readme and f"도구 {len(tools)}개 노출" in readme else f"README 에 '{want}' / '## MCP 도구 ({len(tools)})' / '도구 {len(tools)}개 노출' 이 있어야 함"))
     miss = [t for t in tools if f"`{t}" not in readme]
     out.append(("docs: every tool is documented in README", None if not miss else f"README 에 없는 도구: {miss}"))
-    total = len(CASES) + 9 - (2 if os.path.isfile(HWPF) else 0)   # README 의 숫자는 선택 픽스처(CLIP_SMOKE_HWP) 없이 센 값
+    total = len(CASES) + 19 - (2 if os.path.isfile(HWPF) else 0)   # README 의 숫자는 선택 픽스처(CLIP_SMOKE_HWP) 없이 센 값
     full =all(os.path.isfile(f) for f in (A, B, C, D, E, X, XT)) and bool(RENDER) and os.environ.get("CLIP_SMOKE_DB", "1") == "1"   # 픽스처가 다 있을 때만 케이스 수가 고정
     out.append(("docs: README smoke case count" + ("" if full else " (픽스처 일부 없음 — 건너뜀)"), None if not full or f"{total} 케이스" in readme else f"README 테스트 절의 케이스 수를 {total} 로"))
     out.append(("docs: CHANGELOG has the current VERSION", None if f"## [{version}]" in rd("CHANGELOG.md") else f"CHANGELOG.md 에 [{version}] 항목 없음"))
@@ -857,6 +862,39 @@ def nul_check():
     return out
 
 
+def toggle_check():
+    """DB 접근 토글: 꺼진 서버(CLIP_DB_READ=0)에서 DB 에 닿는 도구가 전부 접속 전에 ERROR 로 끝나는지, 초기 안내에 꺼짐이 적히는지."""
+    off = lambda t, e: None if e and "DB 접근이 꺼져 있습니다" in t and "CLIP_DB_READ=1" in t else f"꺼진 상태인데: err={e} {t[:200]}"
+    calls = [("db_tables", {"like": "AHRM"}, off), ("db_columns", {"table": "DUAL"}, off), ("db_sample", {"table": "DUAL"}, off),
+             ("db_query", {"sql": "SELECT 1 FROM DUAL"}, off), ("db_query", {"sql": "DELETE FROM T", "allow_write": "true"}, off)]
+    if os.path.isfile(E):
+        calls += [("crf_sync_fields", {"path": E, "dataset": "0", "mode": "db", "output": OUT + "/v13_off.crf"}, off),
+                  ("crf_render", {"path": E, "mode": "db"}, off),
+                  ("crf_summary", {"path": E}, lambda t, e: None if not e and "datasets=" in t else f"DB 없이 되는 도구가 막힘: {t[:200]}")]
+    res, _ = mcpcall.call([(t, a) for t, a, _ in calls], env_extra={"CLIP_DB_READ": "0", "CLIP_DB_WRITE": "1"})
+    out = [("db toggle off: %s %s" % (t, "write" if a.get("allow_write") else a.get("mode", "")), chk(r[1], r[2])) for (t, a, chk), r in zip(calls, res[1:])]
+    p = subprocess_init({"CLIP_DB_READ": "0"})
+    out.append(("db toggle off: initialize instructions say DB is off", None if "[★DB 접근 꺼짐]" in p else f"instructions: …{p[-200:]}"))
+    p = subprocess_init({"CLIP_DB_READ": "1", "CLIP_DB_WRITE": "0"})
+    out.append(("db toggle read-only: instructions say read-only", None if "[★DB 는 조회 전용]" in p else f"instructions: …{p[-200:]}"))
+    return out
+
+
+def subprocess_init(env_extra):
+    """서버를 띄워 initialize 응답의 instructions 만 받는다."""
+    import subprocess
+    p = subprocess.Popen(mcpcall.server_cmd(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=dict(os.environ, CLIP_MCP_UPDATE_CHECK="0", **env_extra))
+    try:
+        out, _ = p.communicate(mcpcall._rpc(0, "initialize", {}), timeout=60)
+    except Exception:
+        p.kill(); return ""
+    for ln in out.decode("utf-8", "replace").splitlines():
+        try: o = json.loads(ln)
+        except ValueError: continue
+        if o.get("id") == 0: return (o.get("result") or {}).get("instructions", "")
+    return ""
+
+
 def main():
     import time; since = time.time() - 2
     calls =[(t, a) for _, t, a, _ in CASES]
@@ -869,7 +907,7 @@ def main():
         if msg is not None: fails += 1
         print(f"[{status}] {name}" + (f"\n        {msg}" if msg else ""))
         if VERBOSE: print("        " + text.replace("\n", "\n        ")[:600])
-    doc = files_check(since) + nul_check() + docs_check()
+    doc = files_check(since) + nul_check() + toggle_check() + docs_check()
     for name, msg in doc:
         if msg is not None: fails += 1
         print(f"[{'PASS' if msg is None else 'FAIL'}] {name}" + (f"\n        {msg}" if msg else ""))

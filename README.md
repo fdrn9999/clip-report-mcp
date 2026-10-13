@@ -119,7 +119,7 @@ cd clip-report-mcp
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 373 케이스
+python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 385 케이스
 python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
 ```
 - 픽스처(실 리포트) 경로는 환경변수 `CLIP_SMOKE_A`~`E`, `CLIP_SMOKE_F1`, `CLIP_SMOKE_X` 로 바꾼다. 파일이 없으면 그 케이스는 건너뛴다(그만큼 총 케이스 수가 줄어든다).
@@ -127,6 +127,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 - `CLIP_MCP_SAVE_IMAGES=<폴더>` 를 주면 `mcpcall.py`/`smoke.py` 가 `doc_image`·`crf_preview` 가 돌려준 그림을 그 폴더에 저장한다.
 - `crf_render` 케이스(11 + 크로스탭 수치 검증 1)는 리포트 서버 웹앱이 있을 때만 돈다(`CLIP_RENDER_WEBAPP` 환경변수 또는 `.env`). 크로스탭 저장 케이스의 픽스처는 `CLIP_SMOKE_XT`.
 - 끝에서 **이번 실행이 쓴 모든 `.crf` 에 평문 SQL 이 없는지**(속성 900 이 암호화 타입인지) 바이트로 검사하고, **픽스처 원본이 실행 전과 바이트 단위로 같은지** 해시로 확인한다. 이어서 **암호화 쿼리의 NUL 종결**(글자 수가 4의 배수인 쿼리의 암호문이 0 블록으로 끝나는지, 그 블록이 없는 파일을 `crf_validate` 가 잡는지)을 3 케이스로 검사한다.
+- 본 실행은 **DB 조회만 켠 서버**(`CLIP_DB_READ=1`, 쓰기 꺼짐)로 돌리고, 끝에서 **꺼진 서버**를 따로 띄워 DB 에 닿는 도구가 전부 접속 전에 ERROR 인지 검사한다(10 케이스, DB 연결 불필요).
 - DB 를 실제로 치는 케이스(`crf_sync_fields mode=db` 4건)는 개발 DB 연결이 필요하다 — DB 가 없으면 `CLIP_SMOKE_DB=0` 으로 끈다.
 - 마지막 4 케이스는 **문서 정합성**: README 의 도구 수·도구 이름·케이스 수, CHANGELOG 의 현재 버전 항목이 코드와 어긋나면 FAIL(문서가 현상과 달라지는 것을 막는다).
 - `tools/mcpcall.py` 는 `clip-report.mcp.json`(install.ps1 생성)에서 java/classpath 를 읽는다(없으면 `CLIP_JAVA`/`CLIP_CP`). 여러 호출을 넘기면 첫 오류에서 멈추고(`--continue-on-error` 로 계속), 쓰기 결과는 `.smoke-out/`.
@@ -220,7 +221,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | DB | `db_tables(like?)` | 테이블 목록 + **코멘트(업무명)** 검색 (`ALL_TAB_COMMENTS`) |
 | DB | `db_columns(table)` | 컬럼·타입·코멘트(`ALL_COL_COMMENTS`) → **컬럼 업무의미** 파악 |
 | DB | `db_sample(table, n?)` | 상위 N행 샘플 (값 형태·코드값 확인) |
-| DB | `db_query(sql, max?, allow_write?)` | `SELECT`/`WITH` 실행 (TSV, 행수 캡, 타임아웃 `CLIP_DB_TIMEOUT` 기본 60s) — 쓰기 문장은 `allow_write=true` 명시 필요 |
+| DB | `db_query(sql, max?, allow_write?)` | `SELECT`/`WITH` 실행 (TSV, 행수 캡, 타임아웃 `CLIP_DB_TIMEOUT` 기본 60s) — **기본 꺼짐: `CLIP_DB_READ=1` 필요**. 쓰기 문장은 `CLIP_DB_WRITE=1` + `allow_write=true` 명시 필요 |
 | 문서 | `doc_text(path, [detail|sheet|pages|max_chars])` | **양식 문서 읽기 — PDF · HWP(5.x) · HWPX · DOCX · XLSX/XLSM · XLS · PPTX · HTML · 이미지**(내용으로 형식 자동 인식). 글자뿐 아니라 **배치를 mm 로**: 용지·여백, 문단(y·정렬·글꼴 크기·굵게·색), 표(셀 `[행,열]`·병합·너비×높이), 도형/그림 위치, 엑셀(병합 범위·열 너비·셀 값·수식), 슬라이드 도형(x·y·크기), HTML 요소(헤드리스 Edge/Chrome 으로 A4 폭에 배치한 x·y·크기). 리포트 좌표(0.1mm) = mm×10. 이미지는 크기만(OCR 없음 → `doc_image`) |
 | 문서 | `doc_image(path, [page|max_px|source])` | 그 문서를 **그림으로**(MCP image) 돌려줘 Claude 가 직접 보고 파싱 결과와 대조(비전 검증): 이미지는 그대로, PDF 는 쪽 렌더, HWP/HWPX/DOCX/XLSX/XLS/PPTX/HTML 은 **PC 에 설치된 한글·MS Office·LibreOffice·Edge/Chrome 으로 PDF 변환**(매크로 차단·읽기 전용, 결과 캐시) 후 렌더. 변환기가 없으면 파일에 들어 있는 첫 쪽 미리보기 그림 |
 | 문서 | `pdf_text(path)` | PDF **텍스트만** 추출(예전 도구, 호환용 — 위치·다른 형식은 `doc_text`) |
@@ -273,6 +274,15 @@ java -cp "C:\...\bin\jar\*;clip-report-mcp.jar" CrfMcpHttp 3333 0.0.0.0
 
 ### DB 설정 (.env)
 
+**DB 접근은 기본으로 꺼져 있습니다**(엄격한 사내 환경 기준). 토글을 켜야 DB 에 접속합니다 — `.env` 또는 환경변수, 값은 `1`/`true`/`on`/`yes`, 바꾼 뒤 `/mcp` 재연결:
+
+| 토글 | 기본 | 켜면 되는 것 |
+|---|---|---|
+| `CLIP_DB_READ=1` | 꺼짐 | DB **조회** — `db_query`(SELECT/WITH)·`db_tables`·`db_columns`·`db_sample`, `crf_sync_fields mode=db`, `fields_from_db=true`, `crf_render mode=db` |
+| `CLIP_DB_WRITE=1` | 꺼짐 | DB **쓰기 문장**(INSERT/UPDATE/DELETE/DDL) — `db_query allow_write=true`. `CLIP_DB_READ=1` 도 필요하고 호출마다 `allow_write=true` 를 줘야 함 |
+
+꺼져 있으면 위 도구는 접속 전에 ERROR 로 끝나고(접속정보가 있어도 연결을 만들지 않음), Claude 는 쿼리를 실제로 날려 보지 않고 **Qry.xml·리포트 안의 쿼리·화면 소스에 적힌 그대로** 작업합니다. DB 에서만 알 수 있는 것은 사용자에게 요청합니다 — 프로시저·함수 본문은 소스를 달라고 하고, 실제 값·건수가 필요하면 실행할 SQL 을 적어 주고 조회 결과를 받습니다. `.crf` 읽기·쓰기와 `crf_render mode=sample` 등 나머지는 그대로 동작합니다.
+
 DB 도구(`db_query`/`db_tables`/`db_columns`/`db_sample`)용 접속정보는 **`.mcp.json` 에 넣지 말고 `.env` 로 분리**합니다. 서버(CrfMcpServer/CrfMcpHttp)가 **자동 로드**(내장)합니다.
 
 1. `.env.example` 를 `.env` 로 복사 후 값 입력:
@@ -280,6 +290,7 @@ DB 도구(`db_query`/`db_tables`/`db_columns`/`db_sample`)용 접속정보는 **
    CLIP_DB_URL=jdbc:tibero:thin:@<host>:<port>:<sid>
    CLIP_DB_USER=<DB_USER>
    CLIP_DB_PWD=<DB_PASSWORD>
+   CLIP_DB_READ=1        # 조회 켜기(기본 꺼짐). 쓰기 문장까지는 CLIP_DB_WRITE=1
    ```
 2. 로드 순서(앞이 우선): 동명 **환경변수** → `$CLIP_ENV_FILE` → `~/clip-report-mcp/.env` → `~/.dbtools/.env` → `./.env`
 3. classpath 에 **Tibero JDBC jar** 추가 (예: `...\tibero7-1.0.jar`).
@@ -395,4 +406,4 @@ java -cp $CP CrfParserValidate  "C:\...\report"  3000                     # 파�
 - 변환 결과 PDF 는 `%TEMP%\clip-report-mcp-doc\` 에 문서 내용의 SHA-256 이름으로 캐시된다. 민감한 문서를 다뤘다면 그 폴더를 지운다.
 - JS 쿼리 샌드박스는 Java 접근과 무한 루프는 막지만, 스크립트가 엔진 내장 함수 한 번으로 아주 큰 문자열을 만드는 것까지는 중간에 끊지 못한다(스크립트 1MB·결과 2MB 상한, 메모리 부족은 오류로 돌려줌). 출처를 모르는 `.crf` 를 대량으로 돌릴 때는 별도 프로세스에서 실행하는 것이 안전하다.
 - 원격 서버 기본 `127.0.0.1` 바인딩. 외부 공개 시 `CLIP_MCP_TOKEN` + 리버스 프록시(TLS).
-- **DB 자격증명**은 `.env`(또는 환경변수)로만 — `.gitignore`·배포 zip 제외, 사내 한정 공유. `db_query` 는 운영 DB 직결이므로 **읽기전용 계정 + SELECT 한정** 권장.
+- **DB 자격증명**은 `.env`(또는 환경변수)로만 — `.gitignore`·배포 zip 제외, 사내 한정 공유. **DB 접근은 기본 꺼짐**(`CLIP_DB_READ`/`CLIP_DB_WRITE` 토글, 위 [DB 설정](#db-설정-env)) — 꺼져 있으면 접속정보가 있어도 연결하지 않는다. 켤 때도 `db_query` 는 DB 직결이므로 **읽기전용 계정 + SELECT 한정** 권장. 토글은 이 서버의 접속만 막으며 `.env` 의 접속정보를 숨기지는 않는다.
