@@ -192,6 +192,10 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | 용지 방향 전환 + 요소를 새 본문 너비에 비례 맞춤 | `crf_set_paper orientation=Landscape fit=true` |
 | **엑셀 격자** — 엑셀로 내보내는 밴드의 모든 세로선을 본문 표 열 경계에 맞췄는지(어긋난 변·가까운 경계 제시, 페이지 바닥글 제외) | `crf_validate excel=true` |
 | 표 생성 / 그룹 위치·라벨·소계 / 삭제(컨트롤·그룹·밴드) | `crf_add_table` / `crf_add_group`·`crf_set_group` / `crf_remove_control`·`crf_remove_group`·`crf_remove_section` |
+| **단건 양식 → 사람마다 반복**(데이터 머리글/바닥글을 새 그룹 밴드로, 그룹마다 새 쪽) / 밴드 행 하나씩 옮기기·순서 변경 | `crf_add_group absorb=true new_page=Before` / `crf_move_subsection` |
+| 임베디드 서브리포트를 **부모 행 값으로 거르기**(① 부모 필드→서브리포트 매개변수 ② →데이터셋 매개변수 `'{dataset.X}'`) | `crf_link_subreport_param` |
+| 쿼리 **일부만 바꾸기**(공백 수 무시, 일치 수 확인) / **같은 작업을 여러 파일에** 한 번에 | `crf_query_replace` / `crf_batch files=[…]` |
+| 표 **셀 합치기 방식**(같은 값 / 첫 행에만 값 / 빈 값 제외)과 **기준 필드**(이 값이 같을 때만 합침) | `crf_set_cell merge_mode=… merge_ref=…` |
 | 폴더 리포트 찾기 | `crf_list_reports` |
 | **목록형 리포트 한 방 파생**(템플릿+SQL+columns+제목/조건/그룹) | `crf_generate` (v2) |
 | 열 세트 전체 교체(본문·제목·합계·소계 표) / 쿼리에 조건 if 블록 추가 | `crf_set_columns` / `crf_append_query_condition` |

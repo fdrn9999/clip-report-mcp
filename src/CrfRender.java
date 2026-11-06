@@ -70,6 +70,8 @@ public class CrfRender {
     JSONObject job=new JSONObject(); job.put("crf",crf.getAbsolutePath()); job.put("props",propsF.getAbsolutePath()); job.put("work",work.getAbsolutePath());
     job.put("pdf",pdf.getAbsolutePath()); job.put("result",res.getAbsolutePath()); job.put("mode",mode); job.put("rows",(long)rows);
     String db=s(args,"db"); if(db==null||db.trim().isEmpty()) db=env("CLIP_RENDER_DBNAME"); job.put("db",db);
+    // 링크 서브리포트(공통 로고 등)의 상대경로 기준: link_base(원본 .crf 또는 그 폴더) — 스크래치에 복사한 리포트를 렌더할 때 원본 위치 기준으로 찾게
+    String lb=s(args,"link_base"); if(lb!=null&&!lb.trim().isEmpty()){ File lf=new File(lb.trim()); if(lf.isFile()) lf=lf.getAbsoluteFile().getParentFile(); if(!lf.isDirectory()) return CrfMcpServer.textContent("ERROR: link_base 는 원본 .crf 경로나 폴더여야 합니다 (없음: "+lb+")"); job.put("link_base",lf.getAbsolutePath()); }
     try{ job.put("params",jsonObj(args.get("params"))); job.put("data",jsonObj(args.get("data"))); }
     catch(Exception e){ return CrfMcpServer.textContent("ERROR: params/data 는 JSON 객체여야 합니다 — "+e.getMessage()); }
     String df=s(args,"data_file"); if(df!=null&&!df.trim().isEmpty()){ File f=new File(df.trim()); if(!f.isFile()) return CrfMcpServer.textContent("ERROR: data_file 없음: "+df); if(f.length()>20L*1024*1024) return CrfMcpServer.textContent("ERROR: data_file 이 너무 큽니다("+f.length()/1024/1024+"MB, 20MB 까지)");
@@ -183,13 +185,17 @@ public class CrfRender {
         List<String[]> memo=toSample(rf,(JSONObject)job.get("data"),((Number)job.get("rows")).intValue(),notes);
         File dir=new File(work,"tree/d1/d2/d3/d4/d5/d6/d7/d8"); dir.mkdirs();   // 상대 링크(../../images/…)가 작업 폴더 안에 떨어지도록 깊게
         File copy=new File(dir,crf.getName()); CrfIO.write(rf,copy.getPath());
-        copyLinks(rf,crf.getAbsoluteFile().getParentFile(),dir,work,notes);
+        copyLinks(rf,linkBase(job,crf),dir,work,notes);
         f=addFile(doc,copy.getPath());
         for(String[] m: memo) f.addConnectionMemo(m[0],m[1]).addContentParamCSV("*","UTF-8","\\t","\\r\\n","","0");
       } else {
         String db=s(job,"db"); if(db==null||db.isEmpty()) db=dbName(new File(s(job,"props")).getParentFile());
         if(db==null||db.isEmpty()) throw new RuntimeException("DB 이름을 알 수 없습니다 — db 인자 또는 CLIP_RENDER_DBNAME(DataConnection.properties 의 dataconnectionN.dbname)을 주세요");
-        f=addFile(doc,crf.getPath()); f.addConnectionData("*",db); notes.add("DB 연결: "+db+" (서버의 DataConnection.properties)");
+        String target=crf.getPath();
+        if(job.get("link_base")!=null){ // 원본 위치 기준 링크: 사본을 작업 폴더 깊숙이 두고 링크 대상을 같은 상대 위치에 복사(원본 파일은 그대로)
+          TheReportFile rf=Rexpert4.read(crf.getPath()); File dir=new File(work,"tree/d1/d2/d3/d4/d5/d6/d7/d8"); dir.mkdirs(); File copy=new File(dir,crf.getName()); Files.copy(crf.toPath(),copy.toPath(),StandardCopyOption.REPLACE_EXISTING);
+          copyLinks(rf,linkBase(job,crf),dir,work,notes); target=copy.getPath(); }
+        f=addFile(doc,target); f.addConnectionData("*",db); notes.add("DB 연결: "+db+" (서버의 DataConnection.properties)");
       }
       JSONObject params=(JSONObject)job.get("params");
       if(params!=null){ StringBuilder pl=new StringBuilder(); for(Object k: params.keySet()){ Object v=params.get(k); f.addField(k.toString(),v==null?"":v.toString()); pl.append(pl.length()>0?", ":"").append(k).append('=').append(v); } if(pl.length()>0) notes.add("매개변수: "+pl); }
@@ -257,7 +263,10 @@ public class CrfRender {
     if(data!=null) for(Object k: data.keySet()) if(!used.contains(k.toString()) && !(k.equals("*")&&dss.size()==1)) notes.add("⚠ data 의 '"+k+"' 에 해당하는 데이터셋이 없습니다(이름 확인: crf_summary)");
     return out;
   }
-  static String cell(Object v){ return v==null?"":v.toString().replace('\t',' ').replace("\r\n"," ").replace('\n',' ').replace('\r',' '); }
+  static File linkBase(JSONObject job,File crf){ Object b=job.get("link_base"); return b!=null?new File(b.toString()):crf.getAbsoluteFile().getParentFile(); }
+  /** JSON 숫자 97.0 은 DB NUMBER 97 처럼 "97" 로(엔진은 넘긴 글자 그대로 찍으므로 출력 양식이 없는 칸에서 97.0 / 97 이 달라 보인다). 문자열은 그대로. */
+  static String cell(Object v){ if(v instanceof Double && !((Double)v).isInfinite() && ((Double)v)==Math.rint((Double)v) && Math.abs((Double)v)<1e15) return String.valueOf(((Double)v).longValue());
+    return v==null?"":v.toString().replace('\t',' ').replace("\r\n"," ").replace('\n',' ').replace('\r',' '); }
   /** 필드 이름·타입으로 그럴듯한 가상 값: 칸마다 다른 값이라 잘못 연결된 칸을 찾기 쉽다. */
   static String fake(FieldData f,int r,int j){
     String n=f.getName()==null?"":f.getName().toUpperCase(), t=String.valueOf(f.getDataType());
@@ -280,7 +289,7 @@ public class CrfRender {
       Set<String> seen=new HashSet<>(); String w=work.getCanonicalPath()+File.separator;
       for(WebLinkInfo l: links){ if(l==null) continue; String u=l.getUrlText(); if(u==null||u.trim().isEmpty()||u.matches("(?i)https?://.*")||!seen.add(u)) continue;
         File src=new File(base,u).getCanonicalFile(), dst=new File(copyDir,u).getCanonicalFile();
-        if(!src.isFile()){ notes.add("⚠ 링크 서브리포트 파일 없음: "+u); continue; }
+        if(!src.isFile()){ notes.add("⚠ 링크 서브리포트 파일 없음: "+u+" (기준 폴더 "+base.getPath()+") — 스크래치 사본이면 link_base=<원본 .crf 경로> 로 원본 위치 기준으로 찾게 하세요"); continue; }
         if(!src.getName().toLowerCase().endsWith(".crf")){ notes.add("⚠ 링크 서브리포트 "+u+": .crf 가 아니라 가상 출력에서는 뺍니다"); continue; }
         if(!dst.getPath().startsWith(w)){ notes.add("⚠ 링크 서브리포트 "+u+": 상위 폴더를 너무 많이 올라가 가상 출력에서는 빠집니다"); continue; }
         dst.getParentFile().mkdirs(); Files.copy(src.toPath(),dst.toPath(),StandardCopyOption.REPLACE_EXISTING);

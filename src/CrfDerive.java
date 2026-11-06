@@ -78,6 +78,8 @@ public class CrfDerive {
     for(TableCellNormal b: basesInRow){ b.setColSpan(1); b.setRowSpan(1); }
     CrfTableOps.reindex(t); }
   static void bindField(TheReportFile rf,Object cell,Col c){
+    // 템플릿 셀의 합치기/중복숨김 기준 필드(SuppressReferenceFieldList)는 원래 열의 것 — 다른 필드로 바꾸면 비운다(남기면 엉뚱한 필드 값이 바뀔 때마다 셀 합치기가 끊긴다)
+    Object prev=CrfMcpServer.go(cell,"getApplyValueField"); if(prev!=c.f){ for(String m: new String[]{"getSuppressReferenceFieldList","getMergeReferenceFieldList"}){ Object l=CrfMcpServer.go(cell,m); if(l instanceof com.clipsoft.clipreport.base.RexObjectList){ com.clipsoft.clipreport.base.RexObjectList<?> rl=(com.clipsoft.clipreport.base.RexObjectList<?>)l; while(rl.size()>0) rl.remove(0); } } }
     if(c.f!=null){ CrfMcpServer.call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Field); CrfMcpServer.call(cell,"setApplyValueField",Field.class,c.f); }
     else { CrfMcpServer.call(cell,"setApplyValueType",ApplyValueType.class,ApplyValueType.Text); CrfMcpServer.call(cell,"setApplyValueText",String.class,q(c.text)); try{ CrfMcpServer.call(cell,"setApplyValueField",Field.class,null); }catch(Throwable e){} }
     CrfMcpServer.call(cell,"setOutputFormat",String.class,c.format==null?"":c.format);
@@ -138,8 +140,22 @@ public class CrfDerive {
   }
   static Integer nearest(TreeSet<Integer> g,int x){ Integer lo=g.floor(x), hi=g.ceiling(x); if(lo==null) return hi; if(hi==null) return lo; return x-lo<=hi-x?lo:hi; }
   /** 핵심: 본문 표(+제목 표 +합계 표)를 columns 로 재구성. 저장은 호출자가. */
-  static Rebuild rebuildTables(TheReportFile rf,List<Col> cols,ControlTable body,ControlTable head,ControlTable foot,int targetWidth,String totalLabel,String groupField){
+  static Rebuild rebuildTables(TheReportFile rf,List<Col> cols,ControlTable body,ControlTable head,ControlTable foot,int targetWidth,String totalLabel,String groupField){ return rebuildTables(rf,cols,body,head,foot,targetWidth,totalLabel,groupField,false); }
+  /** 표 높이가 줄었을 때, 그 표가 서브섹션 아래 끝에 붙어 있었으면 서브섹션 높이도 같이 줄인다(본문 행마다 빈 칸이 생기지 않게). */
+  static void shrinkBand(TheReportFile rf,ControlTable t,int oldH){
+    Object[] loc=CrfMcpServer.findControlLoc(rf,t.getName()); if(loc==null||!(loc[1] instanceof SubSection)) return; SubSection sb=(SubSection)loc[1];
+    int oldBottom=t.getY1()+oldH, newBottom=t.getY1()+t.getHeight(); if(sb.getHeight()>=oldBottom && sb.getHeight()-oldBottom<=20) sb.setHeight(newBottom+(sb.getHeight()-oldBottom)); }
+  /** 템플릿 정리(collapse): 본문 표의 1행 이후(템플릿의 2번째 줄 — 예 "2학기")와, 제목 표의 다단 열머리(마지막 행까지 세로 병합된 위 행들)를 지운다. */
+  static void collapseTemplateRows(TheReportFile rf,ControlTable body,ControlTable head,Rebuild r){
+    if(body.getRowCount()>1){ int oldH=body.getHeight(), n=body.getRowCount(); for(int i=n-1;i>=1;i--) CrfTableOps.deleteRow(body,i); body.setHeight(rowsHeight(body)); shrinkBand(rf,body,oldH); r.notes.add("본문 표 '"+body.getName()+"' 템플릿 "+n+"행 → 1행(아래 행 삭제, 높이 "+oldH+"→"+body.getHeight()+")"); }
+    if(head!=null && head.getRowCount()>1){ int last=head.getRowCount()-1, oldH=head.getHeight(); List<Integer> del=new ArrayList<>();
+      for(int rr=last-1;rr>=0;rr--){ boolean reaches=false; for(int c=0;c<head.getColumnCount();c++){ TableCell x=CrfTableOps.cellAt(head,rr,c); TableCellNormal bc=CrfTableOps.baseOf(x); int br=x instanceof TableCellNormal?rr:rowOf(head,bc); if(bc!=null && br>=0 && br+bc.getRowSpan()-1>=last) reaches=true; } if(reaches) del.add(rr); else break; }
+      if(!del.isEmpty()){ for(int rr: del) CrfTableOps.deleteRow(head,rr); head.setHeight(rowsHeight(head)); shrinkBand(rf,head,oldH); r.notes.add("제목 표 '"+head.getName()+"' 다단 열머리 "+del.size()+"행 삭제(마지막 행까지 세로 병합된 템플릿 열머리) — 위쪽 제목 행은 유지"); } }
+  }
+  static int rowsHeight(ControlTable t){ int h=0; for(int i=0;i<t.getRowCount();i++) h+=t.getTableRow(i).getHeight(); return h; }
+  static Rebuild rebuildTables(TheReportFile rf,List<Col> cols,ControlTable body,ControlTable head,ControlTable foot,int targetWidth,String totalLabel,String groupField,boolean collapse){
     Rebuild r=new Rebuild(); r.body=body; r.head=head; r.foot=foot; int n=cols.size();
+    if(collapse) collapseTemplateRows(rf,body,head,r);
     List<Object[]> gfoots=groupFooterTables(rf,body);
     int target=targetWidth>0?targetWidth:body.getWidth(); if(target<=0) target=CrfTableOps.pageInnerWidth(rf); if(target<=0) target=2670;
     r.widths=widthsFor(cols,target); { int sum=0; for(int w: r.widths) sum+=w; if(sum!=target) r.warns.add("열 너비 합 "+sum+" ≠ 목표 "+target+" (지정 너비가 너무 큼 — 표가 본문을 넘을 수 있음)"); }
@@ -150,7 +166,7 @@ public class CrfDerive {
       JSONObject a=new JSONObject(); a.put("merge",c.merge?"true":"false"); if(c.align==null&&numeric(c)) a.put("align","Right"); CrfMcpServer.applyProps(rf,cell,a,"F"); }
     r.notes.add("본문 표 '"+body.getName()+"' "+n+"열 재구성(너비 "+Arrays.toString(r.widths)+" 합 "+target+")");
     // 제목 표
-    if(head!=null){ int hr=head.getRowCount()-1; if(hr>0) r.warns.add("제목 표 '"+head.getName()+"' 가 "+head.getRowCount()+"행 — 마지막 행에 제목을 넣고 위 행은 그대로(직접 정리 필요)");
+    if(head!=null){ int hr=head.getRowCount()-1; if(hr>0){ if(collapse) r.notes.add("제목 표 '"+head.getName()+"' 마지막 행에 열 제목, 위 "+hr+"행(문서 제목 등)은 그대로 유지"); else r.warns.add("제목 표 '"+head.getName()+"' 가 "+head.getRowCount()+"행 — 마지막 행에 제목을 넣고 위 행은 그대로(직접 정리 필요)"); }
       unmergeRow(head,hr); resizeCols(head,n); setWidths(head,r.widths); head.setX1(body.getX1());
       for(int i=0;i<n;i++){ TableCellNormal cell=cell(head,hr,i); if(cell!=null) setText(rf,cell,cols.get(i).title,null); }
       r.notes.add("제목 표 '"+head.getName()+"' 제목 "+n+"개"); }
@@ -294,7 +310,9 @@ public class CrfDerive {
     List<String> did=new ArrayList<>(), warns=new ArrayList<>();
     TheReportFile rf=CrfMcpServer.open(template);
     GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager(); if(gom.getDataSetList().size()==0) return "ERROR: 템플릿에 데이터셋이 없습니다";
-    DataSet ds=gom.getDataSetList().get(0);
+    // 대상 데이터셋: dataset= 지정 > 메인 리포트가 쓰는 데이터셋(활성) > 첫 데이터셋. 템플릿에 안 쓰는 데이터셋이 앞에 있는 경우가 많다(예 ahrmev0503_prn01: DS[2] 가 본문)
+    DataSet ds; String dsArg=s(args,"dataset"); if(dsArg!=null&&!dsArg.trim().isEmpty()) ds=CrfMcpServer.datasetOf(rf,dsArg);
+    else { DataSet act=null; try{ act=rf.getGlobe().getMainReport().getReportData().getActiveDataSet(); }catch(Exception e){} ds=act!=null?act:gom.getDataSetList().get(0); if(act!=null && gom.getDataSetList().get(0)!=act) did.add("대상 데이터셋: 메인 리포트가 쓰는 "+act.getName()+"(DS["+CrfMcpServer.indexOfDataset(rf,act)+"]) — 다른 것은 dataset= 로"); }
     // 1) 템플릿 정리: 그룹 제거
     if(clean){ int g=dropAllGroups(rf,warns); if(g>0) did.add("템플릿 그룹 "+g+"개 제거(밴드·그룹이름 필드 포함)"); }
     // 2) 쿼리 적용 (매개변수 선언, 필드 SELECT 순서)
@@ -315,7 +333,8 @@ public class CrfDerive {
     else if(!r.orphan.isEmpty()) warns.add("SELECT 에 없는 필드가 남아 있음(값이 빔): "+r.orphan);
     if(!r.placeholders.isEmpty()) warns.add("별칭 없는 식 컬럼 → 자리 필드 "+r.placeholders+" (AS 별칭 권장)");
     // 3) 열 정의
-    List<Col> cols; if(args.get("columns")!=null&&!String.valueOf(args.get("columns")).trim().isEmpty()) cols=parseColumns(rf,args.get("columns"),true);
+    List<Col> cols; if(args.get("columns")!=null&&!String.valueOf(args.get("columns")).trim().isEmpty()){ cols=parseColumns(rf,args.get("columns"),true);
+      for(Col c: cols) if(c.f instanceof FieldData && c.field!=null && ds.getFieldDataList().indexOf((FieldData)c.f)<0){ FieldData alt=CrfMcpServer.findDataField(ds,c.field); if(alt!=null) c.f=alt; } }   // 같은 이름이 다른 데이터셋에도 있으면 쿼리를 넣은 데이터셋의 필드로
     else { cols=new ArrayList<>(); RexObjectList<?> fl=ds.getFieldDataList(); for(int i=0;i<fl.size();i++){ Col c=new Col(); c.field=nameOf(fl.get(i)); c.f=(Field)fl.get(i); c.title=c.field; cols.add(c); } did.add("columns 미지정 → SELECT 컬럼 "+cols.size()+"개 전부, 제목=필드명, 너비 균등"); }
     // 4) 표 재구성
     ControlTable body=bodyTable(rf,s(args,"table")); ControlTable head, foot;
@@ -326,7 +345,7 @@ public class CrfDerive {
       String[] fdD=CrfMcpServer.defaultFont(rf,template,true), fdL=CrfMcpServer.defaultFont(rf,template,false); for(int i=0;i<w.length;i++){ CrfMcpServer.inheritFont(CrfMcpServer.tableCell(bt,0,i),fdD,true); CrfMcpServer.inheritFont(CrfMcpServer.tableCell(ht,0,i),fdL,true); JSONObject a=new JSONObject(); a.put("align","Center"); a.put("bold","true"); CrfMcpServer.applyProps(rf,CrfMcpServer.tableCell(ht,0,i),a,"F"); }
       body=(ControlTable)bt; head=(ControlTable)ht; foot=null; did.add("템플릿에 본문 표가 없어 본문/데이터머리글에 새 표 생성"); }
     else { head=siblingTable(rf,body,s(args,"header_table"),null,true); foot=siblingTable(rf,body,s(args,"footer_table"),null,false); }
-    Rebuild rb=rebuildTables(rf,cols,body,head,foot,pInt(args.get("width"),0),s(args,"total_label"),null); did.addAll(rb.notes); warns.addAll(rb.warns);
+    Rebuild rb=rebuildTables(rf,cols,body,head,foot,pInt(args.get("width"),0),s(args,"total_label"),null,clean); did.addAll(rb.notes); warns.addAll(rb.warns);
     // 5) 제목·조건 글상자
     String title=s(args,"title"); if(title!=null){ ControlLabel tl=biggestLabel(rf,true); if(tl!=null){ setText(rf,tl,title,null); did.add("제목 글상자 \""+tl.getName()+"\" = \""+title+"\""); } else warns.add("제목을 넣을 머리글 글상자가 없음(crf_add_label 로 추가)"); }
     List<ControlLabel> cl=condLabels(rf); String cond=s(args,"cond"), condR=s(args,"cond_right");
@@ -375,7 +394,7 @@ public class CrfDerive {
     TheReportFile v=CrfMcpServer.open(output); JSONObject va=new JSONObject(); va.put("path",output); va.put("excel","true"); String val=CrfMcpServer.validate(va);
     StringBuilder b=new StringBuilder("OK: 목록형 리포트 파생 완료 → "+wrote+"\n템플릿: "+new java.io.File(template).getName()+"\n");
     for(String x: did) b.append("  ✔ ").append(x).append("\n"); for(String x: warns) b.append("  ⚠ ").append(x).append("\n");
-    b.append("필드("+ds.getFieldDataList().size()+"): ").append(CrfMcpServer.fieldList(CrfMcpServer.datasetOf(v,"0"))).append("\n");
+    b.append("필드("+ds.getFieldDataList().size()+"): ").append(CrfMcpServer.fieldList(CrfMcpServer.datasetOf(v,String.valueOf(CrfMcpServer.indexOfDataset(rf,ds))))).append("\n");
     b.append(CrfMcpServer.cellGridLine(v,body.getName())).append("\n");
     b.append("----- crf_validate excel=true -----\n").append(val.length()>1800?val.substring(0,1800)+"\n…":val);
     return b.toString();

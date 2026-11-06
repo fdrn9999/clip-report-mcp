@@ -222,7 +222,8 @@ if os.path.isfile(A):
     case("add_table bad field -> ERROR", "crf_add_table", {"path": A, "columns": '[{"field":"NOPE"}]', "output": OUT + "/a_tbl2.crf"}, err_contains("NOPE"))
     case("diff cell change", "crf_diff", {"a": A, "b": OUT + "/a_c2.crf"}, contains("공식: +1 [F_표3_0_0]", "표 표3 셀: ~1", '[0,0]: "주 소 (연락처)" → 공식:F_표3_0_0'))
 if os.path.isfile(B):
-    case("validate B", "crf_validate", {"path": B}, contains("ERROR 1 / WARN 1", "끊어진 참조 #unknown#", "중복 이름 CURI_YEAR"))
+    case("validate B", "crf_validate", {"path": B}, contains("ERROR 1 / WARN 5", "끊어진 참조 #unknown#", "중복 이름 CURI_YEAR",
+         '서브리포트 "리포트 서브섹션2" → 데이터셋 SQLDS3: {dataset.D_STUDENT_CD} 링크(②)의 출발 매개변수가 비어 있음'))   # v0.14.0: 실제 리포트의 끊어진 ② 링크 4곳
     case("validate after force remove (dangling)", "crf_validate", {"path": OUT + "/b_rm2.crf"}, contains('바인딩 비어 있음: GroupHeader/그룹 머리글1/Table"표2"[3,6].ApplyValueField', "필드로 없는 SELECT 컬럼 [NM]"))
     case("add_group outer+label+subtotal", "crf_add_group",
          {"path": B, "column": "DEPT_CD", "level": "outer", "label": "true", "subtotal": "TOT_CDT_PASS,CDT_NUM_TOT", "output": OUT + "/b_g1.crf"},
@@ -422,7 +423,7 @@ if os.path.isfile(E):
          contains("AND T1.APPNM_DT <= TO_DATE('{parameter.STDRDT}', 'YYYYMMDD') AND T1.CNT < 10", "if('{parameter.JBFMCD}' != ''){", "if('{parameter.DEPTCD}' == ''){", "if('{parameter.EMPNM}' != ''){", "if('{parameter.USEYN}' == 'Y'){", "return sql;"))
     case("summary: declared param has no type suffix (Null like designer)", "crf_summary", {"path": OUT + "/e_mb.crf"}, lambda t, e: None if not e and "USEYN" in t and "USEYN:String" not in t else f"param type: {t[:400]}")
     case("describe detail compacts row-common style", "crf_describe_layout", {"path": E, "detail": "true"},
-         contains("[0] «공통: 정렬=Middle/Center, 폰트=돋움체, 크기=8, 굵게, 줄바꿈» \"구분\" | \"대학\"", "데이터:INSTT_DIV_NM «정렬=Left/Center", " | 데이터:EMPNO | 데이터:EMP_NM | "))
+         contains("[0] «공통: 정렬=Middle/Center, 폰트=돋움체, 크기=8, 굵게, 줄바꿈» \"구분\" | \"대학\"", "데이터:INSTT_DIV_NM «정렬=Left/Center", " | 데이터:MAJOR_NM | 데이터:ACDCR_NM | ", "데이터:SEX_NM «정렬=Middle/Center, 폰트=돋움체, 크기=8, 줄바꿈, 셀합치기, 기준필드=EMPNO»"))   # v0.14.0: 합치기 셀의 기준필드 표시
     case("describe detail label font not duplicated", "crf_describe_layout", {"path": E, "detail": "true"}, lambda t, e: None if not e and "폰트=돋움체 정렬=Middle/Center 폰트=돋움체" not in t else "font printed twice")
     case("describe one_per_line", "crf_describe_layout", {"path": E, "detail": "true", "one_per_line": "true"}, contains("[0,0] 데이터:INSTT_DIV_NM «정렬=Left/Center", "\n            [0,2] 데이터:EMPNO\n"))
     # Codex 리뷰 반영(v0.9.0): 중복 컬럼명 자리 보존, reorder 가드, 배치 중복 거부, format 우선순위, choose/when else-if, 속성 안의 >, return 판정
@@ -797,6 +798,92 @@ if os.path.isfile(E):
              contains("대학/직급 교수 부교수 조교수 합계", "공과대학 2 0 1 3", "인문대학 1 1 0 2", "합계 3 1 1 5", "소 계 3 3", "소 계 2 2", "합 계 5"))
 
 
+# ---- v0.14.0: porui 피드백 — 밴드 이동 / 서브리포트 2단 링크 / 쿼리 부분 치환 / 일괄 실행 / 셀 합치기 기준 / generate 메인 데이터셋 / render link_base ----
+G1 = os.environ.get("CLIP_SMOKE_G1", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmev/ahrmev0513_prn01.crf")  # 사번 그룹 + 임베디드 서브리포트(D_EMPNO 2단 링크)
+G2 = os.environ.get("CLIP_SMOKE_G2", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmev/ahrmev0513_prn02.crf")  # 단건 양식: 데이터 머리글 1 + 데이터 바닥글 4
+G3 = os.environ.get("CLIP_SMOKE_G3", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmev/ahrmev0503_prn01.crf")  # 데이터셋 3개 중 DS[2] 가 본문, 2행 본문·다단 열머리
+G4 = os.environ.get("CLIP_SMOKE_F1", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmhr/ahrmhr0120_prn01.crf")  # 목록형 템플릿: 본문 셀에 기준필드 EMPNO
+if os.path.isfile(G1):
+    case("v14 describe: 2-step subreport link shown", "crf_describe_layout", {"path": G1},
+         contains("매개변수링크: EMPNO→D_EMPNO", "데이터셋=강사재임용심사하단", "데이터셋링크: D_EMPNO→강사재임용심사하단.D_EMPNO", "새쪽=Before"))
+    case("v14 validate: linked {dataset.X} is not flagged", "crf_validate", {"path": G1}, lambda t, e: None if not e and "{dataset.D_EMPNO}" not in t else f"validate: {t[:400]}")
+    case("v14 query_replace: whitespace-insensitive literal", "crf_query_replace",
+         {"path": G1, "dataset": "3", "find": "B.EMPNO = '{dataset.D_EMPNO}'", "replace": "B.EMPNO = '{dataset.D_X}'", "output": OUT + "/v14_q1.crf"}, contains("OK: 1곳 치환", "공백 수 무시", "B.EMPNO    ="))
+    case("v14 validate: {dataset.X} without dataset parameter -> ERROR", "crf_validate", {"path": OUT + "/v14_q1.crf"}, contains("{dataset.D_X} 에 해당하는 데이터셋 매개변수가 없음"))
+    case("v14 link_subreport_param: creates both steps", "crf_link_subreport_param", {"path": OUT + "/v14_q1.crf", "parent_field": "EMPNO", "param": "D_X", "output": OUT + "/v14_l1.crf"},
+         contains("OK", "서브리포트 매개변수 D_X 생성", "① 부모 EMPNO → 서브리포트 매개변수 D_X", "② 서브리포트 매개변수 D_X → 데이터셋 강사재임용심사하단.D_X", "✔ 쿼리가 {dataset.D_X} 를 사용 중"))
+    case("v14 validate after link: clean", "crf_validate", {"path": OUT + "/v14_l1.crf"}, lambda t, e: None if not e and "{dataset.D_X}" not in t else f"validate: {t[:400]}")
+    case("v14 link again: idempotent", "crf_link_subreport_param", {"path": OUT + "/v14_l1.crf", "parent_field": "EMPNO", "param": "D_X", "output": OUT + "/v14_l2.crf"}, contains("(이미 있음)"))
+    case("v14 link: query without the token -> hint", "crf_link_subreport_param", {"path": G1, "parent_field": "EMPNO", "param": "D_NEW", "output": OUT + "/v14_l3.crf"}, contains("'{dataset.D_NEW}'"))
+    case("v14 link: unknown parent field -> ERROR", "crf_link_subreport_param", {"path": G1, "parent_field": "NOPE", "output": OUT + "/v14_bad.crf"}, err_contains("NOPE"))
+    case("v14 dataset link broken at step 2 -> ERROR", "crf_query_replace", {"path": G1, "dataset": "3", "find": "{dataset.D_EMPNO}", "replace": "{dataset.CONTRNO}", "output": OUT + "/v14_q2.crf"}, ok)
+    case("v14 validate: dataset param exists but nothing feeds it", "crf_validate", {"path": OUT + "/v14_q2.crf"}, contains("{dataset.CONTRNO} 에 해당하는 데이터셋 매개변수가 없음"))
+    case("v14 query_replace: expect_count mismatch saves nothing", "crf_query_replace", {"path": G1, "find": "B.SYY = '{parameter.SYY}'", "replace": "X", "output": OUT + "/v14_q3.crf"}, err_contains("expect_count=1", "저장하지 않음"))
+    case("v14 query_replace: not found", "crf_query_replace", {"path": G1, "find": "NO_SUCH_TEXT_123", "replace": "X", "output": OUT + "/v14_q4.crf"}, err_contains("찾지 못함"))
+    case("v14 query_replace: regex + declares new parameter", "crf_query_replace", {"path": G1, "dataset": "2", "regex": "true", "find": "B\\.REM_DIV_CD\\s*=\\s*'\\{parameter\\.REMDIVCD\\}'", "replace": "B.REM_DIV_CD = '{parameter.REMDIVCD2}'", "output": OUT + "/v14_q5.crf"},
+         contains("OK: 1곳", "정규식", "+ 매개변수 선언 REMDIVCD2"))
+    case("v14 move_subsection: subreport band to group header start", "crf_move_subsection", {"path": G1, "from": "GroupFooter:EMPNO", "index": "1", "to": "GroupHeader:EMPNO", "at": "start", "output": OUT + "/v14_m1.crf"},
+         contains("OK: 서브섹션 1개 이동 GroupFooter:EMPNO → GroupHeader:EMPNO", '0:"리포트 서브섹션1"[서브리포트]'))
+    case("v14 move_subsection: link survives the move", "crf_describe_layout", {"path": OUT + "/v14_m1.crf"}, contains("데이터셋링크: D_EMPNO→강사재임용심사하단.D_EMPNO"))
+    case("v14 move_subsection: unknown group -> ERROR", "crf_move_subsection", {"path": G1, "from": "GroupHeader:NOPE", "to": "Detail", "output": OUT + "/v14_bad.crf"}, err_contains("NOPE"))
+    case("v14 move_subsection: index out of range -> ERROR", "crf_move_subsection", {"path": G1, "from": "[3]", "index": "5", "to": "[1]", "output": OUT + "/v14_bad.crf"}, err_contains("범위 밖"))
+    case("v14 summary: group sort shown", "crf_summary", {"path": G1}, contains("EMPNO(정렬 Not)"))
+if os.path.isfile(G2):
+    case("v14 move_subsection: whole DataHeader into Detail, empty band removed", "crf_move_subsection", {"path": G2, "from": "데이터머리글", "to": "본문", "at": "0", "output": OUT + "/v14_m2.crf"},
+         lambda t, e: None if not e and "DataHeader 밴드가 비어 삭제" in t and "[1]Detail" in t and "DataHeader," not in t.split("밴드:")[1] else f"move: {t[:400]}")
+    case("v14 add_group absorb: single-record form -> per-group form", "crf_add_group", {"path": G2, "column": "EMPNO", "level": "outer", "absorb": "true", "new_page": "Before", "sort": "Not", "output": OUT + "/v14_g1.crf"},
+         contains("OK", "정렬 Not", "+새쪽=Before", "DataHeader 서브섹션 1개 흡수", "DataFooter 서브섹션 4개 흡수"))
+    case("v14 add_group absorb: bands", "crf_describe_layout", {"path": OUT + "/v14_g1.crf"},
+         lambda t, e: None if not e and "DataHeader" not in t and "DataFooter" not in t and '"데이터 머리글1" h=525 새쪽=Before' in t and '"데이터 바닥글2"' in t else f"layout: {t[:400]}")
+    case("v14 add_group: bad sort -> ERROR", "crf_add_group", {"path": G2, "column": "EMPNO", "sort": "Sideways", "output": OUT + "/v14_bad.crf"}, err_contains("Not"))
+if os.path.isfile(G1) and os.path.isfile(G2):
+    case("v14 batch: same steps on 2 files into out_dir", "crf_batch", {"files": [G1, G2], "out_dir": OUT + "/v14_batch", "steps": [
+            {"tool": "crf_set_param", "args": {"name": "BATCHP", "default": "1"}},
+            {"tool": "crf_validate", "args": {"gate": "false"}}]},
+         contains("OK: 파일 2/2개 성공", "ahrmev0513_prn01.crf", "ahrmev0513_prn02.crf", "v14_batch"))
+    case("v14 batch: validate with ✖ fails the file (gate)", "crf_batch", {"files": [G1], "out_dir": OUT + "/v14_batch3", "steps": [{"tool": "crf_validate", "args": {}}]},
+         lambda t, e: None if e and "crf_validate 에 ✖ 가 있어 실패로 처리" in t and "이 파일은 저장하지 않음" in t else f"batch: {t[:300]}")
+    case("v14 query_replace: zero-length regex match does not crash the preview", "crf_query_replace", {"path": G1, "dataset": "3", "regex": "true", "find": "(?m)$", "replace": "", "expect_count": "any", "output": OUT + "/v14_q6.crf"}, contains("OK"))
+    case("v14 batch: result written", "crf_summary", {"path": OUT + "/v14_batch/ahrmev0513_prn02.crf"}, contains("BATCHP"))
+    case("v14 batch: failing step -> file not written, stop", "crf_batch", {"files": [G2, G1], "out_dir": OUT + "/v14_batch2", "steps": [
+            {"tool": "crf_link_subreport_param", "args": {"parent_field": "EMPNO"}}]},
+         lambda t, e: None if e and all(x in t for x in ("ERROR: 파일 0/2개 성공", "이 파일은 저장하지 않음", "중단")) else f"batch: {t[:300]}")
+    case("v14 batch: nothing written after failure", "crf_list_reports", {"dir": OUT + "/v14_batch2"}, lambda t, e: None if "ahrmev0513" not in t else f"written: {t[:200]}")
+    case("v14 batch: no result location -> ERROR", "crf_batch", {"files": [G1], "steps": [{"tool": "crf_validate", "args": {}}]}, err_contains("out_dir"))
+    case("v14 batch: out_dir equal to the source folder without in_place -> refused", "crf_batch", {"files": [OUT + "/v14_g1.crf"], "out_dir": OUT, "steps": [{"tool": "crf_validate", "args": {"gate": "false"}}]},
+         lambda t, e: None if e and "결과 위치가 원본과 같음" in t else f"batch: {t[:300]}")
+    case("v14 batch: dry_run without files -> refused", "crf_batch", {"dry_run": "true", "steps": [{"tool": "crf_validate", "args": {"path": G2}}]}, err_contains("dry_run"))
+    case("v14 batch: nested batch refused", "crf_batch", {"steps": [{"tool": "crf_batch", "args": {}}]}, err_contains("crf_batch 안에서"))
+    case("v14 batch: steps without files run in order", "crf_batch", {"steps": [
+            {"tool": "crf_set_param", "args": {"path": G2, "name": "SEQ1", "output": OUT + "/v14_s1.crf"}},
+            {"tool": "crf_set_param", "args": {"path": OUT + "/v14_s1.crf", "name": "SEQ2", "output": OUT + "/v14_s2.crf"}}]}, contains("OK: 단계 2/2 성공"))
+    case("v14 batch: chained result", "crf_summary", {"path": OUT + "/v14_s2.crf"}, contains("SEQ1", "SEQ2"))
+if os.path.isfile(E):
+    case("v14 merge_mode + merge_ref on a cell", "crf_set_cell", {"path": E, "table": "표3", "cells": [{"row": 0, "col": 0, "merge_mode": "dup"}, {"row": 0, "col": 1, "merge_mode": "dup", "merge_ref": "UNIV_NM"}], "output": OUT + "/v14_mg1.crf"},
+         contains("셀합치기방식=같은값", "합치기기준필드=[UNIV_NM]"))
+    case("v14 merge: describe detail shows 기준필드", "crf_describe_layout", {"path": OUT + "/v14_mg1.crf", "detail": "true"}, contains("기준필드=UNIV_NM"))
+    case("v14 merge: validate lists the 기준필드", "crf_validate", {"path": OUT + "/v14_mg1.crf"}, contains("셀 합치기 기준필드 UNIV_NM"))
+    case("v14 merge_ref '' clears", "crf_set_cell", {"path": OUT + "/v14_mg1.crf", "table": "표3", "row": "0", "col": "1", "merge_ref": "", "output": OUT + "/v14_mg2.crf"}, contains("합치기기준필드 해제", "(was UNIV_NM)"))
+    case("v14 merge_mode next_if_space", "crf_set_cell", {"path": E, "table": "표3", "row": "0", "col": "0", "merge_mode": "next_if_space", "output": OUT + "/v14_mg3.crf"}, contains("빈칸이면위에"))
+    case("v14 merge_mode bad -> ERROR", "crf_set_cell", {"path": E, "table": "표3", "row": "0", "col": "0", "merge_mode": "sideways", "output": OUT + "/v14_bad.crf"}, err_contains("merge_mode"))
+if os.path.isfile(G4):
+    case("v14 generate: template 기준필드 cleared on rebound cells", "crf_generate", {"template": G4, "sql": "SELECT A.DEPT_NM, A.EMPNO, A.EMP_NM FROM ADM.TMP A", "output": OUT + "/v14_gen1.crf"}, contains("OK"))
+    case("v14 generate: no inherited 기준필드", "crf_validate", {"path": OUT + "/v14_gen1.crf"}, lambda t, e: None if not e and "기준필드" not in t else f"validate: {t[:400]}")
+if os.path.isfile(G3):
+    case("v14 generate: uses the main report's dataset, 13 columns, collapses template rows", "crf_generate",
+         {"template": G3, "sql": "SELECT A.C1, A.C2, A.C3, A.C4, A.C5, A.C6, A.C7, A.C8, A.C9, A.C10, A.C11, A.C12, A.C13 FROM ADM.TMP A", "output": OUT + "/v14_gen2.crf"},
+         contains("OK", "대상 데이터셋: 메인 리포트가 쓰는 강사재임용탈락사유서(DS[2])", "템플릿 2행 → 1행", "다단 열머리 1행 삭제", "13열 재구성"))
+    case("v14 generate: re-readable, body bound to C1..C13", "crf_describe_layout", {"path": OUT + "/v14_gen2.crf"}, contains("데이터:C1 |", "데이터:C13"))
+if RENDER and os.path.isfile(E):
+    import shutil
+    shutil.copyfile(E, OUT + "/v14_copy.crf")
+    case("v14 render: scratch copy without link_base -> hint", "crf_render", {"path": OUT + "/v14_copy.crf", "rows": "1"}, contains("link_base="))
+    case("v14 render: link_base resolves the logo from the original location", "crf_render", {"path": OUT + "/v14_copy.crf", "rows": "1", "link_base": E}, contains("bottom_logo.crf 포함"))
+    case("v14 render: JSON 97.0 prints like a DB number (97)", "crf_render", {"path": E, "data": {"SQLDS1": [{"UNIV_NM": "공과대학", "EMP_NM": 97.0}]}},
+         lambda t, e: None if not e and re.search(r"^공과대학 97\s*$", t, re.M) else f"render: {t[:300]}")
+    case("v14 render: bad link_base -> ERROR", "crf_render", {"path": E, "link_base": "C:/definitely/missing"}, err_contains("link_base"))
+
+
 def docs_check():
     """문서가 코드와 어긋나지 않는지(README 가 현상과 달라지는 것 방지): 도구 수·도구 이름·케이스 수·버전."""
     rd = lambda *p: open(os.path.join(PROJ, *p), encoding="utf-8").read()
@@ -809,7 +896,7 @@ def docs_check():
     miss = [t for t in tools if f"`{t}" not in readme]
     out.append(("docs: every tool is documented in README", None if not miss else f"README 에 없는 도구: {miss}"))
     total = len(CASES) + 19 - (2 if os.path.isfile(HWPF) else 0)   # README 의 숫자는 선택 픽스처(CLIP_SMOKE_HWP) 없이 센 값
-    full =all(os.path.isfile(f) for f in (A, B, C, D, E, X, XT)) and bool(RENDER) and os.environ.get("CLIP_SMOKE_DB", "1") == "1"   # 픽스처가 다 있을 때만 케이스 수가 고정
+    full =all(os.path.isfile(f) for f in (A, B, C, D, E, X, XT, G1, G2, G3)) and bool(RENDER) and os.environ.get("CLIP_SMOKE_DB", "1") == "1"   # 픽스처가 다 있을 때만 케이스 수가 고정
     out.append(("docs: README smoke case count" + ("" if full else " (픽스처 일부 없음 — 건너뜀)"), None if not full or f"{total} 케이스" in readme else f"README 테스트 절의 케이스 수를 {total} 로"))
     out.append(("docs: CHANGELOG has the current VERSION", None if f"## [{version}]" in rd("CHANGELOG.md") else f"CHANGELOG.md 에 [{version}] 항목 없음"))
     return out

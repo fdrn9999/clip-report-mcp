@@ -119,13 +119,13 @@ cd clip-report-mcp
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 385 케이스
+python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 434 케이스
 python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
 ```
-- 픽스처(실 리포트) 경로는 환경변수 `CLIP_SMOKE_A`~`E`, `CLIP_SMOKE_F1`, `CLIP_SMOKE_X` 로 바꾼다. 파일이 없으면 그 케이스는 건너뛴다(그만큼 총 케이스 수가 줄어든다).
+- 픽스처(실 리포트) 경로는 환경변수 `CLIP_SMOKE_A`~`E`, `CLIP_SMOKE_F1`, `CLIP_SMOKE_G1`~`G3`, `CLIP_SMOKE_X` 로 바꾼다. 파일이 없으면 그 케이스는 건너뛴다(그만큼 총 케이스 수가 줄어든다).
 - 문서 파서 케이스는 DOCX/XLSX/PPTX/HWPX/HTML/PNG 픽스처를 테스트가 직접 만들어 쓴다(`.smoke-out/docs/`). 바이너리 HWP 는 `CLIP_SMOKE_HWP=<실제 .hwp>` 를 주면 2 케이스가 추가된다. `doc_image` 의 변환 케이스는 변환기가 있든 없든 통과하도록(그림 또는 명확한 ERROR) 되어 있다.
 - `CLIP_MCP_SAVE_IMAGES=<폴더>` 를 주면 `mcpcall.py`/`smoke.py` 가 `doc_image`·`crf_preview` 가 돌려준 그림을 그 폴더에 저장한다.
-- `crf_render` 케이스(11 + 크로스탭 수치 검증 1)는 리포트 서버 웹앱이 있을 때만 돈다(`CLIP_RENDER_WEBAPP` 환경변수 또는 `.env`). 크로스탭 저장 케이스의 픽스처는 `CLIP_SMOKE_XT`.
+- `crf_render` 케이스(15 + 크로스탭 수치 검증 1)는 리포트 서버 웹앱이 있을 때만 돈다(`CLIP_RENDER_WEBAPP` 환경변수 또는 `.env`). 크로스탭 저장 케이스의 픽스처는 `CLIP_SMOKE_XT`.
 - 끝에서 **이번 실행이 쓴 모든 `.crf` 에 평문 SQL 이 없는지**(속성 900 이 암호화 타입인지) 바이트로 검사하고, **픽스처 원본이 실행 전과 바이트 단위로 같은지** 해시로 확인한다. 이어서 **암호화 쿼리의 NUL 종결**(글자 수가 4의 배수인 쿼리의 암호문이 0 블록으로 끝나는지, 그 블록이 없는 파일을 `crf_validate` 가 잡는지)을 3 케이스로 검사한다.
 - 본 실행은 **DB 조회만 켠 서버**(`CLIP_DB_READ=1`, 쓰기 꺼짐)로 돌리고, 끝에서 **꺼진 서버**를 따로 띄워 DB 에 닿는 도구가 전부 접속 전에 ERROR 인지 검사한다(10 케이스, DB 연결 불필요).
 - DB 를 실제로 치는 케이스(`crf_sync_fields mode=db` 4건)는 개발 DB 연결이 필요하다 — DB 가 없으면 `CLIP_SMOKE_DB=0` 으로 끈다.
@@ -138,7 +138,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 | 파일 (`src/`) | 역할 |
 |---|---|
-| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 56개 (.crf 49 + DB 4 + 문서 3), 서버 instructions(개념·규칙 주입), 읽기/검색/lint/diff 와 셀·글상자·필드·매개변수·그룹·쿼리 편집. 클립소프트 FindQuery(문자열찾기) 유틸의 쿼리·XPath·텍스트 검색을 `crf_search` 가 포함 |
+| **CrfMcpServer.java** | **MCP 서버 (로컬 stdio)** — 도구 60개 (.crf 53 + DB 4 + 문서 3), 서버 instructions(개념·규칙 주입), 읽기/검색/lint/diff 와 셀·글상자·필드·매개변수·그룹·쿼리 편집. 클립소프트 FindQuery(문자열찾기) 유틸의 쿼리·XPath·텍스트 검색을 `crf_search` 가 포함 |
 | **CrfMcpHttp.java** | **MCP 서버 (원격 Streamable HTTP)** — 같은 도구 |
 | **CrfTableOps.java** | 표 구조 편집 — 행/열 삽입·복제·삭제·이동·크기·균등, 표 속성, 격자 정보(`crf_table_rows/cols`, `crf_set_table`, `crf_table_info`) |
 | **CrfDerive.java** | 목록형 파생 — `crf_generate` v2, `crf_set_columns`, `crf_append_query_condition` |
@@ -162,9 +162,9 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 ---
 
-## MCP 도구 (56)
+## MCP 도구 (60)
 
-`.crf` 도구 49개(읽기·검색·점검·미리보기·출력 12 + 생성/수정 37) + DB 4 + 문서 3. 수정 도구는 모두 `output`(새 파일) 또는 `in_place=true`(원본 + `.bak`) 로 저장하고, 저장 후 되읽어 검증한다.
+`.crf` 도구 53개(읽기·검색·점검·미리보기·출력 12 + 생성/수정 41) + DB 4 + 문서 3. 수정 도구는 모두 `output`(새 파일) 또는 `in_place=true`(원본 + `.bak`) 로 저장하고, 저장 후 되읽어 검증한다.
 
 ### 리포트(.crf) 도구
 
@@ -187,10 +187,10 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_set_param(path, name, output, [type|default|prompt])` / `crf_remove_param(...)` | 전역 매개변수 생성·수정 / 삭제(쿼리·바인딩 참조 시 거부) |
 | 수정 | `crf_rename_field(path, name, new_name, output, [dataset])` / `crf_remove_field(path, name, output, [dataset|force])` | 필드 이름변경(객체 바인딩 자동 추종 + 공식 `"ns.OLD"`·쿼리 `{parameter.OLD}` 재작성) / 삭제(참조 목록 제시, `force` 없으면 거부) |
 | 설명 | `crf_field_refs(path, name, [dataset])` | 필드/매개변수가 쓰이는 곳: 셀 좌표·라벨·그룹·누적합산·서브리포트 링크·공식·쿼리 |
-| 수정 | `crf_add_group(path, column, output, [level|label|subtotal|sort])` | 그룹 머리/바닥글 추가 — `level=inner|outer|N` 로 중첩 위치, `label=true` 머리글에 그룹필드 라벨, `subtotal=F1,F2` 바닥글에 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 소계 공식 |
+| 수정 | `crf_add_group(path, column, output, [level|label|subtotal|sort|absorb|new_page])` | 그룹 머리/바닥글 추가 — **`absorb=true`: 데이터 머리글/바닥글(임베디드 서브리포트 포함)을 새 그룹 밴드로 옮겨 단건 양식을 사람마다 반복되는 양식으로**, `new_page=Before` 그룹마다 새 쪽, `sort=Not` 쿼리 순서 유지 — `level=inner|outer|N` 로 중첩 위치, `label=true` 머리글에 그룹필드 라벨, `subtotal=F1,F2` 바닥글에 `rexpert.sum(0,"data.F",0,"data.그룹필드","")` 소계 공식 |
 | 수정 | `crf_set_group(path, group, output, [column|sort])` / `crf_remove_group(path, group, output, [force])` | 그룹 필드/정렬 변경 / 그룹 삭제(머리·바닥글 밴드 대칭 제거, 컨트롤·그룹이름 참조 있으면 거부) |
 | 수정 | `crf_place_detail_fields(path, output)` | 본문에 필드 바인딩 데이터 라벨 배치 |
-| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|clear_format|align|valign|fontsize|bold|font|wrap|cangrow|merge|bgcolor|color|underline|italic|linespace|padding])` · **일괄** `cells=[{row,col,table?,…}]`(최상위 인자는 기본값, 저장·검증 1회) | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
+| 수정 | `crf_set_cell(path, table, row, col, output, [field|text|formula|clear|format|clear_format|align|valign|fontsize|bold|font|wrap|cangrow|merge|merge_mode|merge_ref|bgcolor|color|underline|italic|linespace|padding])` · **일괄** `cells=[{row,col,table?,…}]`(최상위 인자는 기본값, 저장·검증 1회) | **표 셀** 편집 — 필드/텍스트/**공식(새 공식필드 생성+바인딩)**/지우기, 출력양식, 정렬, 폰트·크기·굵게·줄바꿈, 확장·셀합치기·배경. 저장 후 되읽어 검증. `‹병합›` 셀은 기준 셀 안내 |
 | 수정 | `crf_set_label(path, name, output, [같은 속성 + left|top|width|height|visible|border|linewidth])` | **글상자/컨트롤** 편집 — 값·공식·스타일(글자색/밑줄/줄간격/여백)·위치·크기·표시·**테두리** |
 | 수정 | `crf_set_cell_checkbox(path, table, row, col, field, output, [true_value|false_value|operator|true_value2|check_type|shape|color|size|default|off])` | 셀을 **기본 체크박스**(셀 내용=체크박스)로 — `field operator true_value` 면 체크(기본 `Equal '1'`), `false_value` 면 해제. 조건이 없으면 항상 빈 상자. `check_type=Rectangle(색칠, 기본)|V|Ellipse|RoundRectangle`. ■/□ 글자 대신 이걸 쓸 것 |
 | 수정 | `crf_merge_cells(path, table, row, col, output, [rowspan|colspan])` | 셀 **병합**(기준 셀이 rowspan×colspan 차지, 덮인 자리는 ‹병합›) / 1×1 로 **해제** |
@@ -209,9 +209,13 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_add_label(path, section, [text|field|formula], [위치], output, [fontsize|bold|underline|color|font|align|valign|wrap|linespace|border|linewidth])` | 밴드에 **글상자** 추가(없는 표준밴드는 자동생성) — 글꼴/정렬/글자색/테두리까지 한 번에 |
 | 수정 | `crf_set_paper(path, [paper|orientation|margin*|fit], output)` | **용지** 종류/방향/여백. 방향을 바꾸면 디자이너처럼 가로/세로 크기를 교환하고, `fit=true` 면 모든 밴드의 표(열 비례)·글상자·선을 새 본문 너비에 비례 조정 |
 | 설명 | `crf_preview(path, [max_px|guides])` | 리포트 **배치를 그림으로**(MCP image) — 용지 한 장에 밴드를 한 번씩 쌓고 글상자·표 셀(병합·테두리·배경)·선·그림 자리를 좌표대로, 글꼴·정렬·줄바꿈까지 그린다. 정적 텍스트는 검정, 필드는 파란 `«필드명»`. 원본 양식 그림(`doc_image`)과 나란히 놓고 비전으로 대조하는 용도(설계 화면 — 데이터 반복·확장·페이지 나눔·서브리포트 내용 없음) |
-| 설명 | `crf_render(path, [mode|params|data|data_file|rows|page|max_px|pdf|db])` | **실제 CLIP 서버 엔진으로 PDF 출력** → 한 쪽을 그림(MCP image)과 글자로. `crf_preview` 와 달리 진짜 출력이다: 데이터 행 반복, 셀 확장, 페이지 나눔, 그룹 소계·누적합산·크로스탭·조건 스타일·서브리포트(공통 로고)까지. **`mode=sample`**(기본): 모든 데이터셋에 가상 행을 넣는다(DB 접속 없음, 쿼리 실행 안 함) — `data={"데이터셋":[{필드:값,…},…]}`(또는 필드 순서 배열, TSV 문자열)로 직접 주거나, 안 주면 필드 이름·타입으로 `rows` 행 자동 생성(그룹 필드는 묶이게, 칸마다 다른 값). **`mode=db`**: 서버가 하는 그대로 서버 설정(`DataConnection.properties`)의 DB 에서 쿼리를 실행(`params={"이름":"값"}`) — 읽은 행 수를 데이터셋별로 알려 준다. PDF 를 따로 남기려면 `pdf=<경로.pdf>`. 원본 `.crf` 는 건드리지 않는다(`pdf` 가 리포트 파일이거나 `.pdf` 가 아니면 거부). [설정](#실제-엔진-출력-설정-crf_render) 필요 |
+| 설명 | `crf_render(path, [mode|params|data|data_file|rows|page|max_px|pdf|db|link_base])` | **실제 CLIP 서버 엔진으로 PDF 출력** → 한 쪽을 그림(MCP image)과 글자로. `crf_preview` 와 달리 진짜 출력이다: 데이터 행 반복, 셀 확장, 페이지 나눔, 그룹 소계·누적합산·크로스탭·조건 스타일·서브리포트(공통 로고)까지. **`mode=sample`**(기본): 모든 데이터셋에 가상 행을 넣는다(DB 접속 없음, 쿼리 실행 안 함) — `data={"데이터셋":[{필드:값,…},…]}`(또는 필드 순서 배열, TSV 문자열)로 직접 주거나, 안 주면 필드 이름·타입으로 `rows` 행 자동 생성(그룹 필드는 묶이게, 칸마다 다른 값). **`mode=db`**: 서버가 하는 그대로 서버 설정(`DataConnection.properties`)의 DB 에서 쿼리를 실행(`params={"이름":"값"}`) — 읽은 행 수를 데이터셋별로 알려 준다. PDF 를 따로 남기려면 `pdf=<경로.pdf>`. 원본 `.crf` 는 건드리지 않는다(`pdf` 가 리포트 파일이거나 `.pdf` 가 아니면 거부). [설정](#실제-엔진-출력-설정-crf_render) 필요 |
 | 수정 | `crf_add_crosstab(path, row, column, value, output, [function|row_name|column_name|sort|total|header|format|section|left|top|row_width|col_width|row_height|…])` | **크로스탭(교차표) 생성** — `row` 필드 값이 행, `column` 필드 값이 열(값 개수만큼 열이 늘어남), 교차 칸에 `value` 를 `Sum|Count|Avg|Min|Max` 로 집계 + 행/열 합계. 예: 부서 × 직급 인원수. 데이터 머리글 밴드에 두고(없으면 생성), 코드와 표시명이 다르면 `row_name`/`column_name`. `crf_describe_layout` 이 크로스탭의 행·열 그룹과 네 행렬(머리/행 라벨/열 라벨/값)을 보여 준다 |
 | 수정 | `crf_add_running_total(path, name, field, output, [function|reset_group])` | **누적합산 필드** 생성 — 레코드마다 `Sum|Count|Avg|Min|Max` 누적. `reset_group`(그룹 필드 이름 또는 번호)을 주면 그 그룹이 바뀔 때 초기화(=그룹 바닥글에 두면 소계), 안 주면 전체 누계. 만든 뒤 `crf_set_cell field=<이름>` 으로 바인딩. `crf_add_group subtotal=` 의 `rexpert.sum()` 공식 소계와 같은 값을 내는 디자이너 기본 방식이고, 본문에 두면 줄마다 누계가 찍힌다 |
+| 수정 | `crf_move_subsection(path, from, to, output, [index|at|remove_empty|drop_empty_target])` | **밴드 행(서브섹션) 이동·순서 변경** — 임베디드 서브리포트 서브섹션 포함. 섹션은 `crf_describe_layout` 번호(`[1]`), 영문/한글 밴드 이름, `GroupHeader:필드`/`GroupFooter:필드` 로 지정. 비게 된 일반 밴드는 삭제(`remove_empty=false` 면 높이 0 행을 남김), 본문·그룹 밴드는 높이 0 행을 남김 |
+| 수정 | `crf_link_subreport_param(path, parent_field, output, [subreport|param|dataset|dataset_param])` | **서브리포트 매개변수 2단 링크** — ① 부모 데이터 필드 → 서브리포트 매개변수(기본 `D_<필드>`), ② 서브리포트 매개변수 → 서브리포트 데이터셋 매개변수(쿼리의 `'{dataset.X}'`). 없는 매개변수는 만들고 기존 링크는 재사용·교정, 쿼리에 토큰이 없으면 넣을 문구를 알려 준다 |
+| 수정 | `crf_query_replace(path, find, replace, output, [dataset|regex|flex_space|ignore_case|expect_count|declare_params])` | **쿼리 일부만 치환** — 기본은 글자 그대로 + 공백 수 무시(`B.EMPNO = X` 가 `B.EMPNO    =X` 와도 맞음), `regex=true` 정규식. 일치 수가 `expect_count`(기본 1)와 다르면 저장하지 않고 일치한 줄을 모두 보여 준다. 새 `{parameter.X}` 선언, JS 쿼리 재검사 |
+| 수정 | `crf_batch(steps, [files|out_dir|suffix|in_place|dry_run|continue_on_error])` | **여러 도구 호출을 한 번에, 여러 파일에** — `steps=[{tool,args}]`. `files` 를 주면 파일마다 임시 사본에 모든 단계를 이어서 적용하고 **전부 성공한 파일만** `out_dir`/`<이름><suffix>.crf`/원본(`in_place`, `.bak`)에 쓴다. 단계 인자의 `{file}`/`{name}` 은 현재 파일 경로/이름 |
 | 설명 | `crf_diff(a, b)` | 두 리포트 **비교** — 데이터셋/필드/쿼리(줄 단위 ±)/scriptType/매개변수/공식 스크립트/그룹/섹션/컨트롤/표 셀 바인딩 |
 
 ### 업무지식 도구 — DB & 문서 (양식→백엔드→DB→쿼리 파이프라인)
@@ -256,7 +260,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
   }
 }
 ```
-→ 클라이언트 재시작 → 도구 56개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
+→ 클라이언트 재시작 → 도구 60개 노출. **MCP 서버에는 API 키 불필요**(키는 Claude 쪽).
 > DB 도구(`db_*`)를 쓰려면 classpath 에 **Tibero JDBC 드라이버 jar** 도 추가하세요. 접속정보는 `.env` 분리(아래).
 
 ### B. 원격 (HTTP) — 팀 공유 / claude.ai 웹
