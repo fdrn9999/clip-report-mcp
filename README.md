@@ -119,7 +119,7 @@ cd clip-report-mcp
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 434 케이스
+python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 462 케이스
 python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
 ```
 - 픽스처(실 리포트) 경로는 환경변수 `CLIP_SMOKE_A`~`E`, `CLIP_SMOKE_F1`, `CLIP_SMOKE_G1`~`G3`, `CLIP_SMOKE_X` 로 바꾼다. 파일이 없으면 그 케이스는 건너뛴다(그만큼 총 케이스 수가 줄어든다).
@@ -171,7 +171,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 분류 | 도구 | 설명 |
 |---|---|---|
 | 설명 | `crf_summary(path)` | 데이터셋·필드·쿼리·그룹·섹션 요약 |
-| 설명 | `crf_describe_layout(path, [detail])` | 섹션→서브섹션(유형/높이/숨김/서브리포트 링크)→컨트롤 + 표 셀 그리드(`‹병합›`, `{출력양식}`). `detail=true` 면 셀/컨트롤별 정렬·폰트·크기·굵게·줄바꿈·확장·셀합치기·조건스타일 |
+| 설명 | `crf_describe_layout(path, [detail])` | 섹션→서브섹션(유형/높이/숨김/서브리포트 링크)→컨트롤 + 표 셀 그리드(`‹병합›`, `{출력양식}`). `detail=true` 면 셀/컨트롤별 정렬·폰트·크기·굵게·줄바꿈·확장·셀합치기·조건스타일. **내장 서브리포트는 안쪽 밴드·표까지 `▼` 아래에 펼쳐** 보이고, 편집에 쓸 `subreport="…"` 값을 알려 준다 |
 | 설명 | `crf_validate(path, [excel])` | **lint** — 끊어진 바인딩(없는 필드/빈 바인딩), 공식의 `#unknown#`·없는 필드 참조·`return` 누락, **JS 동적쿼리의 문법 오류·실행 오류**(실제 JS 엔진으로 실행해 확인: 닫히지 않은 괄호, 선언 안 한 변수 등), 그룹 필드 null, **NUL 종결 없이 저장된 암호화 쿼리**(v0.12.0 저장본 — 디자이너에서 쿼리 끝에 쓰레기 글자), 미선언/미사용 매개변수, 쿼리 컬럼↔필드 불일치, `System` 기본 글꼴·글꼴 섞임, scriptType 불일치, 중복 이름, 숨김 밴드, 링크 서브리포트 파일 없음. **`excel=true`**: 엑셀 격자(엑셀로 내보내는 밴드의 표 열 경계·글상자 좌우·선 x 가 본문 표 경계 ±1mm 에 있는지, 페이지 바닥글 제외; 어긋난 변마다 엑셀 열이 쪼개짐)를 ⚠ 로 |
 | 설명 | `crf_get_query(path, [dataset|mode|params])` | **쿼리 본문** — 데이터셋별 scriptType·연결·필드·사용 매개변수(미선언 표시)·`{dataset.X}` 참조·테이블(추정). JS 동적쿼리는 원문 + **평문 복원본**(if 블록은 `/*IF*/` 주석). **`params={"DEPTCD":"20399"}`(또는 `mode=eval`) 를 주면 그 값으로 JS 를 실제 실행한 SQL** — 리포트가 DB 로 보내는 문장 그대로라 "0건/조건이 안 먹는다" 를 바로 확인(XML/JSON 데이터셋은 루트 XPath·필드 경로) |
 | 설명 | `crf_get_formula(path, [name])` | **공식 스크립트** 전문 + 참조 필드(없는 필드·`#unknown#` 표시), 누적합산 정의(함수/필드/리셋), 그룹이름→그룹필드 |
@@ -196,7 +196,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_merge_cells(path, table, row, col, output, [rowspan|colspan])` | 셀 **병합**(기준 셀이 rowspan×colspan 차지, 덮인 자리는 ‹병합›) / 1×1 로 **해제** |
 | 설명 | `crf_table_info(path, table, [detail])` | 표 **격자**: 위치·크기, 열 너비·행 높이 목록, 셀별 내용과 병합 span `(r×c)`/`‹병합←r,c›`, `detail=true` 면 글꼴·정렬·테두리, 격자 일관성 검사 |
 | 수정 | `crf_table_rows(path, table, action, output, [row|at|position|count|height|heights|to|shift])` | 표 **행** 편집 — `insert`(중간 삽입: `at` 또는 `row`+`position=before\|after`, 위 행의 구조·스타일 복제, 삽입 지점을 가로지르는 세로 병합은 늘어남) · `copy`(내용까지 복제) · `delete`(`'1,3'`/`'2-4'`, 병합 기준 셀 삭제 시 아래 셀로 승격) · `move`(`to`) · `resize`(`heights='60,80,…'` 전체 / `'1:80,3:40'` / `row`+`height`) · `equalize`(모든 행 같은 높이; `height` 없으면 총 높이 유지). `shift=true`(기본) 면 표 아래 요소를 높이 변화만큼 옮기고 감싸는 글상자·밴드 높이도 맞춤 |
-| 수정 | `crf_table_cols(path, table, action, output, [col|at|position|count|width|widths|to|shift])` | 표 **열** 편집 — 행과 동일한 `insert`/`copy`/`delete`/`move`/`resize`(`widths`)/`equalize`(모든 열 같은 너비). 표가 용지 본문 너비를 넘으면 ⚠ |
+| 수정 | `crf_table_cols(path, table, action, output, [col|at|position|count|width|widths|to|shift])` | 표 **열** 편집 — 행과 동일한 `insert`/`copy`/`delete`/`move`/`resize`(`widths`)/`equalize`(모든 열 같은 너비). 표가 용지 본문 너비를 넘으면 ⚠. `match_widths="550,250,…" widths="400,300,…"` 면 `table` 없이 **열 폭이 정확히 그 값인 표를 메인 + 모든 내장 서브리포트에서 찾아 한 번에** 바꾼다(머리글 표와 서브리포트 본문/합계 표의 열 경계를 함께 맞출 때) |
 | 수정 | `crf_set_table(path, table, output, [left|top|width|height|border|cell_border|linewidth|linecolor|auto_merge|keep_together|visible|unmerge_all|name])` | 표 **자체** — 위치, 전체 너비/높이(열·행 **비례** 조정), 외곽선, **모든 셀 테두리** 일괄(`cell_border=true\|false\|left,top`), 자동병합, 페이지나눔방지(`None\|Row\|Table`), **전체 병합 해제**, 이름 변경 |
 | 수정 | `crf_set_subsection(path, section, output, [index|height|visible|name|new_page|repeat])` | 밴드 행(서브섹션) 높이·숨김·이름·페이지바꿈·그룹머리글 반복(`repeat=None|OnPage`) |
 | 수정 | `crf_merge_labels(path, names, output, [into=table\|label|name|border])` / `crf_split_label(path, name, output, [lines|heights])` | 세로로 놓인 **글상자 여러 개 → 1열 표 하나(또는 줄바꿈 글상자 하나)** / 반대로 **줄바꿈 글상자·1열 표 → 줄/행별 글상자** — 값·글꼴·정렬 유지, 세로 자리 그대로 |
@@ -238,6 +238,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 
 ### 설명·제안 강화 (v0.2)
 
+- **내장 서브리포트 안 편집**: `path` 를 받는 `crf_*` 도구는 모두 `subreport="사업비신청목록"`(중첩은 `"A>B"`) 를 받는다. 그러면 그 서브리포트 안의 밴드·표·글상자·공식·그룹을 읽고 고치며, 저장은 파일 전체로 한다. 표·컨트롤 이름은 `table="사업비신청목록>표1"` 처럼 줄여 쓸 수 있다(서브리포트 안 표 이름은 메인과 겹치는 일이 많다). `subreport` 없이 부른 `crf_diff`·`crf_validate` 는 내장 서브리포트별 차이·✖/⚠ 도 덧붙인다. 링크된(별도 파일) 서브리포트는 그 .crf 를 직접 연다.
 - **풍부한 읽기**: `crf_summary` 는 용지(크기·방향·여백)와 **필드 인벤토리를 분류별**(데이터/매개변수/시스템/공식/누적합산/그룹이름)로, `crf_describe_layout` 은 컨트롤별 **위치·바인딩분류(텍스트/데이터/공식/시스템)·출력양식·폰트·확장가능** 과 **표의 셀 그리드(어느 칸에 어느 필드)** 까지 보여줍니다. → Claude가 칸 단위로 정확히 설명·제안.
 - **개념 주입**: MCP `initialize` 의 `instructions` 로 CLIP 개념·용어 가이드를 Claude에 자동 주입 → 항상 정식 용어로 답변.
 - **참고 문서**: 개념 전반은 **[GUIDE.md](GUIDE.md)** (공식 교육가이드 요약: 섹션·필드종류·출력양식·요약함수·조건스타일·크로스탭·마스터디테일 등).

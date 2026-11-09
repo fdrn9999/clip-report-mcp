@@ -54,6 +54,7 @@ public class CrfMcpServer {
     "[★양식은 파싱 + 그림으로 교차 검증한 뒤 작업] 양식 문서나 이미지를 받으면 글자만 믿지 말고 **① doc_text 로 구조·좌표를 읽고 ② doc_image 로 그 문서를 그림으로 받아(이미지 파일은 그대로, PDF 는 쪽 렌더, HWP/HWPX/DOCX/XLSX/PPTX/HTML 은 PC 의 한글·MS Office·LibreOffice·Edge/Chrome 으로 PDF 변환 후 렌더, 변환기가 없으면 파일에 든 첫 쪽 미리보기) 직접 눈으로 보고 ③ 둘을 대조**하세요 — 파싱에 빠진 요소(도장·선·체크칸·그림 속 글자), 병합 셀, 정렬, 테두리/배경, 쪽 수를 확인하고, 어긋나면 그림을 기준으로 인벤토리를 고치거나 사용자에게 묻습니다. 여러 쪽이면 page=2… 로 필요한 쪽을 모두 봅니다. 이 검증을 마친 뒤에 리포트 작업을 시작하고, 그림을 얻지 못했으면(변환기·미리보기 없음) 그 사실을 사용자에게 알리고 PDF/이미지를 요청하거나 doc_text 만으로 진행해도 되는지 확인하세요. **작업 후에는 crf_preview(path) 로 리포트 배치를 그림으로 받아 원본 양식 그림과 나란히 대조**(요소 누락·위치·정렬·병합·테두리)하고 고친 뒤 다시 확인합니다 — crf_preview 는 설계 화면(데이터·확장·페이지 나눔 없음)이므로 실제 출력은 실서버 렌더로 마무리 확인합니다.\n"+
     "[★고친 뒤에는 실제 출력으로 확인] 리포트를 만들거나 고쳤으면 **crf_render 로 실제 엔진 출력을 받아 눈으로 확인**한다(crf_preview 는 설계 화면이라 행 반복·확장·페이지 나눔·소계가 안 보임). 순서: crf_validate → crf_render(mode=sample; 목록형은 rows=60 쯤 주고 page=2 로 다음 쪽 머리글·그룹 이어짐까지, 합계·소계는 data 로 값을 알고 있는 행을 줘서 숫자를 대조, 0건은 rows=0, 긴 글·0 값도 넣어 본다) → 쿼리·실제 수치는 crf_render(mode=db, params={…}) 로 개발 DB 에서 확인(읽은 행 수가 응답에 나옴; 0행이면 crf_get_query params= 로 실행 SQL 을 본다). 확인한 범위(가상/DB, 몇 쪽, 무엇을 대조)와 **확인하지 못한 것**(업무 화면에서 넘기는 값, 디자이너에서 열기, 엑셀 저장 등)을 보고에 구분해 적는다. crf_render 가 '서버 엔진 위치 미설정' ERROR 면 그 안내(CLIP_RENDER_WEBAPP)를 사용자에게 전하고 crf_preview 까지만 확인했다고 말한다.\n"+
     "[★크로스탭·누적합산] 행·열이 데이터 값에 따라 늘어나는 교차 집계(부서×직급 인원, 일자×분야 건수)는 표를 손으로 늘리지 말고 **crf_add_crosstab**(row/column/value/function) — 쿼리는 (행, 열, 값) 한 줄씩 또는 집계 전 상세 행을 돌려주면 된다. 기존 크로스탭의 구조는 crf_describe_layout 이 행·열 그룹과 네 행렬로 보여 준다. 그룹 소계는 crf_add_group subtotal=(rexpert.sum 공식) 이 기본이고, 줄마다 누계나 디자이너 기본 방식이 필요하면 **crf_add_running_total**(reset_group=그룹필드 → 그룹 바닥글 소계 / 생략 → 전체 누계) 후 crf_set_cell field=<이름>. SQL 에서 이미 계산한 소계를 다시 합산하지 말고, 비율·단위가 다른 값은 합산하지 않는다.\n"+
+    "[★내장 서브리포트 안 편집] 리포트 안에 들어 있는(임베디드) 서브리포트의 표·글상자·공식·그룹도 기존 도구로 고친다: path 를 받는 crf_* 도구에 subreport=\"이름\"(중첩 \"A>B\") 를 주거나 table=\"이름>표1\"/name=\"이름>글상자1\" 로 쓴다(서브리포트 안 표 이름은 메인과 자주 겹치므로 꼭 지정). crf_describe_layout 이 서브리포트 안쪽을 ▼ 아래에 펼쳐 이름을 알려 준다. Java/SDK 프로그램을 따로 짜지 말 것. 머리글 표와 서브리포트 본문·합계 표의 열 경계를 함께 맞출 때는 crf_table_cols action=resize match_widths=\"지금 폭들\" widths=\"새 폭들\" 한 번(메인+모든 내장 서브리포트에서 같은 폭의 표를 전부 바꿈). 링크(별도 파일) 서브리포트는 그 .crf 를 path 로 연다.\n"+
     "[★단건 양식 → 여러 사람 출력] 한 사람(EMPNO 등)용 양식을 여러 명이 한 번에 나오게 바꿀 때: crf_add_group(column=사번, level=outer, absorb=true, new_page=Before, sort=Not) 한 번이면 데이터 머리글/바닥글(임베디드 서브리포트 서브섹션 포함)이 새 그룹 머리글/바닥글로 옮겨지고 사람마다 새 쪽이 된다(sort=Not 은 쿼리 ORDER BY 순서 유지). 밴드 하나씩 옮기려면 crf_move_subsection(from=DataFooter, index=1, to=GroupFooter:EMPNO). 쿼리 조건 '= {parameter.EMPNO}' 는 crf_query_replace 로 목록 조건(예 INSTR(','||'{parameter.EMPNOLIST}'||',', ','||B.EMPNO||',') > 0)으로 바꾼다. 같은 변경을 여러 파일에 하면 crf_batch(files=[…], out_dir=…, steps=[…]).\n"+
     "[★서브리포트가 부모 행 값으로 거를 때] 임베디드 서브리포트의 쿼리가 '{dataset.D_X}' 로 부모 행 값을 받으려면 링크가 **두 단계** 다 있어야 한다 — ① 부모 데이터 필드 → 서브리포트 매개변수, ② 서브리포트 매개변수 → 서브리포트 데이터셋의 매개변수. ② 가 없으면 에러 없이 0건. crf_link_subreport_param(parent_field=EMPNO, param=D_EMPNO) 로 둘 다 만들고, crf_describe_layout 의 '매개변수링크/데이터셋링크' 와 crf_validate 로 확인한다.\n"+
     "[★셀 합치기] crf_set_cell merge_mode=dup(같은 값 합치기) | next_if_space(첫 행에만 값, 아래 빈 칸을 합침) | dup,except_space. 열마다 따로 합쳐진다. 엔진은 셀의 **기준 필드**(merge_ref) 값이 같은 행끼리만 합치므로, 합치기가 엉뚱한 곳(예 직번이 바뀌는 곳)에서 끊기면 템플릿에서 물려받은 기준 필드 때문이다 — crf_validate 가 '셀 합치기 기준필드' 로 알려 주고 merge_ref=\"\" 로 해제, 반대로 오른쪽 열이 왼쪽 그룹 경계를 넘어 합쳐지면 merge_ref=<왼쪽 필드>. 결과는 crf_render 로 확인.\n"+
@@ -214,7 +215,7 @@ public class CrfMcpServer {
     arr.add(tool("crf_table_rows","Table ROW editing (structure): action=insert (new empty rows; at=index the new rows take, or row+position=before|after; count; height — structure/style copied from the row above, horizontal merges replicated, vertical merges spanning the insertion point are extended) | copy (duplicate row `row` with its content/bindings, at=destination) | delete (row='1' | '1,3' | '2-4') | move (row → to) | resize (heights='60,80,…' all rows | '1:80,3:40' index:value | row+height) | equalize (all rows same height: height=N, or omit to keep the total height). Merged cells are kept consistent; deleting a merge anchor promotes the next cell. shift=true (default) moves controls below the table by the height change and grows the band. Saves to a new file; the result is re-read and the grid verified.",
         strSchema(new String[]{"path","table","action","output"}, "path","source .crf", "table","ControlTable name (crf_describe_layout / crf_table_info)", "action","insert|copy|delete|move|resize|equalize", "row","row index (0-based); delete accepts '1,3' / '2-4'; copy/move: source row", "at","insert/copy: index the new rows occupy (rows = append)", "position","insert/copy with row=: before|after (default after)", "count","insert/copy: how many (default 1)", "height","insert: new row height; resize: height for row(s); equalize: height for every row (0.1mm)", "heights","resize: '60,80,…' (all rows) or '1:80,3:40' (index:value) or 'all:60'", "to","move: destination index", "shift","true(default)|false: move controls below the table by the height delta", "output","destination .crf")));
     arr.add(tool("crf_table_cols","Table COLUMN editing (structure): action=insert (new columns; at=index, or col+position=before|after; count; width — style copied from the column to the left, vertical merges replicated, horizontal merges spanning the insertion point are extended) | copy (duplicate column `col` with content, at=destination) | delete (col='1' | '1,3' | '2-4') | move (col → to) | resize (widths='300,500,…' all | '1:400,3:200' index:value | col+width) | equalize (all columns same width: width=N, or omit to keep the total width). shift=false (default): controls right of the table stay. Warns if the table exceeds the page body width. Saves to a new file; grid verified after re-read.",
-        strSchema(new String[]{"path","table","action","output"}, "path","source .crf", "table","ControlTable name", "action","insert|copy|delete|move|resize|equalize", "col","column index (0-based); delete accepts '1,3' / '2-4'; copy/move: source column", "at","insert/copy: index the new columns occupy (cols = append at right)", "position","insert/copy with col=: before|after (default after)", "count","insert/copy: how many (default 1)", "width","insert: new column width; resize: width for col(s); equalize: width for every column (0.1mm)", "widths","resize: '300,500,…' (all columns) or '1:400,3:200' (index:value) or 'all:300'", "to","move: destination index", "shift","true|false(default): move controls right of the table by the width delta", "output","destination .crf")));
+        strSchema(new String[]{"path","action","output"}, "path","source .crf", "table","ControlTable name", "action","insert|copy|delete|move|resize|equalize", "col","column index (0-based); delete accepts '1,3' / '2-4'; copy/move: source column", "at","insert/copy: index the new columns occupy (cols = append at right)", "position","insert/copy with col=: before|after (default after)", "count","insert/copy: how many (default 1)", "width","insert: new column width; resize: width for col(s); equalize: width for every column (0.1mm)", "widths","resize: '300,500,…' (all columns) or '1:400,3:200' (index:value) or 'all:300'", "match_widths","resize ACROSS TABLES (table not needed): exact current column widths like '550,250,250' — every table whose widths equal this, in the main report AND all embedded subreports (header table + subreport body/total tables together), gets widths= (full list, same count)", "to","move: destination index", "shift","true|false(default): move controls right of the table by the width delta", "output","destination .crf")));
     arr.add(tool("crf_set_table","Table-level properties: left/top (move), width/height (resize the whole table — columns/rows scaled proportionally), border (table outline on/off), cell_border (every cell: true|false|'left,top,…'), linewidth/linecolor for cell lines, auto_merge, keep_together=None|Row|Table, visible, name (rename), unmerge_all=true (split every merged cell back to 1×1). Saves to a new file.",
         strSchema(new String[]{"path","table","output"}, "path","source .crf", "table","ControlTable name", "left","x (0.1mm)", "top","y (0.1mm)", "width","total width — column widths scaled proportionally", "height","total height — row heights scaled proportionally", "border","true|false: table outline", "cell_border","true|false|'left,right,top,bottom' subset: applied to EVERY cell", "linewidth","W025|W050|W075|W100|W150|W200|W300 for cell lines", "linecolor","#RRGGBB for cell lines", "auto_merge","true|false", "keep_together","None|Row|Table", "visible","true|false", "unmerge_all","true: split all merged cells", "name","new table name", "output","destination .crf")));
     arr.add(tool("crf_table_info","Show one table's grid: position/size, every column width and row height, each cell's content with merge span (r×c) and ‹병합←r,c› for covered cells, borders/font with detail=true, and a grid-consistency check. Use before crf_table_rows/cols/crf_merge_cells to pick indexes.",
@@ -265,6 +266,10 @@ public class CrfMcpServer {
         strSchema(new String[]{"path","find","replace","output"}, "path","source .crf", "find","text (or regex) to find", "replace","replacement text", "dataset","dataset name or index (default / *: every dataset)", "regex","true: find is a Java regular expression", "flex_space","true (default): whitespace-insensitive literal match", "ignore_case","true: case-insensitive", "expect_count","required number of matches (default 1; any = no check)", "declare_params","false: don't declare new {parameter.X}", "output","destination .crf")));
     arr.add(tool("crf_batch","RUN SEVERAL TOOL CALLS AS ONE STEP, optionally ON MANY FILES: steps=[{\"tool\":\"crf_add_group\",\"args\":{…}}, …]. Without files: each step uses its own path/output, executed in order, stops at the first ERROR. With files=[a.crf,b.crf,…]: for each file all steps run on a temporary copy (path is set for you, editing steps chain in place) and the result is written only if every step succeeded — to out_dir/<name>, <name><suffix>.crf, or over the original with in_place=true (.bak backup). Use for the same change on several reports (e.g. 5 forms: add_group absorb, set_param, link_subreport_param, validate). In step args {file} / {name} expand to the current file path / base name. A crf_validate step that reports ✖ (ERROR n>0) counts as a failed step (gate; give it gate=false to only report). Images from render/preview steps are omitted (call them separately).",
         strSchema(new String[]{"steps"}, "steps","JSON array of {tool, args}", "files","JSON array (or comma-separated) of .crf paths to apply all steps to (optional)", "out_dir","with files: folder for the results (originals untouched)", "suffix","with files: write <name><suffix>.crf next to each original (e.g. _edited)", "in_place","with files: overwrite each original (first time backs up to .bak)", "dry_run","true: run on the copies and report, write nothing", "continue_on_error","true: keep going after a failing step/file (default false)")));
+    // 내장 서브리포트 범위: path 를 받는 crf_* 도구는 모두 subreport= 로 서브리포트 안을 읽고 고친다 (CrfScope)
+    for(Object o: arr){ JSONObject t=(JSONObject)o; String n=(String)t.get("name"); JSONObject props=(JSONObject)((JSONObject)t.get("inputSchema")).get("properties");
+      if(!n.startsWith("crf_") || CrfScope.OWN_MEANING.contains(n) || !(props.containsKey("path")||n.equals("crf_diff")) || props.containsKey("subreport")) continue;
+      JSONObject sp=new JSONObject(); sp.put("type","string"); sp.put("description","EMBEDDED SUBREPORT scope (optional): name of an embedded subreport (subsection or control, as crf_describe_layout lists it; nested = \"A>B\"). The tool then reads/edits INSIDE that subreport — its sections, tables, labels, formulas, groups — and the whole file is saved. Shorthand: table=\"서브리포트>표1\" / name=\"서브리포트>글상자1\". Linked (external file) subreports: open that .crf directly."); props.put("subreport",sp); }
     JSONObject r=new JSONObject(); r.put("tools",arr); return r; }
 
   @SuppressWarnings("unchecked")
@@ -284,7 +289,7 @@ public class CrfMcpServer {
   static TheReportFile open(String path) throws IOException {
     if(path==null||path.trim().isEmpty()) throw new RuntimeException("path 인자가 비어 있습니다 (.crf 절대경로 필요)");
     File f=new File(path.trim()); if(!f.isFile()) throw new RuntimeException("파일 없음: "+path);
-    return Rexpert4.read(f.getPath());
+    TheReportFile rf=Rexpert4.read(f.getPath()); CrfScope.apply(rf); return rf;   // subreport= 가 있으면 내장 서브리포트 안으로 범위 전환
   }
   /** Write a .crf for a tool: output required, must differ from the input (원본 보존), parent dir auto-created. */
   static String save(TheReportFile rf,String output,String input) throws IOException {
@@ -300,7 +305,7 @@ public class CrfMcpServer {
       File bak=new File(o.getPath()+".bak"); if(!bak.exists()){ java.nio.file.Files.copy(o.toPath(),bak.toPath()); bakNote=" (원본 백업 → "+bak.getName()+")"; } else bakNote=" (백업 "+bak.getName()+" 유지)"; }
     if(o.getParentFile()!=null && !o.getParentFile().isDirectory()) o.getParentFile().mkdirs();
     boolean existed=o.exists();
-    CrfIO.write(rf,o.getPath());
+    final File oo=o; CrfScope.writeRooted(rf,()->CrfIO.write(rf,oo.getPath()));   // 서브리포트 범위면 원래 메인 리포트로 되돌려 저장
     return o.getPath()+(same?" (in_place)"+bakNote:(existed?" (기존 파일 덮어씀)":""));
   }
 
@@ -315,7 +320,7 @@ public class CrfMcpServer {
   }
   static final ThreadLocal<JSONObject> CUR_ARGS=new ThreadLocal<>();
   static JSONObject dispatch(String name,JSONObject args) throws Exception {
-    CUR_ARGS.set(args);
+    CUR_ARGS.set(args); CrfScope.CUR_TOOL.set(name); CrfScope.splitPathArgs(name,args);
     if("true".equalsIgnoreCase(s(args,"in_place")) && (s(args,"output")==null||s(args,"output").trim().isEmpty()) && s(args,"path")!=null) args.put("output",s(args,"path"));
     switch(name){
       case "crf_summary":  return textContent(summary((String)args.get("path")));
@@ -328,7 +333,7 @@ public class CrfMcpServer {
       case "crf_describe_layout":return textContent(describeLayout((String)args.get("path"),"true".equalsIgnoreCase(s(args,"detail")),"true".equalsIgnoreCase(s(args,"one_per_line"))));
       case "crf_add_group":return textContent(addGroup(args));
       case "crf_set_group":return textContent(setGroup(args));
-      case "crf_validate":return textContent(validate(args));
+      case "crf_validate":{ final JSONObject va=args; return textContent(CrfScope.deep(s(args,"path"),validate(args),()->validate(va),false)); }
       case "crf_set_label":return textContent(setLabel(args));
       case "crf_set_subsection":return textContent(setSubsection(args));
       case "crf_remove_control":return textContent(removeControl(args));
@@ -362,7 +367,7 @@ public class CrfMcpServer {
       case "crf_field_refs":return textContent(fieldRefs(args));
       case "crf_add_label":return textContent(addLabel(args));
       case "crf_set_paper":return textContent(setPaper(args));
-      case "crf_diff":return textContent(diff((String)args.get("a"),(String)args.get("b")));
+      case "crf_diff":{ String da=(String)args.get("a"), db=(String)args.get("b"); return textContent(CrfScope.deep(da,db,diff(da,db),()->diff(da,db),true)); }
       case "db_query":{ String sql=s(args,"sql"); if(sql==null||sql.trim().isEmpty()) return textContent("ERROR: sql 인자가 비어 있습니다");
         if(!"true".equalsIgnoreCase(s(args,"allow_write")) && !isReadOnlySql(sql)) return textContent("ERROR: db_query 는 SELECT/WITH 조회만 허용합니다. 쓰기 문장(INSERT/UPDATE/DELETE/DDL)은 allow_write=true 를 명시해야 합니다: "+sql.trim().replaceAll("\\s+"," ").substring(0,Math.min(80,sql.trim().length())));
         if(!isReadOnlySql(sql)){ requireDbRead("db_query"); if(!on("CLIP_DB_WRITE")) return textContent("ERROR: DB 쓰기가 꺼져 있습니다(기본값) — 쓰기 문장(INSERT/UPDATE/DELETE/DDL)은 실행하지 않았습니다. 켜려면 .env(또는 환경변수)에 CLIP_DB_WRITE=1 을 넣고 /mcp 로 재연결해야 합니다. 사용자에게 알리고, 임의로 설정을 바꾸지 마세요."); }
@@ -462,6 +467,8 @@ public class CrfMcpServer {
 
   @SuppressWarnings("unchecked")
   static Field findField(TheReportFile rf,String name){
+    if(name==null) return null;
+    try{ DataSet act=rf.getGlobe().getMainReport().getReportData().getActiveDataSet(); if(act!=null){ Field f=findDataField(act,name.trim()); if(f!=null) return f; } }catch(Exception e){}   // 지금 리포트(서브리포트 범위면 그 서브리포트)가 쓰는 데이터셋 먼저 — 같은 이름이 다른 데이터셋에도 흔함
     GlobalObjectManager gom=rf.getGlobe().getGlobalObjectManager();
     var rom=rf.getGlobe().getMainReport().getReportObjectManager();
     java.util.List<RexObjectList<?>> lists=new java.util.ArrayList<>();
@@ -1042,7 +1049,19 @@ public class CrfMcpServer {
   static java.util.regex.Pattern paramTokenPattern(String name){ return java.util.regex.Pattern.compile("\\{parameter\\."+java.util.regex.Pattern.quote(name)+"\\}", java.util.regex.Pattern.CASE_INSENSITIVE); }
   /** Everywhere a field object is used: bindings (labels/cells), group fields, running totals, conditions, subreport links (by identity) + formula scripts and query tokens (by name). */
   @SuppressWarnings("unchecked")
+  /** 필드 참조 — 파일 안 모든 리포트(메인 + 내장 서브리포트)에서 찾는다. 데이터셋·매개변수는 파일 전체가 공유하므로
+   *  subreport= 범위로 지울 때도 메인/다른 서브리포트의 참조를 놓치면 안 된다. 서브리포트에서 찾은 것은 "[서브리포트 X] " 접두. */
   static java.util.List<String> refsOf(TheReportFile rf,Field target){
+    java.util.List<Object[]> reps=CrfScope.allReports(rf); Report cur=rf.getGlobe().getMainReport();
+    if(reps.size()==1 && reps.get(0)[1]==cur) return refsIn(rf,target);
+    java.util.LinkedHashSet<String> out=new java.util.LinkedHashSet<>();
+    for(Object[] r: reps){ String p=(String)r[0]; java.util.List<String> got; try{ got=CrfScope.with(rf,(Report)r[1],()->refsIn(rf,target)); }catch(Exception e){ continue; }
+      for(String x: got) out.add(p.isEmpty()?x:"[서브리포트 "+p+"] "+x); }
+    // 메인에서 찾은 것과 같은 참조가 서브리포트 접두로 또 나오면(전역 객체 경로) 하나만 남긴다
+    java.util.List<String> res=new java.util.ArrayList<>(); java.util.Set<String> plain=new java.util.HashSet<>(); for(String x: out) if(!x.startsWith("[서브리포트 ")) plain.add(x);
+    for(String x: out){ if(x.startsWith("[서브리포트 ")){ String tail=x.substring(x.indexOf("] ")+2); if(plain.contains(tail)) continue; } res.add(x); }
+    return res; }
+  static java.util.List<String> refsIn(TheReportFile rf,Field target){
     java.util.List<String> out=new java.util.ArrayList<>();
     walkRefs(rf.getGlobe(),target,out,Collections.newSetFromMap(new IdentityHashMap<>()),"",0);
     var rom=rf.getGlobe().getMainReport().getReportObjectManager(); java.util.regex.Pattern sp=scriptRefPattern(nsOf(target),target.getName());
@@ -1555,7 +1574,12 @@ public class CrfMcpServer {
   @SuppressWarnings("unchecked")
   static String describeLayout(String path,boolean detail) throws Exception { return describeLayout(path,detail,false); }
   static String describeLayout(String path,boolean detail,boolean onePerLine) throws Exception {
-    TheReportFile rf=open(path);
+    TheReportFile rf=open(path); String sc=CrfScope.scopeOf(rf);
+    return (sc==null?"":"[내장 서브리포트 '"+sc+"' 안]\n")+layoutText(rf,detail,onePerLine,sc==null?"":sc,0);
+  }
+  /** 지금 메인 자리에 있는 리포트의 밴드·컨트롤 + 그 안의 내장 서브리포트를 재귀로 펼침 (scope=그 서브리포트의 subreport= 경로) */
+  @SuppressWarnings("unchecked")
+  static String layoutText(TheReportFile rf,boolean detail,boolean onePerLine,String scope,int depth) throws Exception {
     RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
     StringBuilder b=new StringBuilder();
     for(int i=0;i<secs.size();i++){ Section sec=secs.get(i); String gf=groupFieldOf(sec); b.append("["+i+"] "+sec.getClass().getSimpleName().replace("Section","")+(gf==null?"":"(→"+gf+")")+"\n");
@@ -1601,6 +1625,11 @@ public class CrfMcpServer {
             if(rows>60) b.append("          …(+"+(rows-60)+"행)\n"); }
         }
       } } }
+    if(depth<4) for(Object[] x: CrfStruct.subreports(rf)){ Report sub=(Report)x[3]; if(sub==null || !CrfStruct.hasDesign(sub)) continue;
+      String sp=(scope.isEmpty()?"":scope+">")+x[0];
+      String inner=CrfScope.with(rf,sub,()->layoutText(rf,detail,onePerLine,sp,depth+1));
+      b.append("   ▼ 내장 서브리포트 '"+x[0]+"' ("+x[4]+") — 안쪽 편집은 subreport=\""+sp+"\" (또는 table=\""+sp+">표이름\")\n");
+      b.append("      ").append(inner.replaceAll("\\s+$","").replace("\n","\n      ")).append("\n"); }
     return b.toString();
   }
   /** Style summary for a control or cell (detail mode). */

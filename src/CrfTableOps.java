@@ -225,6 +225,7 @@ class CrfTableOps {
   }
   /** crf_table_cols */
   static String tableCols(JSONObject args) throws Exception {
+    if(s(args,"match_widths")!=null && !s(args,"match_widths").trim().isEmpty()) return resizeMatching(args);
     Ctx c=ctx(args); ControlTable t=c.t; String action=q(s(args,"action")).trim().toLowerCase(); int rows=t.getRowCount(), cols=t.getColumnCount(); if(action.isEmpty()) return "ERROR: action 은 insert|delete|copy|move|resize|equalize";
     boolean shift="true".equalsIgnoreCase(s(args,"shift")); int oldW=t.getWidth(), oldRight=t.getX1()+oldW; String did;
     List<String> before=checkGrid(t); if(!before.isEmpty()) return "ERROR: 표 '"+c.name+"' 격자가 이미 손상되어 있습니다 — "+before.get(0)+" (디자이너에서 확인)";
@@ -258,6 +259,31 @@ class CrfTableOps {
     String wrote=CrfMcpServer.save(c.rf,c.output,c.path); String err=verify(c,rows,t.getColumnCount()); if(err!=null) return err;
     return "OK: 표 '"+c.name+"' ("+band(c)+") "+did+" → "+rows+"행×"+t.getColumnCount()+"열, 너비 "+oldW+"→"+t.getWidth()+extra+", verified[grid ok], wrote "+wrote+(t.getX1()+t.getWidth()>pageInnerWidth(c.rf)&&pageInnerWidth(c.rf)>0?"\n⚠ 표 오른쪽 끝("+(t.getX1()+t.getWidth())+") 이 용지 본문 너비("+pageInnerWidth(c.rf)+") 를 넘습니다 — crf_set_table width= 로 줄이거나 crf_table_cols resize":"");
   }
+  /** crf_table_cols match_widths="550,250,…" widths="400,300,…": 열 폭이 정확히 그 값인 표를 메인 + 모든 내장 서브리포트에서 찾아
+   *  한 번에 바꾼다(머리글 표와 서브리포트 본문/합계 표의 열 경계를 함께 맞출 때). subreport= 를 주면 그 서브리포트(와 그 안)만. */
+  static String resizeMatching(JSONObject args) throws Exception {
+    String path=s(args,"path"), output=s(args,"output"); int[] from=ints(s(args,"match_widths"),"match_widths"), to=ints(s(args,"widths"),"widths");
+    if("true".equalsIgnoreCase(s(args,"shift"))) return "ERROR: match_widths 는 shift=true 를 지원하지 않습니다 — 표 전체 너비가 바뀌면 옆 컨트롤은 그대로입니다. 합을 같게 주거나(권장) 표마다 crf_table_cols table=… shift=true 로";
+    if(to.length!=from.length) return "ERROR: widths("+to.length+"개)는 match_widths("+from.length+"개)와 개수가 같아야 합니다 — 열 폭 전체를 순서대로";
+    TheReportFile rf=CrfMcpServer.open(path); String sc=CrfScope.scopeOf(rf); List<String> hits=new ArrayList<>();
+    walkTables(rf,rf.getGlobe().getMainReport(),sc==null?"":sc,0,from,to,hits);
+    if(hits.isEmpty()) return "ERROR: 열 폭이 "+Arrays.toString(from)+" 인 표가 없습니다"+(sc==null?" (메인+내장 서브리포트 전체)":" ('"+sc+"' 안)")+" — crf_describe_layout / crf_table_info 로 폭 확인";
+    for(String h: hits) if(h.startsWith("ERROR")) return h+" (파일은 쓰지 않음)";
+    String wrote=CrfMcpServer.save(rf,output,path);
+    return "OK: 열 폭 "+Arrays.toString(from)+" → "+Arrays.toString(to)+" 표 "+hits.size()+"개 변경, verified[grid ok]\n  - "+String.join("\n  - ",hits)+"\nwrote "+wrote;
+  }
+  static void walkTables(TheReportFile rf,com.clipsoft.clipreport.base.reports.Report rep,String scope,int depth,int[] from,int[] to,List<String> hits) throws Exception {
+    CrfScope.with(rf,rep,()->{
+      for(Object[] e: CrfMcpServer.allControls(rf)){ if(!(e[3] instanceof ControlTable)) continue; ControlTable t=(ControlTable)e[3]; if(t.getColumnCount()!=from.length) continue;
+        boolean same=true; for(int k=0;k<from.length;k++) if(t.getTableColumn(k).getWidth()!=from[k]) same=false; if(!same) continue;
+        for(int k=0;k<to.length;k++) t.getTableColumn(k).setWidth(to[k]); reindex(t);
+        List<String> bad=checkGrid(t); String where=(scope.isEmpty()?"메인":"서브리포트 '"+scope+"'")+" "+((Section)e[0]).getClass().getSimpleName().replace("Section","")+"/"+((SubSection)e[1]).getName()+" 표 '"+t.getName()+"'";
+        hits.add(bad.isEmpty()?where:"ERROR: "+where+" 격자 불일치 — "+bad.get(0)); }
+      if(depth<4) for(Object[] x: CrfStruct.subreports(rf)){ com.clipsoft.clipreport.base.reports.Report sub=(com.clipsoft.clipreport.base.reports.Report)x[3]; if(sub!=null && CrfStruct.hasDesign(sub)) walkTables(rf,sub,(scope.isEmpty()?"":scope+">")+x[0],depth+1,from,to,hits); }
+      return null; });
+  }
+  static int[] ints(String spec,String nm){ if(spec==null||spec.trim().isEmpty()) throw new RuntimeException(nm+" 가 필요합니다 (예 '550,250,250')"); String[] p=spec.split("[,\\s]+"); List<Integer> l=new ArrayList<>(); for(String x: p) if(!x.trim().isEmpty()){ try{ l.add(Integer.parseInt(x.trim())); }catch(NumberFormatException e){ throw new RuntimeException(nm+" 값 '"+x+"' 이 숫자가 아닙니다"); } }
+    int[] r=new int[l.size()]; for(int i=0;i<r.length;i++){ r[i]=l.get(i); if(r[i]<=0) throw new RuntimeException(nm+" 는 양수만"); } return r; }
   static int pageInnerWidth(TheReportFile rf){ try{ Object mp=rf.getGlobe().getMainReport().getReportDesign().getMainPage(); int w=ix(mp,"getPaperWidth"); if(w<=0) return 0; return w-ix(mp,"getLeftMargin")-ix(mp,"getRightMargin"); }catch(Throwable e){ return 0; } }
 
   /** crf_set_table: 위치/크기(비례)/테두리/이름/표 옵션/전체 병합 해제 */

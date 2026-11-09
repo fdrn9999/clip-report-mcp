@@ -308,7 +308,7 @@ public class CrfStruct {
     return r; }
   static boolean writes(String tool){ try{ JSONObject t=null; for(Object o: (JSONArray)CrfMcpServer.toolsList().get("tools")) if(tool.equals(((JSONObject)o).get("name"))) t=(JSONObject)o; if(t==null) return false; JSONObject props=(JSONObject)((JSONObject)t.get("inputSchema")).get("properties"); return props.containsKey("output") && !tool.equals("crf_render"); }catch(Exception e){ return false; } }
   static String run(String tool,JSONObject args){
-    JSONObject saved=CrfMcpServer.CUR_ARGS.get();
+    JSONObject saved=CrfMcpServer.CUR_ARGS.get(); String savedTool=CrfScope.CUR_TOOL.get();
     try{ JSONObject r=CrfMcpServer.callTool(wrap(tool,args)); StringBuilder t=new StringBuilder(); JSONArray c=(JSONArray)r.get("content"); int img=0;
       if(c!=null) for(Object o: c){ JSONObject x=(JSONObject)o; if("text".equals(x.get("type"))) t.append(t.length()==0?"":"\n").append(x.get("text")); else img++; }
       if(img>0) t.append("\n[그림 ").append(img).append("개 생략 — 그림이 필요하면 따로 호출]");
@@ -317,7 +317,7 @@ public class CrfStruct {
       if(tool.equals("crf_validate") && !"false".equalsIgnoreCase(String.valueOf(args.get("gate"))) && java.util.regex.Pattern.compile("— ERROR [1-9]").matcher(s).find()) s="ERROR: crf_validate 에 ✖ 가 있어 실패로 처리(gate=false 면 통과) — "+s;
       return s; }
     catch(Throwable e){ return "ERROR: "+CrfMcpServer.friendly(e); }
-    finally{ CrfMcpServer.CUR_ARGS.set(saved); } }
+    finally{ CrfMcpServer.CUR_ARGS.set(saved); CrfScope.CUR_TOOL.set(savedTool); } }
   @SuppressWarnings("unchecked")
   static JSONObject wrap(String tool,JSONObject args){ JSONObject p=new JSONObject(); p.put("name",tool); p.put("arguments",args); return p; }
   static String indent(String s){ return "   "+s.replace("\n","\n   "); }

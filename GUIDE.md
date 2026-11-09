@@ -193,6 +193,7 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | **엑셀 격자** — 엑셀로 내보내는 밴드의 모든 세로선을 본문 표 열 경계에 맞췄는지(어긋난 변·가까운 경계 제시, 페이지 바닥글 제외) | `crf_validate excel=true` |
 | 표 생성 / 그룹 위치·라벨·소계 / 삭제(컨트롤·그룹·밴드) | `crf_add_table` / `crf_add_group`·`crf_set_group` / `crf_remove_control`·`crf_remove_group`·`crf_remove_section` |
 | **단건 양식 → 사람마다 반복**(데이터 머리글/바닥글을 새 그룹 밴드로, 그룹마다 새 쪽) / 밴드 행 하나씩 옮기기·순서 변경 | `crf_add_group absorb=true new_page=Before` / `crf_move_subsection` |
+| 임베디드 서브리포트 **안의** 표·글상자·공식 고치기(서브리포트 안 표 이름은 메인과 겹치기 쉬움) | 아무 `crf_*` 도구 + `subreport="이름"`(중첩 `"A>B"`) 또는 `table="이름>표1"`; 열 폭 함께 맞추기는 `crf_table_cols resize match_widths=… widths=…` |
 | 임베디드 서브리포트를 **부모 행 값으로 거르기**(① 부모 필드→서브리포트 매개변수 ② →데이터셋 매개변수 `'{dataset.X}'`) | `crf_link_subreport_param` |
 | 쿼리 **일부만 바꾸기**(공백 수 무시, 일치 수 확인) / **같은 작업을 여러 파일에** 한 번에 | `crf_query_replace` / `crf_batch files=[…]` |
 | 표 **셀 합치기 방식**(같은 값 / 첫 행에만 값 / 빈 값 제외)과 **기준 필드**(이 값이 같을 때만 합침) | `crf_set_cell merge_mode=… merge_ref=…` |

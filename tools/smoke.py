@@ -170,7 +170,7 @@ if os.path.isfile(B):
     case("set_query v2 sync none / no declare", "crf_set_query", {"path": B, "sql": sq, "dataset": "1", "declare_params": "false", "sync_fields": "none", "output": OUT + "/b_sq1.crf"},
          lambda t, e: None if not e and "선언되지 않은 매개변수: [SALYYM]" in t and "필드 추가" not in t else f"none: {t[:300]}")
     case("set_query v2 replace removes unreferenced", "crf_set_query", {"path": B, "sql": sq, "dataset": "1", "sync_fields": "replace", "output": OUT + "/b_sq3.crf"},
-         contains("필드 제거(미참조): [", "필드(6)"))
+         contains("필드 제거(미참조): [", "참조 중이라 유지: [ADMIT_CMPSJ_CDT(1곳 참조), ADMIT_CURI(1곳 참조)]", "필드(8)"))   # v0.15: 내장 서브리포트 표에 바인딩된 필드는 지우지 않음
     case("set_query SELECT * hint", "crf_set_query", {"path": B, "sql": "SELECT * FROM ADM.AHRM810 WHERE X=#{x}", "dataset": "SQLDS3", "output": OUT + "/b_sq2.crf"},
          contains("SELECT 목록을 파싱하지 못함", "mode=db"))
     case("sync_fields sql", "crf_sync_fields", {"path": OUT + "/b_sq1.crf", "dataset": "1", "mode": "sql", "set_types": "true", "output": OUT + "/b_sync3.crf"},
@@ -207,7 +207,7 @@ if os.path.isfile(A):
          contains('"글상자2" (Detail)', "align=Middle", "width=1700", 'verified[text="임용지원서(수정)"]'))
     case("set_label missing -> ERROR", "crf_set_label", {"path": A, "name": "없음", "text": "x", "output": OUT + "/a_l2.crf"}, error)
     case("remove_control", "crf_remove_control", {"path": A, "name": "글상자1", "output": OUT + "/a_rc.crf"}, contains("삭제 (Detail/PAGE1)"))
-    case("remove_control verify", "crf_describe_layout", {"path": OUT + "/a_rc.crf"}, lambda t, e: None if not e and '"글상자1"' not in t else "still present")
+    case("remove_control verify", "crf_describe_layout", {"path": OUT + "/a_rc.crf"}, lambda t, e: None if not e and '"글상자1"' not in t.split("▼")[0] else "still present")   # v0.15: 내장 서브리포트 안의 같은 이름 글상자는 펼쳐 보이므로 메인 부분만
     case("set_subsection", "crf_set_subsection", {"path": A, "section": "본문", "index": "1", "visible": "true", "height": "800", "new_page": "After", "output": OUT + "/a_ss.crf"},
          contains('Detail sub[1] "본문2" h=800', "visible=true", "new_page=After"))
     case("set_subsection bad new_page -> ERROR", "crf_set_subsection", {"path": A, "section": "본문", "new_page": "Sideways", "output": OUT + "/a_ss2.crf"}, error)
@@ -884,6 +884,48 @@ if RENDER and os.path.isfile(E):
     case("v14 render: bad link_base -> ERROR", "crf_render", {"path": E, "link_base": "C:/definitely/missing"}, err_contains("link_base"))
 
 
+# ---- v0.15.0: 내장 서브리포트 안 편집 (subreport= 범위 / "서브>표" 경로 / describe 재귀 / match_widths / diff·validate 재귀) ----
+SR = os.environ.get("CLIP_SMOKE_SR", "C:/eGovFrameDev-4.3.1/workspace/report/meta/res/rfsm/rfsmbs/rfsmbs0100_prn01.crf")  # 임베디드 서브리포트 2개(사업비신청목록·세부항목 지출현황) + 링크 서브리포트
+if os.path.isfile(SR):
+    case("v15 describe: embedded subreports expanded with their tables", "crf_describe_layout", {"path": SR},
+         contains("▼ 내장 서브리포트 '사업비신청목록'", "▼ 내장 서브리포트 '세부항목 지출현황'", 'subreport="세부항목 지출현황"', "데이터:SUM_AMT{#,##0}"))
+    case("v15 table_info via path syntax 서브>표", "crf_table_info", {"path": SR, "table": "세부항목 지출현황>표1"}, contains("1행×6열", "데이터:PRUF_TARPR_NM"))
+    case("v15 table_info subreport= picks the subreport's 표3, not the main one", "crf_table_info", {"path": SR, "subreport": "사업비신청목록", "table": "표3"}, contains("※ 사업 비목별"))
+    case("v15 table_info without scope = main 표3", "crf_table_info", {"path": SR, "table": "표3"}, contains("사업비목", "실행예산"))
+    case("v15 unknown subreport -> ERROR lists names", "crf_table_info", {"path": SR, "subreport": "없는것", "table": "표1"}, err_contains("서브리포트 '없는것' 없음", '"사업비신청목록"'))
+    case("v15 linked subreport -> ERROR (open that file)", "crf_table_info", {"path": SR, "subreport": "리포트 서브섹션1", "table": "표1"}, err_contains("링크된 별도 파일", "comLine.crf"))
+    case("v15 set_cell inside subreport", "crf_set_cell", {"path": SR, "table": "사업비신청목록>표2", "row": "0", "col": "0", "text": "합 계", "output": OUT + "/v15_c1.crf"}, contains("OK"))
+    case("v15 scoped describe shows only the subreport", "crf_describe_layout", {"path": OUT + "/v15_c1.crf", "subreport": "사업비신청목록"},
+         lambda t, e: None if not e and "[내장 서브리포트 '사업비신청목록' 안]" in t and '"합 계"' in t and "본문4" not in t else f"describe: {t[:300]}")
+    case("v15 main report intact after a scoped save", "crf_describe_layout", {"path": OUT + "/v15_c1.crf"}, contains('"총괄사업명"', '"본문4"', "▼ 내장 서브리포트 '사업비신청목록'"))
+    case("v15 diff recurses into embedded subreports", "crf_diff", {"a": SR, "b": OUT + "/v15_c1.crf"}, contains("▼ 내장 서브리포트 '사업비신청목록'", '→ "합 계"'))
+    case("v15 scoped diff", "crf_diff", {"a": SR, "b": OUT + "/v15_c1.crf", "subreport": "사업비신청목록"}, lambda t, e: None if not e and '→ "합 계"' in t and "▼" not in t else f"diff: {t[:300]}")
+    case("v15 scoped validate", "crf_validate", {"path": OUT + "/v15_c1.crf", "subreport": "세부항목 지출현황"}, contains("ERROR"))
+    case("v15 match_widths: header table + both subreport tables at once", "crf_table_cols", {"path": SR, "action": "resize", "match_widths": "400,300,300,300,300,200", "widths": "380,310,310,310,310,180", "output": OUT + "/v15_w1.crf"},
+         contains("표 3개 변경", "메인 Detail/본문2 표 '표3'", "서브리포트 '사업비신청목록' Detail/본문1 표 '표1'", "서브리포트 '사업비신청목록' DataFooter/데이터 바닥글1 표 '표2'"))
+    case("v15 match_widths result inside subreport", "crf_table_info", {"path": OUT + "/v15_w1.crf", "table": "사업비신청목록>표2"}, contains("[0]380 [1]310", "[5]180"))
+    case("v15 match_widths scoped to one subreport", "crf_table_cols", {"path": SR, "action": "resize", "subreport": "사업비신청목록", "match_widths": "400,300,300,300,300,200", "widths": "380,310,310,310,310,180", "output": OUT + "/v15_w2.crf"},
+         lambda t, e: None if not e and "표 2개 변경" in t and "메인" not in t else f"cols: {t[:300]}")
+    case("v15 match_widths count mismatch -> ERROR", "crf_table_cols", {"path": SR, "action": "resize", "match_widths": "400,300", "widths": "700", "output": OUT + "/v15_bad.crf"}, err_contains("개수가 같아야"))
+    case("v15 match_widths no table -> ERROR", "crf_table_cols", {"path": SR, "action": "resize", "match_widths": "1,2,3", "widths": "1,2,3", "output": OUT + "/v15_bad.crf"}, err_contains("인 표가 없습니다"))
+    case("v15 batch step with subreport=", "crf_batch", {"steps": [
+            {"tool": "crf_table_cols", "args": {"path": SR, "subreport": "세부항목 지출현황", "table": "표2", "action": "resize", "widths": "5:260", "output": OUT + "/v15_b1.crf"}},
+            {"tool": "crf_table_info", "args": {"path": OUT + "/v15_b1.crf", "table": "세부항목 지출현황>표2"}}]}, contains("OK: 단계 2/2 성공", "[5]260"))
+    # Codex 리뷰 v0.15.0 6건 회귀
+    case("v15 scoped remove_field still sees the main report's reference", "crf_remove_field", {"path": SR, "subreport": "사업비신청목록", "name": "TITLE", "dataset": "SQLDS1", "output": OUT + "/v15_rf.crf"}, err_contains("1곳에서 참조", 'Table"표3"'))
+    case("v15 set_table name= is a new name, not a 서브>표 selector", "crf_set_table", {"path": SR, "table": "표3", "name": "사업비신청목록>renamed", "output": OUT + "/v15_nm.crf"}, contains("OK: 표 '사업비신청목록>renamed' (Detail)"))
+    case("v15 scoped set_cell binds the subreport's own dataset", "crf_set_cell", {"path": SR, "subreport": "세부항목 지출현황", "table": "표2", "row": "0", "col": "0", "field": "ITMXP_NM", "output": OUT + "/v15_ds.crf"}, contains("OK"))
+    case("v15 ...bound to SQLDS3 (not SQLDS2 of the same name)", "crf_field_refs", {"path": OUT + "/v15_ds.crf", "name": "ITMXP_NM", "dataset": "SQLDS3"}, contains('[서브리포트 세부항목 지출현황] DataFooter/데이터 바닥글1/Table"표2"[0,0]'))
+    case("v15 add a broken formula inside a subreport", "crf_add_formula_field", {"path": SR, "subreport": "세부항목 지출현황", "name": "BADF", "script": 'return rexpert.field("data.NOPE_COL");', "output": OUT + "/v15_bad_f.crf"}, contains("OK"))
+    case("v15 validate counts subreport ✖ in the header", "crf_validate", {"path": OUT + "/v15_bad_f.crf"}, contains("(내장 서브리포트 ✖ 1 포함)", "✖ 공식 BADF: 없는 필드 참조 [data.NOPE_COL]"))
+    case("v15 batch gate fails on a subreport-only ✖", "crf_batch", {"steps": [{"tool": "crf_validate", "args": {"path": OUT + "/v15_bad_f.crf"}}]}, err_contains("crf_validate 에 ✖ 가 있어 실패로 처리"))
+    case("v15 diff reports subreports missing in B", "crf_diff", {"a": SR, "b": E}, contains("내장 서브리포트가 B 에 없음"))
+    case("v15 match_widths + shift -> ERROR", "crf_table_cols", {"path": SR, "action": "resize", "match_widths": "400,300,300,300,300,200", "widths": "400,300,300,300,300,300", "shift": "true", "output": OUT + "/v15_bad.crf"}, err_contains("shift=true 를 지원하지 않습니다"))
+    if RENDER:
+        case("v15 render: subreport edit reaches the engine output", "crf_render", {"path": OUT + "/v15_c1.crf", "link_base": SR,
+             "data": {"SQLDS1": [{"TITLE": "1차"}], "SQLDS2": [{"ITMXP_NM": "운영비", "BUDGT_AMT": "1000"}], "SQLDS3": [{"ITMXP_NM": "운영비"}]}},
+             lambda t, e: None if not e and re.search(r"^합 계 1,000", t, re.M) else f"render: {t[:400]}")
+
 def docs_check():
     """문서가 코드와 어긋나지 않는지(README 가 현상과 달라지는 것 방지): 도구 수·도구 이름·케이스 수·버전."""
     rd = lambda *p: open(os.path.join(PROJ, *p), encoding="utf-8").read()
@@ -904,7 +946,7 @@ def docs_check():
 
 import hashlib
 def _sha(p): return hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.isfile(p) else None
-ORIG = {p: _sha(p) for p in (A, B, C, D, E, X, XT)}   # 픽스처 원본은 어떤 도구도 건드리면 안 된다
+ORIG = {p: _sha(p) for p in (A, B, C, D, E, X, XT, SR)}   # 픽스처 원본은 어떤 도구도 건드리면 안 된다
 
 
 def files_check(since):
