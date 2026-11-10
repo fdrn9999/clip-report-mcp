@@ -119,7 +119,7 @@ cd clip-report-mcp
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 462 케이스
+python tools/smoke.py -v        # 실 리포트 7종 + 즉석 생성 문서 픽스처로 도구 회귀 + 문서 정합성 검사, 480 케이스
 python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 서버를 stdio JSON-RPC 로 직접 호출
 ```
 - 픽스처(실 리포트) 경로는 환경변수 `CLIP_SMOKE_A`~`E`, `CLIP_SMOKE_F1`, `CLIP_SMOKE_G1`~`G3`, `CLIP_SMOKE_X` 로 바꾼다. 파일이 없으면 그 케이스는 건너뛴다(그만큼 총 케이스 수가 줄어든다).
@@ -198,7 +198,7 @@ python tools/mcpcall.py --list '[["crf_summary",{"path":"C:/path/x.crf"}]]'   # 
 | 수정 | `crf_table_rows(path, table, action, output, [row|at|position|count|height|heights|to|shift])` | 표 **행** 편집 — `insert`(중간 삽입: `at` 또는 `row`+`position=before\|after`, 위 행의 구조·스타일 복제, 삽입 지점을 가로지르는 세로 병합은 늘어남) · `copy`(내용까지 복제) · `delete`(`'1,3'`/`'2-4'`, 병합 기준 셀 삭제 시 아래 셀로 승격) · `move`(`to`) · `resize`(`heights='60,80,…'` 전체 / `'1:80,3:40'` / `row`+`height`) · `equalize`(모든 행 같은 높이; `height` 없으면 총 높이 유지). `shift=true`(기본) 면 표 아래 요소를 높이 변화만큼 옮기고 감싸는 글상자·밴드 높이도 맞춤 |
 | 수정 | `crf_table_cols(path, table, action, output, [col|at|position|count|width|widths|to|shift])` | 표 **열** 편집 — 행과 동일한 `insert`/`copy`/`delete`/`move`/`resize`(`widths`)/`equalize`(모든 열 같은 너비). 표가 용지 본문 너비를 넘으면 ⚠. `match_widths="550,250,…" widths="400,300,…"` 면 `table` 없이 **열 폭이 정확히 그 값인 표를 메인 + 모든 내장 서브리포트에서 찾아 한 번에** 바꾼다(머리글 표와 서브리포트 본문/합계 표의 열 경계를 함께 맞출 때) |
 | 수정 | `crf_set_table(path, table, output, [left|top|width|height|border|cell_border|linewidth|linecolor|auto_merge|keep_together|visible|unmerge_all|name])` | 표 **자체** — 위치, 전체 너비/높이(열·행 **비례** 조정), 외곽선, **모든 셀 테두리** 일괄(`cell_border=true\|false\|left,top`), 자동병합, 페이지나눔방지(`None\|Row\|Table`), **전체 병합 해제**, 이름 변경 |
-| 수정 | `crf_set_subsection(path, section, output, [index|height|visible|name|new_page|repeat])` | 밴드 행(서브섹션) 높이·숨김·이름·페이지바꿈·그룹머리글 반복(`repeat=None|OnPage`) |
+| 수정 | `crf_set_subsection(path, section\|section_index, output, [index|height|shift_controls|visible|name|new_page|repeat|section_keep_together|group_keep_together|keep_together|subreport_keep_together|print_at_bottom|…])` | 밴드·밴드 행(서브섹션) — 높이(`shift_controls=true` 면 안의 컨트롤도 함께 옮김)·숨김·이름·페이지바꿈·그룹머리글 반복(`repeat=None|OnPage`)·**쪽 넘김 방지 플래그**(밴드 `section_keep_together`, 행 `keep_together`, 내장 서브리포트 행 `subreport_keep_together` 등). 같은 종류 밴드가 여럿이면 `section_index=n`(describe 의 `[n]`) 또는 `GroupFooter:필드`. `subreport=` 로 내장 서브리포트 안 행도 |
 | 수정 | `crf_merge_labels(path, names, output, [into=table\|label|name|border])` / `crf_split_label(path, name, output, [lines|heights])` | 세로로 놓인 **글상자 여러 개 → 1열 표 하나(또는 줄바꿈 글상자 하나)** / 반대로 **줄바꿈 글상자·1열 표 → 줄/행별 글상자** — 값·글꼴·정렬 유지, 세로 자리 그대로 |
 | 수정 | `crf_set_font(path, output, [font|data_font|size|only_system|section])` | **글꼴 일괄** — 라벨(글자)/데이터(숫자) 따로, `only_system=true` 면 SDK 기본 `System` 글꼴만 교체. 전/후 통계 응답 |
 | 수정 | `crf_add_table(path, output, columns \| rows, [section|header_section|left|top|row_height|name|width|border|wrap|align])` | **표 생성** — `columns` JSON(`field,title,width,format,align`)로 본문 1행 데이터 표 + 머리글 밴드 제목 표(같은 열 너비); **`rows` JSON 으로 문단·목록·※주석용 1열 N행 텍스트 표**(글상자를 줄마다 만들지 말 것). 새 셀은 리포트 글꼴 상속. SDK 생성이라 디자이너에서 한 번 확인 권장 |

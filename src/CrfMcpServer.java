@@ -48,7 +48,7 @@ public class CrfMcpServer {
     "[★JS 동적쿼리는 return 필수] scriptType=JavaScript 쿼리는 마지막에 `return sql;` 이 없으면 에러 없이 0건입니다(저장소 JS 쿼리 1,491개 전부 return 있음). crf_set_query 가 경고하고 crf_validate 가 ✖ 로 잡습니다. JS 쿼리의 문법 오류·실행 오류(선언 안 한 변수 등)도 실제 JS 엔진으로 돌려 crf_set_query/crf_append_query_condition/crf_validate 가 ✖ 로 알려 줍니다. MyBatis 변환은 return 을 자동으로 붙이며 isValid/isEmpty/isNotEmpty/\"Y\".equals(x)/list.size() > 0/&lt; 엔티티/본문 <= 연산자, <choose>, <foreach>(매개변수를 A,B,C 쉼표 문자열로 받아 split 루프; 루프 변수·index 를 쓰는 <if test> 포함), <where>/<trim>/<set>(앞머리 AND/OR·끝 쉼표 정리)를 처리합니다(<include>/<bind> 는 수동).\n"+
     "[★목록형 리포트는 crf_generate 한 방] 비슷한 목록형 리포트(템플릿)에서 새 리포트를 파생할 때는 도구를 50번 부르지 말고 **crf_generate(template, sql, output, columns=[{field,title,width,align,format,total}], title, cond, cond_right, groups=none|auto|A,B)** 한 번으로: 템플릿 그룹·묵은 필드/바인딩 정리 → 쿼리(매개변수 선언·필드 SELECT 순서; SELECT * 는 fields_from_db=true) → 본문/제목/합계 표 재구성 → 제목·조건 글상자 → 그룹(소계) → 로고 유지 → 엑셀 격자 맞춤 → crf_validate excel=true 까지 자동. 열만 바꾸려면 crf_set_columns, 기존 JS 쿼리에 조건 하나 보태려면 crf_append_query_condition(param, sql 조각; ORDER BY 앞에 if 블록). 생성 후 실서버 렌더로 확인.\n"+
     "[★데이터셋 수정] 쿼리 교체는 crf_set_query(매개변수 자동 선언 + SELECT 컬럼을 필드로 추가·SELECT 순서로 재정렬). SELECT * 등 파싱 불가면 crf_sync_fields(mode=db)로 DB 에서 컬럼을 확정. 데이터셋 추가/삭제=crf_add_dataset/crf_remove_dataset, 매개변수=crf_set_param/crf_remove_param, 필드 이름변경/삭제=crf_rename_field/crf_remove_field(참조 검사; 참조 확인만은 crf_field_refs).\n"+
-    "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값; 여러 셀은 cells=[{row,col,…}] 한 번에; 출력양식 제거는 format='' 또는 clear_format=true), 글상자=crf_set_label, 밴드 행=crf_set_subsection(높이/숨김/페이지바꿈), 표 생성=crf_add_table(columns JSON), 표 구조=crf_table_info(열 너비·행 높이·병합 격자 확인) → crf_table_rows/crf_table_cols(action=insert|copy|delete|move|resize|equalize: 행/열 중간 삽입·복제·삭제·이동·너비/높이·균등 분배; 병합 셀은 자동으로 늘리고/승격) · crf_set_table(위치·전체 너비/높이 비례 조정·외곽선·셀 테두리 일괄·unmerge_all) · 셀 테두리=crf_set_cell border=left,top… , 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section(영문 DataFooter/한글 데이터바닥글 모두 가능; 없으면 오류에 현재 밴드 목록)/crf_remove_field. 용지 방향 전환은 crf_set_paper orientation=Landscape fit=true(가로/세로 크기 교환 + 모든 밴드 요소를 새 본문 너비에 비례 조정). 넓은 표는 crf_describe_layout detail=true(행 공통 스타일 «공통» 압축)·one_per_line=true 로 읽기. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
+    "[★레이아웃 수정/검증] 셀=crf_set_cell(값·공식·출력양식·정렬·폰트·병합값; 여러 셀은 cells=[{row,col,…}] 한 번에; 출력양식 제거는 format='' 또는 clear_format=true), 글상자=crf_set_label, 밴드·행=crf_set_subsection(높이(+shift_controls=true 로 안의 컨트롤 함께)/숨김/페이지바꿈/쪽 넘김 방지 section_keep_together·keep_together·subreport_keep_together — 서명/결재 블록이 쪽 사이에서 갈라지면 바닥글 밴드 section_keep_together + 서브리포트 행 subreport_keep_together; 같은 종류 밴드가 여럿이면 section_index=n(describe 의 [n])), 표 생성=crf_add_table(columns JSON), 표 구조=crf_table_info(열 너비·행 높이·병합 격자 확인) → crf_table_rows/crf_table_cols(action=insert|copy|delete|move|resize|equalize: 행/열 중간 삽입·복제·삭제·이동·너비/높이·균등 분배; 병합 셀은 자동으로 늘리고/승격) · crf_set_table(위치·전체 너비/높이 비례 조정·외곽선·셀 테두리 일괄·unmerge_all) · 셀 테두리=crf_set_cell border=left,top… , 그룹=crf_add_group(level/label/subtotal)·crf_set_group·crf_remove_group, 삭제=crf_remove_control/crf_remove_section(영문 DataFooter/한글 데이터바닥글 모두 가능; 없으면 오류에 현재 밴드 목록)/crf_remove_field. 용지 방향 전환은 crf_set_paper orientation=Landscape fit=true(가로/세로 크기 교환 + 모든 밴드 요소를 새 본문 너비에 비례 조정). 넓은 표는 crf_describe_layout detail=true(행 공통 스타일 «공통» 압축)·one_per_line=true 로 읽기. 수정 후에는 crf_validate 로 끊어진 바인딩·공식·매개변수를 점검하고, 원본과 비교는 crf_diff.\n"+
     "[★체크박스] 체크 표시는 ■/□·●/○ 글자로 흉내내지 말고 crf_set_cell_checkbox(셀 내용=체크박스 + 참/거짓 조건: field/true_value/false_value)로 만드세요. 조건이 비어 있으면 값이 뭐든 항상 빈 상자입니다. 기본은 색칠(check_type=Rectangle), V 체크/원은 옵션.\n"+
     "[★참조 양식은 요소 전부를 좌표까지 판독] HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으면 눈에 띄는 것만 옮기지 말고 **모든 요소**(제목·부제·문단·표와 셀·선·상자·도형·체크칸·서명란·직인 자리·머리글/바닥글·페이지번호·로고·여백)를 **배치·좌표(x,y,너비,높이 mm)·정렬·글꼴/크기/굵게/색·테두리/배경·데이터 자리 여부**까지 빠짐없이 표로 인벤토리한 뒤 배치를 시작하세요. 판독은 내장 도구로: **doc_text(path)** 가 PDF·HWP·HWPX·DOCX·XLSX/XLS·PPTX·HTML 을 형식 자동 인식으로 읽어 용지/여백, 문단(y·정렬·글꼴 크기·굵게), 표(셀 [행,열]·병합·너비×높이), 도형/그림 위치를 mm 로 줍니다(리포트 좌표 = mm×10; PDF 줄 위치는 detail=true, 엑셀은 sheet, 이미지는 크기만 — OCR 없음). 인벤토리에 없는 요소가 결과물에 없거나 위치가 다르면 미완성이며, 마지막에 렌더 결과를 원본과 요소별로 나란히 대조(정렬 체크리스트)해 차이를 보고합니다.\n"+
     "[★양식은 파싱 + 그림으로 교차 검증한 뒤 작업] 양식 문서나 이미지를 받으면 글자만 믿지 말고 **① doc_text 로 구조·좌표를 읽고 ② doc_image 로 그 문서를 그림으로 받아(이미지 파일은 그대로, PDF 는 쪽 렌더, HWP/HWPX/DOCX/XLSX/PPTX/HTML 은 PC 의 한글·MS Office·LibreOffice·Edge/Chrome 으로 PDF 변환 후 렌더, 변환기가 없으면 파일에 든 첫 쪽 미리보기) 직접 눈으로 보고 ③ 둘을 대조**하세요 — 파싱에 빠진 요소(도장·선·체크칸·그림 속 글자), 병합 셀, 정렬, 테두리/배경, 쪽 수를 확인하고, 어긋나면 그림을 기준으로 인벤토리를 고치거나 사용자에게 묻습니다. 여러 쪽이면 page=2… 로 필요한 쪽을 모두 봅니다. 이 검증을 마친 뒤에 리포트 작업을 시작하고, 그림을 얻지 못했으면(변환기·미리보기 없음) 그 사실을 사용자에게 알리고 PDF/이미지를 요청하거나 doc_text 만으로 진행해도 되는지 확인하세요. **작업 후에는 crf_preview(path) 로 리포트 배치를 그림으로 받아 원본 양식 그림과 나란히 대조**(요소 누락·위치·정렬·병합·테두리)하고 고친 뒤 다시 확인합니다 — crf_preview 는 설계 화면(데이터·확장·페이지 나눔 없음)이므로 실제 출력은 실서버 렌더로 마무리 확인합니다.\n"+
@@ -184,8 +184,8 @@ public class CrfMcpServer {
         strSchema(new String[]{"path"}, "path",".crf file", "excel","true: the report is exported to Excel — Excel-grid findings become WARN instead of INFO (optional)")));
     arr.add(tool("crf_set_label","Edit a 글상자(label) or other named control: bind field / static text / new formula, output format, alignment, font size/bold, wrap, can-grow, background, position/size, visibility. Saves to a new file.",
         strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "field","field name to bind (optional)", "text","static text (optional)", "formula","JavaScript formula (with return) — creates a formula field and binds it (optional)", "formula_name","name for the created formula field (optional)", "clear","true to clear the value (optional)", "format","output format e.g. #,##0; '' or 'none' REMOVES it (optional)", "clear_format","true to remove the output format (optional)", "align","Left|Center|Right|Both(양쪽)|Equal(배분) (optional)", "valign","Top|Center|Bottom (optional)", "fontsize","font size (optional)", "bold","true/false (optional)", "font","font name (optional)", "wrap","true/false word wrap (optional)", "cangrow","true/false (optional)", "bgcolor","#RRGGBB (optional)", "left","X (optional)", "top","Y (optional)", "width","W (optional)", "height","H (optional)", "visible","true/false (optional)", "color","font color #RRGGBB (optional)", "underline","true/false (optional)", "italic","true/false (optional)", "linespace","extra line spacing in pt (optional)", "padding","inner margins 'l,t,r,b' in 0.1mm (optional)", "border","true/false: draw a rectangle border around the label (optional)", "linewidth","border width W025|W050|W075|W100|W150|W200|W300 (optional)", "output","destination .crf")));
-    arr.add(tool("crf_set_subsection","Edit a subsection (band row) of a section: height, visible, name, page break. Saves to a new file.",
-        strSchema(new String[]{"path","section","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English)", "index","subsection index within the section (default 0; see crf_describe_layout sub[j])", "height","new height (optional)", "visible","true/false (optional)", "name","new subsection name (optional)", "new_page","None|Before|After|BeforeAfter page break (optional)", "repeat","group header repeat: None|OnPage|OnColumn|OnPageAndColumn (optional; OnPage = header repeats on every page)", "output","destination .crf")));
+    arr.add(tool("crf_set_subsection","Edit a band (section) and one of its subsections (band rows): height (shift_controls moves the row's controls with it), visible, name, page break, group-header repeat, and KEEP-TOGETHER / page flags. Band flags: section_keep_together (whole band on one page — e.g. a signature/approval block in a group/data footer), group_keep_together (group header only), reset_record_number, fill_page (detail only). Row flags: keep_together, use_fill_page, reset_page_number, print_at_bottom (normal rows); subreport_keep_together, follow_main_frame, continue_page_number (embedded-subreport rows). crf_describe_layout shows the flags that are on as {…} and every band's [n]. Works inside an embedded subreport with subreport=\"이름\". Saves to a new file.",
+        strSchema(new String[]{"path","output"}, "path","source .crf", "section","band: 보고서머리글|페이지머리글|데이터머리글|본문|데이터바닥글|페이지바닥글|보고서바닥글|그룹머리글|그룹바닥글 (or English), GroupFooter:EMPNO for a specific group, or [n]. When several bands of the same kind exist, give section_index or GroupFooter:필드", "section_index","band number [n] from crf_describe_layout (alternative to section)", "index","subsection index within the band (default 0; see crf_describe_layout sub[j])", "height","new height (optional)", "shift_controls","true = move every control in this row down by (new height − old height), so space is added/removed at the TOP; or an integer offset (−up/+down) (optional)", "visible","true/false (optional)", "name","new subsection name (optional)", "new_page","None|Before|After|BeforeAfter page break (optional)", "repeat","group header repeat: None|OnPage|OnColumn|OnPageAndColumn (optional; OnPage = header repeats on every page)", "section_keep_together","true/false: keep the whole band on one page (not on page header/footer)", "group_keep_together","true/false (group header band): keep the group header..footer together", "reset_record_number","true/false (band)", "fill_page","true/false (detail band)", "keep_together","true/false: do not split this row across pages", "use_fill_page","true/false (row)", "reset_page_number","true/false (row)", "print_at_bottom","true/false (row): print at the page bottom", "subreport_keep_together","true/false (embedded-subreport row): do not split the subreport across pages", "follow_main_frame","true/false (embedded-subreport row)", "continue_page_number","true/false (embedded-subreport row)", "output","destination .crf")));
     arr.add(tool("crf_remove_control","Remove a control (label/table/line/image/subreport…) by name from its band. Saves to a new file.",
         strSchema(new String[]{"path","name","output"}, "path","source .crf", "name","control name (from crf_describe_layout)", "output","destination .crf")));
     arr.add(tool("crf_remove_group","Remove a group: its group header + footer bands (with their controls) and the Group definition. Refuses if the group's 그룹이름 field is bound somewhere unless force=true. Saves to a new file.",
@@ -721,20 +721,73 @@ public class CrfMcpServer {
     return "OK: added label \""+c.getName()+"\"("+did+did2+") to "+sec.getClass().getSimpleName().replace("Section","")+", wrote "+output;
   }
 
+  // ---- 밴드/행 플래그 (keep-together 등): {파라미터 이름, getter 접미사, 설명} — describe/diff/set 이 같은 표를 쓴다
+  static final String[][] SEC_FLAGS={
+    {"section_keep_together","SectionKeepTogether","섹션 전체를 한 쪽에(넘치면 통째로 다음 쪽)"},
+    {"group_keep_together","GroupkeepTogether","그룹 머리글~바닥글을 한 쪽에(그룹 머리글만)"},
+    {"reset_record_number","ResetRecordNumber","레코드 번호 초기화"},
+    {"fill_page","FillPage","본문 남은 공간 채우기(본문만)"}};
+  static final String[][] SUB_FLAGS={
+    {"keep_together","SubSectionKeepTogether","이 행을 쪽 사이에서 자르지 않음","true"},
+    {"use_fill_page","UseFillPage","남은 공간 채우기"},
+    {"reset_page_number","ResetPageNumber","쪽 번호 초기화"},
+    {"print_at_bottom","PrintAtBottom","쪽 바닥에 출력"},
+    {"subreport_keep_together","SubReportKeepTogether","내장 서브리포트를 쪽 사이에서 자르지 않음(서브리포트 행만)"},
+    {"follow_main_frame","FollowMainReportFrame","메인 리포트 틀 따름(서브리포트 행만)","true"},
+    {"continue_page_number","ContinuePageNumber","쪽 번호 이어 감(서브리포트 행만)"}};
+  /** 디자이너 기본값과 다른 플래그만 파라미터 이름으로: " {section_keep_together, keep_together=false}" — 없으면 "".
+   *  기본값(저장소 400개 표본): keep_together·follow_main_frame 은 거의 항상 true(4번째 칸 "true"), 나머지는 false. */
+  static String flagsOn(Object o,String[][] tbl){ StringBuilder b=new StringBuilder(); for(String[] f: tbl){ Object v=go(o,"get"+f[1]); if(!(v instanceof Boolean)) continue; boolean defTrue=f.length>3&&"true".equals(f[3]);
+      if((Boolean)v!=defTrue) b.append(b.length()==0?"":", ").append(f[0]).append(defTrue?"=false":""); } return b.length()==0?"":" {"+b+"}"; }
+  static Boolean flagArg(JSONObject a,String k){ Object v=a.get(k); if(v==null) return null; String t=String.valueOf(v).trim().toLowerCase(); if(t.isEmpty()) return null; if(t.equals("true")||t.equals("1")||t.equals("on")||t.equals("yes")) return true; if(t.equals("false")||t.equals("0")||t.equals("off")||t.equals("no")) return false; throw new RuntimeException(k+" 는 true/false"); }
+  /** 플래그 설정: 대상 클래스에 setter 가 없으면 null(지원 안 함) */
+  static String setFlag(Object o,String[] f,boolean v){ try{ o.getClass().getMethod("set"+f[1],boolean.class).invoke(o,v); return " "+f[0]+"="+v; }catch(NoSuchMethodException e){ return null; }catch(Exception e){ throw new RuntimeException(f[0]+" 설정 실패: "+e); } }
+  static String secLabel(TheReportFile rf,Section sec){ RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); int k=-1; for(int i=0;i<secs.size();i++) if(secs.get(i)==sec) k=i; String gf=k<0?null:bandField(secs,k); return "["+k+"] "+sec.getClass().getSimpleName().replace("Section","")+(gf==null?"":"(→"+gf+")"); }
+  @SuppressWarnings("unchecked")
+  static List<Control> subControls(SubSection sb){ List<Control> cs=new ArrayList<>(); if(!(sb instanceof SubSectionDefault)) return cs; RexObjectList<ControlListForEachSeparatedPage> cls=((SubSectionDefault)sb).getControlListForEachSeparatedPageList(); for(int k=0;k<cls.size();k++){ RexObjectList<Control> cl=(RexObjectList<Control>)(RexObjectList<?>)cls.get(k).getControlList(); for(int x=0;x<cl.size();x++) cs.add(cl.get(x)); } return cs; }
+
   static String setSubsection(JSONObject args) throws Exception {
     String path=s(args,"path"), section=s(args,"section"), output=s(args,"output"); int idx=pInt(args.get("index"),0);
-    TheReportFile rf=open(path); Section sec=findSection(rf,section); if(sec==null) return "ERROR: section '"+section+"' not found";
-    RexObjectList<SubSection> ss=sec.getSubSectionList(); if(idx<0||idx>=ss.size()) return "ERROR: index "+idx+" 범위 밖 (서브섹션 "+ss.size()+"개)";
-    SubSection sb=ss.get(idx); StringBuilder did=new StringBuilder();
-    if(args.get("height")!=null){ sb.setHeight(pInt(args.get("height"),sb.getHeight())); did.append(" height="+sb.getHeight()); }
-    String vis=s(args,"visible"); if(vis!=null&&!vis.isEmpty()){ sb.setVisible(Boolean.parseBoolean(vis)); did.append(" visible="+vis); }
-    String nm=s(args,"name"); if(nm!=null&&!nm.isEmpty()){ sb.setName(nm); did.append(" name=\""+nm+"\""); }
-    String np=s(args,"new_page"); if(np!=null&&!np.isEmpty()){ NewPageType t; try{ t=NewPageType.valueOf(np.trim()); }catch(Exception e){ return "ERROR: new_page 는 None|Before|After|BeforeAfter"; } call(sb,"setNewPage",NewPageType.class,t); did.append(" new_page="+t); }
-    String rp=s(args,"repeat"); if(rp!=null&&!rp.isEmpty()){ com.clipsoft.clipreport.base.enums.RepeatGroupType t; try{ t=com.clipsoft.clipreport.base.enums.RepeatGroupType.valueOf(rp.trim()); }catch(Exception e){ return "ERROR: repeat 는 None|OnPage|OnColumn|OnPageAndColumn"; } if(!(sb instanceof SubSectionDefault)) return "ERROR: repeat 는 기본 서브섹션에만"; ((SubSectionDefault)sb).setRepeatGroup(t); did.append(" repeat="+t); }
-    if(did.length()==0) return "ERROR: nothing to set (height/visible/name/new_page/repeat)";
+    TheReportFile rf=open(path); Section sec;
+    RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
+    String si=s(args,"section_index");
+    // section_index(=describe_layout 의 [n]) 우선. section 은 crf_move_subsection 과 같은 해석: 번호 [n]·영문/한글·GroupFooter:필드(그룹이 여럿이면 필드 필수)
+    if(si!=null&&!si.trim().isEmpty()){ int k=pInt(si.trim().replaceAll("[\\[\\]]",""),-1); if(k<0||k>=secs.size()) return "ERROR: section_index "+si+" 범위 밖 (밴드 "+secs.size()+"개: "+sectionsIndexed(rf)+")"; sec=secs.get(k);
+      if(nz(section)){ String t=section.trim(); boolean match; if(t.matches("\\[?\\d+\\]?")||t.contains(":")||t.contains("(")){ int j; try{ j=CrfStruct.sectionIndex(rf,t); }catch(RuntimeException e){ return "ERROR: "+e.getMessage(); } match=j==k; }
+        else match=sec.getClass().getSimpleName().equalsIgnoreCase("Section"+engSection(t));
+        if(!match) return "ERROR: section_index "+k+" 는 "+sec.getClass().getSimpleName().replace("Section","")+" 인데 section='"+section+"' — 둘 중 하나만 주거나 맞추세요 ("+sectionsIndexed(rf)+")"; } }
+    else { if(!nz(section)) return "ERROR: section 또는 section_index 가 필요합니다 ("+sectionsIndexed(rf)+")";
+      int k; try{ k=CrfStruct.sectionIndex(rf,section); }catch(RuntimeException e){ return "ERROR: "+e.getMessage()+" — 또는 section_index=n (crf_describe_layout 의 [n])"; } sec=secs.get(k); }
+    StringBuilder did=new StringBuilder(), notes=new StringBuilder();
+    // 섹션(밴드) 단위 플래그
+    for(String[] f: SEC_FLAGS){ Boolean v=flagArg(args,f[0]); if(v==null) continue; String r=setFlag(sec,f,v); if(r==null) return "ERROR: "+f[0]+" 는 "+sec.getClass().getSimpleName().replace("Section","")+" 밴드에 없는 속성입니다"+("section_keep_together".equals(f[0])?" (페이지 머리글/바닥글에는 없음)":""); did.append(r); }
+    RexObjectList<SubSection> ss=sec.getSubSectionList();
+    boolean subWanted=args.get("height")!=null||nz(s(args,"visible"))||nz(s(args,"name"))||nz(s(args,"new_page"))||nz(s(args,"repeat"))||nz(s(args,"shift_controls")); for(String[] f: SUB_FLAGS) if(nz(s(args,f[0]))) subWanted=true;
+    SubSection sb=null;
+    if(subWanted){ if(idx<0||idx>=ss.size()) return "ERROR: index "+idx+" 범위 밖 (서브섹션 "+ss.size()+"개)"; sb=ss.get(idx);
+      int oldH=sb.getHeight();
+      if(args.get("height")!=null){ sb.setHeight(pInt(args.get("height"),sb.getHeight())); did.append(" height="+oldH+"→"+sb.getHeight()); }
+      String shift=s(args,"shift_controls");
+      if(nz(shift)){ if(!(sb instanceof SubSectionDefault)) return "ERROR: shift_controls 는 컨트롤이 있는 일반 행에만 — 서브리포트 행 안쪽은 subreport=\""+sb.getName()+"\" 로 그 안의 행을 고르세요";
+        int dy; String t=shift.trim().toLowerCase(); if(t.equals("true")) dy=sb.getHeight()-oldH; else if(t.equals("false")) dy=0; else { try{ dy=Integer.parseInt(t); }catch(Exception e){ return "ERROR: shift_controls 는 true(높이 변화량만큼) 또는 정수(위로 -, 아래로 +)"; } }
+        if(dy!=0){ int n=0, clamp=0; for(Control c: subControls(sb)){
+            // 선·도형(ControlCross)은 Y2 를 따로 저장 — 같이 옮겨야 수평선이 사선이 되지 않는다. 0 미만이면 모양을 유지한 채 위 끝만 0 에 맞춘다.
+            boolean cross=c instanceof com.clipsoft.clipreport.base.controls.ControlCross; int y2=cross?((com.clipsoft.clipreport.base.controls.ControlCross)c).getY2():c.getY1();
+            int d=dy, top=Math.min(c.getY1(),y2); if(top+d<0){ d=-top; clamp++; }
+            c.setY1(c.getY1()+d); if(cross) ((com.clipsoft.clipreport.base.controls.ControlCross)c).setY2(y2+d); n++; } did.append(" shift_controls="+(dy>0?"+":"")+dy+"(컨트롤 "+n+"개)"); if(clamp>0) notes.append("\n⚠ 위쪽이 0 미만이 되는 컨트롤 "+clamp+"개는 0 으로 맞춤"); } }
+      String vis=s(args,"visible"); if(nz(vis)){ sb.setVisible(Boolean.parseBoolean(vis)); did.append(" visible="+vis); }
+      String nm=s(args,"name"); if(nz(nm)){ sb.setName(nm); did.append(" name=\""+nm+"\""); }
+      String np=s(args,"new_page"); if(nz(np)){ NewPageType t; try{ t=NewPageType.valueOf(np.trim()); }catch(Exception e){ return "ERROR: new_page 는 None|Before|After|BeforeAfter"; } call(sb,"setNewPage",NewPageType.class,t); did.append(" new_page="+t); }
+      String rp=s(args,"repeat"); if(nz(rp)){ com.clipsoft.clipreport.base.enums.RepeatGroupType t; try{ t=com.clipsoft.clipreport.base.enums.RepeatGroupType.valueOf(rp.trim()); }catch(Exception e){ return "ERROR: repeat 는 None|OnPage|OnColumn|OnPageAndColumn"; } if(!(sb instanceof SubSectionDefault)) return "ERROR: repeat 는 기본 서브섹션에만"; ((SubSectionDefault)sb).setRepeatGroup(t); did.append(" repeat="+t); }
+      for(String[] f: SUB_FLAGS){ Boolean v=flagArg(args,f[0]); if(v==null) continue; String r=setFlag(sb,f,v); if(r==null) return "ERROR: "+f[0]+" 는 "+(sb instanceof SubSectionSubreport?"서브리포트 행":"일반 행")+"에 없는 속성입니다 — sub["+idx+"] 는 "+subSectionInfo(sb)+(f[0].startsWith("subreport")||f[0].equals("follow_main_frame")||f[0].equals("continue_page_number")?" (서브리포트 행의 index 를 주세요)":" (서브리포트 행에는 subreport_keep_together)"); did.append(r); }
+      if(sb instanceof SubSectionDefault){ int over=0, maxB=0; for(Control c: subControls(sb)){ int bot=c.getY1()+ix(c,"getHeight"); if(bot>sb.getHeight()){ over++; maxB=Math.max(maxB,bot); } } if(over>0) notes.append("\nℹ 행 높이("+sb.getHeight()+")보다 아래로 나가는 컨트롤 "+over+"개(가장 아래 "+maxB+") — 높이를 늘리거나 shift_controls/crf_set_label top 으로 옮기세요"); }
+    }
+    if(did.length()==0) return "ERROR: nothing to set (height/visible/name/new_page/repeat/shift_controls, 행 플래그 keep_together/use_fill_page/reset_page_number/print_at_bottom/subreport_keep_together/follow_main_frame/continue_page_number, 밴드 플래그 section_keep_together/group_keep_together/reset_record_number/fill_page)";
     String wrote=save(rf,output,path);
-    return "OK: "+sec.getClass().getSimpleName().replace("Section","")+" sub["+idx+"] "+subSectionInfo(sb)+" set"+did+", wrote "+wrote;
+    return "OK: "+secLabel(rf,sec)+flagsOn(sec,SEC_FLAGS)+(sb==null?"":" sub["+idx+"] "+subSectionInfo(sb))+" set"+did+", wrote "+wrote+notes;
   }
+  static boolean nz(String v){ return v!=null&&!v.trim().isEmpty(); }
+  static String sectionsIndexed(TheReportFile rf){ RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList(); StringBuilder b=new StringBuilder(); for(int i=0;i<secs.size();i++){ String gf=bandField(secs,i); b.append(i>0?", ":"").append("["+i+"]"+secs.get(i).getClass().getSimpleName().replace("Section","")+(gf==null?"":"(→"+gf+")")); } return b.toString(); }
   static String removeControl(JSONObject args) throws Exception {
     String path=s(args,"path"), name=s(args,"name"), output=s(args,"output");
     TheReportFile rf=open(path); Object[] loc=findControlLoc(rf,name); if(loc==null) return "ERROR: control '"+name+"' not found";
@@ -801,6 +854,14 @@ public class CrfMcpServer {
   static java.util.Map<String,String> formulaMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); RexObjectList<?> fl=rf.getGlobe().getMainReport().getReportObjectManager().getFieldFormulaList(); for(int i=0;i<fl.size();i++) m.put(nameOf(fl.get(i)),q(g(fl.get(i),"getScript"))); return m; }
   static java.util.Map<String,String> paramMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); RexObjectList<?> gp=rf.getGlobe().getGlobalObjectManager().getFieldGlobalParameterList(); for(int i=0;i<gp.size();i++) m.put(nameOf(gp.get(i)),q(g(gp.get(i),"getDataType"))+"="+q(g(gp.get(i),"getDefaultValue"))); return m; }
   static java.util.Map<String,String> controlMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.TreeMap<>(); for(Object[] e: allControls(rf)){ Control c=(Control)e[3]; Object f=go(c,"getApplyValueField"); String t=g(c,"getApplyValueText"); m.put(c.getName(), ((Section)e[0]).getClass().getSimpleName().replace("Section","")+" "+c.getClass().getSimpleName().replace("Control","")+(f!=null?" ["+nameOf(f)+"]":(t!=null&&!t.isEmpty()?" \""+oneLine(t,30)+"\"":""))+" @"+c.getX1()+","+c.getY1()); } return m; }
+  /** 밴드·행 속성: "Type(→그룹필드)[#n]" → 밴드 플래그, "… sub[j]" → 이름·행 종류·높이·숨김·새쪽·반복·행 플래그.
+   *  키에 밴드 번호를 넣지 않는다 — 앞에 밴드가 추가·삭제돼도 같은 밴드끼리 비교(번호 순서 변화는 "섹션:" 줄이 알림). 같은 종류·그룹이 여럿이면 #n. */
+  static java.util.Map<String,String> bandMap(TheReportFile rf){ java.util.Map<String,String> m=new java.util.LinkedHashMap<>(); RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
+    java.util.Map<String,Integer> seen=new java.util.HashMap<>();
+    for(int i=0;i<secs.size();i++){ Section sec=secs.get(i); String gf=bandField(secs,i); String base=sec.getClass().getSimpleName().replace("Section","")+(gf==null?"":"(→"+gf+")"); int nth=seen.merge(base,1,Integer::sum); String key=base+(nth>1?"#"+nth:""); m.put(key,"밴드"+flagsOn(sec,SEC_FLAGS));
+      RexObjectList<SubSection> ss=sec.getSubSectionList(); for(int j=0;j<ss.size();j++){ SubSection sb=ss.get(j); Object rg=go(sb,"getRepeatGroup");
+        String rt=sb.getClass().getSimpleName().replace("SubSection",""); m.put(key+" sub["+j+"]","\""+q(sb.getName())+"\""+(rt.equals("Default")?"":" ["+rt+"]")+" h="+sb.getHeight()+(sb.getVisible()?"":" [숨김]")+(go(sb,"getNewPage")!=null&&!"None".equals(String.valueOf(go(sb,"getNewPage")))?" 새쪽="+go(sb,"getNewPage"):"")+(rg!=null&&!"None".equals(String.valueOf(rg))?" 반복="+rg:"")+flagsOn(sb,SUB_FLAGS)); } }
+    return m; }
   static void diffMaps(StringBuilder s,String title,java.util.Map<String,String> A,java.util.Map<String,String> B,int max){ java.util.List<String> add=new java.util.ArrayList<>(), rem=new java.util.ArrayList<>(), chg=new java.util.ArrayList<>();
     for(String k: B.keySet()) if(!A.containsKey(k)) add.add(k); for(String k: A.keySet()) if(!B.containsKey(k)) rem.add(k); for(String k: A.keySet()) if(B.containsKey(k)&&!q(A.get(k)).equals(q(B.get(k)))) chg.add(k);
     if(add.isEmpty()&&rem.isEmpty()&&chg.isEmpty()) return; s.append(title).append(": ");
@@ -825,10 +886,11 @@ public class CrfMcpServer {
     diffMaps(s,"공식",formulaMap(A),formulaMap(B),10);
     java.util.Map<String,String> ga=new java.util.TreeMap<>(), gb=new java.util.TreeMap<>(); RexObjectList<Group> gla=A.getGlobe().getMainReport().getReportObjectManager().getGroupList(), glb=B.getGlobe().getMainReport().getReportObjectManager().getGroupList(); for(int i=0;i<gla.size();i++) ga.put(nameOf(gla.get(i).getGroupingField()),""+gla.get(i).getSortMethod()); for(int i=0;i<glb.size();i++) gb.put(nameOf(glb.get(i).getGroupingField()),""+glb.get(i).getSortMethod()); diffMaps(s,"그룹",ga,gb,10);
     String sa=sectionsOf(A), sb=sectionsOf(B); if(!sa.equals(sb)) s.append("섹션: ").append(sa).append(" → ").append(sb).append("\n");
+    diffMaps(s,"밴드·행 속성",bandMap(A),bandMap(B),15);
     diffMaps(s,"컨트롤",controlMap(A),controlMap(B),15);
     java.util.Map<String,Control> ta=new java.util.TreeMap<>(), tb=new java.util.TreeMap<>(); for(Object[] e: allControls(A)) if("ControlTable".equals(e[3].getClass().getSimpleName())) ta.put(((Control)e[3]).getName(),(Control)e[3]); for(Object[] e: allControls(B)) if("ControlTable".equals(e[3].getClass().getSimpleName())) tb.put(((Control)e[3]).getName(),(Control)e[3]);
     for(String k: ta.keySet()) if(tb.containsKey(k)) diffMaps(s,"  표 "+k+" 셀",cellGrid(ta.get(k)),cellGrid(tb.get(k)),20);
-    if(s.toString().split("\n").length<=2) s.append("차이 없음 (데이터셋/필드/쿼리/매개변수/공식/그룹/섹션/컨트롤/셀 기준)\n");
+    if(s.toString().split("\n").length<=2) s.append("차이 없음 (데이터셋/필드/쿼리/매개변수/공식/그룹/섹션/밴드·행 속성(높이·숨김·새쪽·반복·keep-together 등)/컨트롤/셀 기준)\n");
     return s.toString();
   }
 
@@ -1550,6 +1612,7 @@ public class CrfMcpServer {
     String type=sb.getClass().getSimpleName().replace("SubSection",""); if(type.equals("Default")) type="";
     StringBuilder b=new StringBuilder("\""+q(sb.getName())+"\""+(type.isEmpty()?"":" ["+type+"]")+" h="+sb.getHeight()+(sb.getVisible()?"":" [숨김]"));
     Object np=go(sb,"getNewPage"); if(np!=null && !"None".equals(String.valueOf(np))) b.append(" 새쪽=").append(np);
+    b.append(flagsOn(sb,SUB_FLAGS));
     if(sb instanceof SubSectionSubreport){ SubSectionSubreport ss=(SubSectionSubreport)sb; b.append(subreportInfo(ss.getLinkedSubreportPath(), ss.getSubreport(), null)).append(CrfStruct.linkInfo(new Object[]{ss.getName(),ss,ss.getFieldLinkListForSubReportParameter(),ss.getSubreport(),""})); }
     return b.toString();
   }
@@ -1560,6 +1623,8 @@ public class CrfMcpServer {
     if(links!=null&&links.size()>0){ b.append(" 매개변수링크: "); for(int i=0;i<links.size();i++){ Object l=links.get(i); b.append(i>0?", ":"").append(nameOf(go(l,"getLinkedField1"))).append("→").append(nameOf(go(l,"getLinkedField2"))); } }
     return b.toString();
   }
+  /** 그룹 머리글·바닥글이 묶인 그룹 필드(바닥글은 머리글과 짝지어 찾음), 그 밖의 밴드는 null */
+  static String bandField(RexObjectList<Section> secs,int i){ Section s=secs.get(i); if(s instanceof SectionGroupHeader) return groupFieldOf(s); if(!(s instanceof SectionGroupFooter)) return null; String l=CrfStruct.label(secs,i); int c=l.indexOf(':'); return c<0?null:l.substring(c+1); }
   static String groupFieldOf(Section sec){ if(sec instanceof SectionGroupHeader){ Group gp=((SectionGroupHeader)sec).getGroup(); return gp==null?"-":nameOf(gp.getGroupingField()); } return null; }
 
   static SubSectionDefault band(String name,int h){ SubSectionDefault sd=new SubSectionDefault(); sd.setName(name); sd.setHeight(h); sd.setVisible(true); sd.getControlListForEachSeparatedPageList().add(new ControlListForEachSeparatedPage()); return sd; }
@@ -1582,7 +1647,7 @@ public class CrfMcpServer {
   static String layoutText(TheReportFile rf,boolean detail,boolean onePerLine,String scope,int depth) throws Exception {
     RexObjectList<Section> secs=rf.getGlobe().getMainReport().getReportDesign().getMainPage().getSectionList();
     StringBuilder b=new StringBuilder();
-    for(int i=0;i<secs.size();i++){ Section sec=secs.get(i); String gf=groupFieldOf(sec); b.append("["+i+"] "+sec.getClass().getSimpleName().replace("Section","")+(gf==null?"":"(→"+gf+")")+"\n");
+    for(int i=0;i<secs.size();i++){ Section sec=secs.get(i); String gf=bandField(secs,i); b.append("["+i+"] "+sec.getClass().getSimpleName().replace("Section","")+(gf==null?"":"(→"+gf+")")+flagsOn(sec,SEC_FLAGS)+"\n");
       RexObjectList<SubSection> ss=sec.getSubSectionList();
       for(int j=0;j<ss.size();j++){ SubSection sb=ss.get(j); b.append("   sub["+j+"] "+subSectionInfo(sb)+"\n");
       List<Control> cs=new ArrayList<>();

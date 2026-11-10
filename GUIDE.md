@@ -173,6 +173,18 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 
 통지서·서약서·신고서처럼 레코드 1건짜리 양식은 **본문 밴드 하나**에 글상자/표를 좌표(0.1mm)로 배치한다. 양식(HWPX/PDF)의 세로 위치·정렬을 요소별로 옮기고, 줄바꿈 문단은 `linespace`(pt) 로 행간을 맞추며, 셀 병합·테두리·색칠 체크박스로 표를 재현한다. 절차와 함정은 [docs/document-report-recipe.md](docs/document-report-recipe.md).
 
+## 9-7. 서명/결재 블록이 쪽 사이에서 갈라질 때
+
+증상: 본문(근거·내역)이 길어지면 서명 블록의 일부(예: 위원장 서명줄)만 다음 장으로 넘어간다. 서명 블록은 보통 **바닥글 밴드 하나 = 일자 행 + 내장 서브리포트 행(위원 서명 반복 + 위원장 서명)** 구조다.
+
+1. `crf_describe_layout` 으로 서명 블록이 든 밴드 번호 `[n]` 과 행을 찾는다. 켜진 플래그는 `{…}` 로 보인다. `{section_keep_together}` 도 `{subreport_keep_together}` 도 없으면 갈라질 수 있다.
+2. 밴드 전체를 한 쪽에: `crf_set_subsection section_index=n section_keep_together=true`. 그룹 바닥글이 여럿이면 번호나 `section=GroupFooter:EMPNO` 로 고른다.
+3. 서브리포트 행도 자르지 않게: `crf_set_subsection section_index=n index=<서브리포트 행> subreport_keep_together=true`. 밴드 플래그만으로는 서브리포트 안에서 쪽이 나뉠 수 있어 두 플래그를 함께 켠다.
+4. (선택) 블록이 커서 앞 장에 빈 공간이 많이 남으면 여백을 줄인다: `crf_set_subsection … height=110 shift_controls=-20`. 서브리포트 안은 `subreport="이름" section=데이터바닥글 height=140 shift_controls=true`.
+5. `crf_render rows=4`(또는 긴 근거 문구를 `data=` 로)로 실제 출력에서 일자·위원 서명·위원장 서명이 같은 쪽에 찍히는지 확인한다. `crf_diff` 의 "밴드·행 속성" 에서 바뀐 플래그를 확인한다.
+
+블록 전체가 한 쪽보다 크면 keep-together 는 효과가 없다(엔진이 결국 자른다). 이럴 때는 행 높이를 줄인다.
+
 ## 10. 본 도구(MCP)와 개념 매핑
 
 | 하고 싶은 것 | 도구 |
@@ -214,6 +226,7 @@ HWPX·PDF·DOCX·HTML·이미지 등 어떤 형식이든 참조 양식을 받으
 | 연속 문단/목록을 **표 하나**로 / 글상자 여러 개 **합치기** / **나누기** | `crf_add_table rows=[…]` / `crf_merge_labels` / `crf_split_label` |
 | 글꼴 **일괄**(라벨/데이터 따로, System 만) | `crf_set_font` |
 | 그룹 머리글 매 페이지 반복 | `crf_set_subsection repeat=OnPage|None` |
+| 밴드·행 **쪽 넘김 방지**(서명 블록 분리 방지) / 행 높이 + 컨트롤 함께 이동 | `crf_set_subsection section_index=n section_keep_together=true`·`subreport_keep_together=true`·`keep_together` / `height=… shift_controls=true` (§9-7) |
 
 > **편집 제안**: Claude가 `crf_summary` + `crf_describe_layout` 로 구조를 읽고, 위 개념에 비추어 개선점을 자연어로 제시합니다.
 

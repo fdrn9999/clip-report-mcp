@@ -3,6 +3,28 @@
 이 프로젝트의 주요 변경을 기록합니다. 버전은 [유의적 버전](https://semver.org/lang/ko/)을 따르며,
 릴리스마다 git 태그 `vX.Y.Z` 를 답니다. 실행 중인 버전은 `/mcp` 의 clip-report **serverInfo.version** 으로 확인할 수 있습니다.
 
+## [0.16.0] - 2026-11-10
+밴드·행의 keep-together(쪽 넘김 방지) 속성을 MCP 도구로 읽고 쓰고 비교할 수 있게 했다. 계기는 ahrmev0513_prn01·03~06(재임용 서류평가심사표) 작업이다. 기여도 근거가 길어지면 위원장 서명줄만 다음 장으로 떨어졌다. 원인은 서명 블록(그룹 바닥글 [5] = 일자 행 + 내장 서브리포트 행)의 `sectionKeepTogether`·`subReportKeepTogether` 가 꺼져 있던 것이다. 그 세션은 이 속성을 도구로 바꿀 수 없어 디자이너 jar 로 Java 를 직접 짰다. `crf_diff` 도 바뀐 속성을 "차이 없음" 으로 보고했다.
+### Added
+- **`crf_set_subsection` — 밴드·행 플래그.**
+  - 밴드 단위: `section_keep_together`(밴드 전체를 한 쪽에. 페이지 머리글/바닥글에는 없음), `group_keep_together`(그룹 머리글), `reset_record_number`, `fill_page`(본문).
+  - 일반 행: `keep_together`, `use_fill_page`, `reset_page_number`, `print_at_bottom`.
+  - 내장 서브리포트 행: `subreport_keep_together`, `follow_main_frame`, `continue_page_number`.
+  - 밴드·행 종류에 없는 속성을 주면 ERROR 다. 예: 서브리포트 행에 `keep_together` 를 주면 `subreport_keep_together` 를 쓰라고 알려 준다.
+- **`crf_set_subsection section_index=n` — `crf_describe_layout` 의 `[n]` 번호로 밴드를 고른다.** `section` 도 `crf_move_subsection` 과 같은 방식으로 읽는다: `[n]`, `GroupFooter:EMPNO`, 한글·영문 이름. 그룹이 여럿인데 `그룹바닥글` 만 주면 이제 ERROR 다. 지금까지는 첫 그룹 바닥글이 조용히 잡혔다. ERROR 에는 밴드 목록이 함께 나온다.
+- **`crf_set_subsection shift_controls`.** `true` 면 행 안의 컨트롤을 높이 변화량만큼 함께 옮긴다(행 위쪽에서 공간을 늘리거나 줄임). 정수를 주면 그만큼 옮긴다(위로 −, 아래로 +). 위쪽이 0 보다 작아지는 컨트롤은 0 으로 맞추고 알린다. 내장 서브리포트 안의 행도 `subreport="이름"` 으로 똑같이 고칠 수 있다. 높이를 바꾼 뒤 행 아래로 나가는 컨트롤이 있으면 ℹ 로 알린다.
+- **`crf_describe_layout` — 디자이너 기본값과 다른 플래그만 `{…}` 로 표시한다.** 예: `[5] GroupFooter(→EMPNO) {section_keep_together}`, `{subreport_keep_together}`, `{keep_together=false}`. 기본값은 저장소 400개 표본으로 정했다. `keep_together`(행 1,686/1,708)와 `follow_main_frame`(서브리포트 행 268/278)은 보통 켜져 있고, 나머지는 꺼져 있다. 그룹 바닥글에도 그룹 필드를 붙인다(`[4] GroupFooter(→JUDGE_EMPNO)`). 같은 종류 밴드가 여럿일 때 번호를 고르기 쉽게 하려는 것이다.
+- **`crf_diff` — "밴드·행 속성" 비교.** 밴드 플래그와 행의 이름·종류·높이·숨김·새쪽·반복·행 플래그를 비교한다. 내장 서브리포트 안도 재귀로 비교한다.
+- GUIDE §9-7 "서명/결재 블록이 쪽 사이에서 갈라질 때" 레시피.
+### Codex 리뷰 (3건 모두 반영)
+- `shift_controls` 가 선·도형의 `Y1` 만 옮겨 수평선이 사선이 됐다. `ControlCross`(선·도형)는 `Y2` 를 따로 저장한다 → `Y2` 도 함께 옮긴다. 위쪽이 0 미만이 되면 모양을 유지한 채 위 끝만 0 에 맞춘다(세로선 5~60 을 −20 → 0~55).
+- `crf_diff` 의 밴드 키에 밴드 번호가 들어 있었다. 그래서 앞 밴드를 지우면서 뒤 밴드의 플래그를 바꾸면, 플래그 변경이 "추가 1·삭제 1" 에 묻혔다 → 키를 `GroupFooter(→EMPNO)` 처럼 종류·그룹으로 만든다(같은 종류가 여럿이면 `#n`). 번호 순서 변화는 기존 "섹션:" 줄이 알린다.
+- `crf_diff` 가 행 종류를 서브리포트 행만 표시했다. 그래서 같은 이름·높이의 일반 행을 다른 종류 행(예: `FileImport`)으로 바꾸면 "차이 없음" 이었다 → 일반 행이 아니면 모두 `[종류]` 를 붙인다.
+### Verified
+- 그 세션의 수정 전 파일(report repo `fc7d9c4^` 의 ahrmev0513_prn01)에 `crf_set_subsection` 세 번(밴드 keep-together + 높이·`shift_controls`, 서브리포트 행 keep-together, 서브리포트 안 데이터 바닥글 높이 + `shift_controls=true`)만 적용했다. 결과는 jar 로 만든 커밋본(`fc7d9c4`)과 **바이트까지 같았다**.
+- `crf_render`(가상 데이터 4행)로 실제 엔진 출력을 비교했다. 수정 전에는 "2026 년 11 월 10 일" 이 1쪽, "위원회 위원장 … (서명)" 이 2쪽에 찍혔다. 수정 후에는 일자와 위원장 서명이 같은 2쪽에 함께 찍혔다.
+- smoke 462 → 480 (v16 케이스 18개, 리뷰 회귀 1개 포함). 선 `Y2` 수정은 픽스처에 선이 없어 SDK 로 선 2개를 넣은 임시 파일에서 확인했다(+20: 수평선 40/40 → 60/60).
+
 ## [0.15.0] - 2026-11-09
 내장(임베디드) 서브리포트 안의 표·글상자·공식·그룹을 기존 도구로 고칠 수 있게 했다. 계기는 rfsmbs0100_prn01(사업비지급신청서) 금액 칸 확대 작업이다. 금액 표가 내장 서브리포트 2개 안에 있었는데, `crf_table_info` 가 "table '표1' not found" 를 냈다. `표2`/`표3` 은 이름이 같은 메인 리포트 표가 잡혔다. 그래서 작업 세션이 CLIP SDK 로 Java 프로그램(서브리포트 재귀 탐색 + 열 폭 시그니처 매칭)을 직접 짜서 처리했다. 아래 인터페이스는 그 세션이 제안한 내용을 따른다. 도구 수는 그대로 60이고, 새 코드는 `src/CrfScope.java` 에 있다.
 ### Added

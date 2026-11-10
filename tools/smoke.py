@@ -926,6 +926,37 @@ if os.path.isfile(SR):
              "data": {"SQLDS1": [{"TITLE": "1차"}], "SQLDS2": [{"ITMXP_NM": "운영비", "BUDGT_AMT": "1000"}], "SQLDS3": [{"ITMXP_NM": "운영비"}]}},
              lambda t, e: None if not e and re.search(r"^합 계 1,000", t, re.M) else f"render: {t[:400]}")
 
+# ---- v0.16.0: 밴드·행 keep-together 플래그 / section_index / shift_controls / diff 밴드 속성 ----
+KT = os.environ.get("CLIP_SMOKE_KT", "C:/eGovFrameDev-4.3.1/workspace/report/meta/adm/ahrm/ahrmev/ahrmev0513_prn01.crf")  # 그룹 바닥글 2개([4]JUDGE_EMPNO·[5]EMPNO), [5] sub[1]=내장 서브리포트(서명), keep-together 켜짐
+if os.path.isfile(KT):
+    case("v16 describe shows non-default flags + group footer field", "crf_describe_layout", {"path": KT},
+         lambda t, e: None if not e and "[5] GroupFooter(→EMPNO) {section_keep_together}" in t and "{subreport_keep_together}" in t and "[4] GroupFooter(→JUDGE_EMPNO)\n" in t and "{keep_together}" not in t else f"describe: {t[:500]}")
+    case("v16 two group footers + 그룹바닥글 -> ERROR (name the group or [n])", "crf_set_subsection", {"path": KT, "section": "그룹바닥글", "height": "120", "output": OUT + "/v16_x.crf"}, err_contains("그룹이 2개", "section_index"))
+    case("v16 section_keep_together off via GroupFooter:EMPNO", "crf_set_subsection", {"path": KT, "section": "GroupFooter:EMPNO", "section_keep_together": "false", "output": OUT + "/v16_a.crf"}, contains("OK: [5] GroupFooter(→EMPNO)", "section_keep_together=false"))
+    case("v16 subreport_keep_together off via section_index", "crf_set_subsection", {"path": OUT + "/v16_a.crf", "section_index": "5", "index": "1", "subreport_keep_together": "false", "output": OUT + "/v16_b.crf"}, contains("OK", "subreport_keep_together=false"))
+    case("v16 diff sees band/row flag changes", "crf_diff", {"a": KT, "b": OUT + "/v16_b.crf"}, contains("밴드·행 속성: ~2", "GroupFooter(→EMPNO): 밴드 {section_keep_together} → 밴드", "{subreport_keep_together} →"))
+    # Codex 리뷰: 앞 밴드를 지워 번호가 바뀌어도 같은 밴드끼리 플래그를 비교해야 한다
+    case("v16 diff keys survive band renumbering (remove PageHeader + flag off)", "crf_batch", {"steps": [
+            {"tool": "crf_remove_section", "args": {"path": KT, "section": "PageHeader", "force": "true", "output": OUT + "/v16_rn.crf"}},
+            {"tool": "crf_set_subsection", "args": {"path": OUT + "/v16_rn.crf", "section": "GroupFooter:EMPNO", "section_keep_together": "false", "output": OUT + "/v16_rn2.crf"}},
+            {"tool": "crf_diff", "args": {"a": KT, "b": OUT + "/v16_rn2.crf"}}]}, contains("GroupFooter(→EMPNO): 밴드 {section_keep_together} → 밴드", "-2 [PageHeader, PageHeader sub[0]]"))
+    case("v16 flags back on -> diff vs original: none", "crf_batch", {"steps": [
+            {"tool": "crf_set_subsection", "args": {"path": OUT + "/v16_b.crf", "section_index": "[5]", "section_keep_together": "true", "output": OUT + "/v16_c.crf"}},
+            {"tool": "crf_set_subsection", "args": {"path": OUT + "/v16_c.crf", "section_index": "5", "index": "1", "subreport_keep_together": "true", "output": OUT + "/v16_d.crf"}},
+            {"tool": "crf_diff", "args": {"a": KT, "b": OUT + "/v16_d.crf"}}]}, contains("OK: 단계 3/3 성공", "차이 없음"))
+    case("v16 keep_together=false shows as non-default", "crf_set_subsection", {"path": KT, "section": "본문", "keep_together": "false", "output": OUT + "/v16_k.crf"}, contains('"본문1" h=100 {keep_together=false}'))
+    case("v16 keep_together on a subreport row -> ERROR", "crf_set_subsection", {"path": KT, "section_index": "5", "index": "1", "keep_together": "true", "output": OUT + "/v16_x.crf"}, err_contains("서브리포트 행에 없는 속성", "subreport_keep_together"))
+    case("v16 section_keep_together on PageFooter -> ERROR", "crf_set_subsection", {"path": KT, "section_index": "6", "section_keep_together": "true", "output": OUT + "/v16_x.crf"}, err_contains("PageFooter 밴드에 없는 속성"))
+    case("v16 section_index vs section mismatch -> ERROR", "crf_set_subsection", {"path": KT, "section_index": "3", "section": "그룹바닥글", "height": "1", "output": OUT + "/v16_x.crf"}, err_contains("section_index 3 는 Detail"))
+    case("v16 section_index out of range -> ERROR", "crf_set_subsection", {"path": KT, "section_index": "99", "height": "1", "output": OUT + "/v16_x.crf"}, err_contains("범위 밖", "[5]GroupFooter(→EMPNO)"))
+    case("v16 bad flag value -> ERROR", "crf_set_subsection", {"path": KT, "section_index": "5", "section_keep_together": "maybe", "output": OUT + "/v16_x.crf"}, err_contains("true/false"))
+    case("v16 shift_controls=true inside the embedded subreport", "crf_set_subsection", {"path": KT, "subreport": "리포트 서브섹션1", "section": "데이터바닥글", "height": "180", "shift_controls": "true", "output": OUT + "/v16_s.crf"}, contains("height=140→180", "shift_controls=+40(컨트롤 1개)"))
+    case("v16 ...control moved (diff inside subreport)", "crf_diff", {"a": KT, "b": OUT + "/v16_s.crf"}, contains("▼ 내장 서브리포트 '리포트 서브섹션1'", "h=140 → \"데이터 바닥글1\" h=180", "표2: DataFooter Table @550,40 → DataFooter Table @550,80"))
+    case("v16 shift_controls integer offset", "crf_set_subsection", {"path": KT, "section_index": "5", "height": "130", "shift_controls": "-40", "output": OUT + "/v16_s2.crf"}, contains("shift_controls=-40(컨트롤 1개)", "0 으로 맞춤"))
+    case("v16 shift_controls on a subreport row -> ERROR", "crf_set_subsection", {"path": KT, "section_index": "5", "index": "1", "shift_controls": "true", "output": OUT + "/v16_x.crf"}, err_contains("subreport=\"리포트 서브섹션1\""))
+    case("v16 nothing to set -> ERROR lists the flags", "crf_set_subsection", {"path": KT, "section_index": "5", "output": OUT + "/v16_x.crf"}, err_contains("section_keep_together", "subreport_keep_together"))
+
+
 def docs_check():
     """문서가 코드와 어긋나지 않는지(README 가 현상과 달라지는 것 방지): 도구 수·도구 이름·케이스 수·버전."""
     rd = lambda *p: open(os.path.join(PROJ, *p), encoding="utf-8").read()
